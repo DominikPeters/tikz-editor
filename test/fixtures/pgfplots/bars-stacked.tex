@@ -1,0 +1,9 @@
+% ybar stacked with positive and negative values (separate sums), painted
+% last plot first. Behaviour U6.
+\begin{tikzpicture}
+\begin{axis}[ybar stacked, bar width=12pt]
+  \addplot coordinates {(1,2) (2,-1) (3,1) (4,2)};
+  \addplot coordinates {(1,1) (2,-2) (3,-3) (4,1)};
+  \addplot coordinates {(1,0.5) (2,1) (3,2) (4,-1)};
+\end{axis}
+\end{tikzpicture}

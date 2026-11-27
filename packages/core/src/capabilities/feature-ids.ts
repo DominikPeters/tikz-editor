@@ -136,6 +136,12 @@ export const FEATURE_IDS = [
   "pgfplots_legend",
   "pgfplots_plot_styles",
   "pgfplots_pgfplotsset",
+  "pgfplots_bars",
+  "pgfplots_area",
+  "pgfplots_error_bars",
+  "pgfplots_symbolic_coords",
+  "pgfplots_nodes_near_coords",
+  "pgfplots_document_lengths",
   "render_pipeline"
 ] as const;
 

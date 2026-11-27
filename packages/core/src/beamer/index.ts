@@ -1,4 +1,5 @@
 export { resolveBeamerPageGeometry } from "./geometry.js";
+export { mayReadPgfplotsTableFiles, pgfplotsTableFileNames } from "../pgfplots/table-files.js";
 export { beamerObjectOverlayTarget, beamerStatementOverlayTarget, type BeamerObjectOverlayTarget } from "./object-overlays.js";
 export {
   buildBeamerBuildModel,

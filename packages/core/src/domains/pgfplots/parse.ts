@@ -5,10 +5,12 @@ import {
   addLegendImageId,
   addPlotId,
   axisStatementId,
+  foreachStatementId,
   legendStatementId,
   pgfplotsExtraId,
   pgfplotsLibraryStatementId,
-  pgfplotsSetStatementId
+  pgfplotsSetStatementId,
+  pgfplotsTableReadStatementId
 } from "../../ast/ids.js";
 import type {
   AddLegendEntryStatement,
@@ -17,10 +19,12 @@ import type {
   AxisBodyItem,
   AxisEnvironmentName,
   AxisStatement,
+  ForeachStatement,
   LegendStatement,
   PgfplotsExtraStatement,
   PgfplotsLibraryStatement,
   PgfplotsSetStatement,
+  PgfplotsTableReadStatement,
   PlotInput,
   PlotSourceText,
   PlotTableSource,
@@ -28,8 +32,10 @@ import type {
   Statement
 } from "../../ast/types.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
+import type { OptionListAst } from "../../options/types.js";
 import { readCoordinateList } from "../../pgfplots/coordinate-list.js";
 import { findFirstChildByName, forEachChild } from "../../syntax/cursor.js";
+import { mapUnknownStatement } from "../../transform/unknown.js";
 import { mapPathStatement } from "../paths/parse.js";
 
 const AXIS_ENVIRONMENTS: readonly AxisEnvironmentName[] = ["axis", "semilogxaxis", "semilogyaxis", "loglogaxis"];
@@ -60,12 +66,24 @@ export function mapAxisStatement(
   const counters = { plot: 0, legendEntry: 0, legendImage: 0, legend: 0, extra: 0 };
 
   const body: AxisBodyItem[] = [];
-  forEachChild(node, (child) => {
+  const visit = (child: SyntaxNode): void => {
     switch (child.type.name) {
       case "BeginAxis":
       case "EndAxis":
       case "OptionList":
       case "Comment":
+      case "BeginAxisFontEnv":
+      case "EndAxisFontEnv":
+        return;
+      // A font size environment changes the font of the text inside it; its items belong to the axis.
+      case "AxisFontEnvironment":
+        forEachChild(child, visit);
+        return;
+      case "AxisLabelStatement":
+        body.push(mapUnknownStatement(child, source, allocate(state)));
+        return;
+      case "PgfplotsInvokeForeachStatement":
+        body.push(mapInvokeForeachStatement(child, source, state));
         return;
       case "AddPlotStatement":
         body.push(mapAddPlotStatement(child, source, state, id, counters.plot++));
@@ -85,7 +103,8 @@ export function mapAxisStatement(
       default:
         body.push(...mapBodyItem(child));
     }
-  });
+  };
+  forEachChild(node, visit);
 
   return {
     kind: "Axis",
@@ -121,7 +140,11 @@ function mapAddPlotStatement(
 ): AddPlotStatement {
   const commandNode = findFirstChildByName(node, "AddPlotCmd") ?? findFirstChildByName(node, "AddPlot3Cmd");
   const incrementNode = findFirstChildByName(node, "AddPlotIncrement");
-  const optionsNode = findFirstChildByName(node, "OptionList");
+  const optionNodes: SyntaxNode[] = [];
+  forEachChild(node, (child) => {
+    if (child.type.name === "OptionList") optionNodes.push(child);
+  });
+  const [optionsNode = null, ...extraOptionNodes] = optionNodes;
   const trailingNode = findFirstChildByName(node, "AddPlotTrailingPath");
   const legacyNode = findFirstChildByName(node, "AddPlotLegacyPlot");
   const legacyKeyword = legacyNode ? findFirstChildByName(legacyNode, "PlotKw") : null;
@@ -144,6 +167,9 @@ function mapAddPlotStatement(
           optionsSpan: toSpan(optionsNode),
           options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
         }
+      : {}),
+    ...(extraOptionNodes.length > 0
+      ? { extraOptions: extraOptionNodes.map((extra) => ({ span: toSpan(extra), options: parseOptionListRaw(source.slice(extra.from, extra.to), extra.from) })) }
       : {}),
     ...(legacyNode
       ? {
@@ -181,7 +207,7 @@ function mapPlotInput(node: SyntaxNode, source: string): PlotInput {
   }
   const expression = findFirstChildByName(node, "PlotExpression");
   if (expression) {
-    const group = findFirstChildByName(expression, "Group");
+    const group = findFirstChildByName(expression, "PlotExpressionData") ?? findFirstChildByName(expression, "Group");
     const inner = group ? braceInner(group, source).span : toSpan(expression);
     return { kind: "expression", span: toSpan(expression), expression: source.slice(inner.from, inner.to), expressionSpan: inner };
   }
@@ -260,6 +286,32 @@ function mapTableSource(table: SyntaxNode, source: string): PlotTableSource {
   return { kind: "inline", raw, span: brace.span, braceSpan: toSpan(data), terminated: brace.terminated };
 }
 
+/**
+ * `\pgfplotsinvokeforeach{list}{body}`: a loop whose body names the element
+ * `#1` (manual, utility commands), mapped as a `\foreach` over `#1`.
+ */
+function mapInvokeForeachStatement(node: SyntaxNode, source: string, state: AxisMappingState): ForeachStatement {
+  const groups: SyntaxNode[] = [];
+  forEachChild(node, (child) => {
+    if (child.type.name === "Group") groups.push(child);
+  });
+  const [list, bodyNode] = groups;
+  const listRaw = list ? source.slice(braceInner(list, source).span.from, braceInner(list, source).span.to) : "";
+  return {
+    kind: "Foreach",
+    id: foreachStatementId(allocate(state)),
+    span: toSpan(node),
+    ...(list ? { headerSpan: toSpan(list) } : {}),
+    headerRaw: list ? source.slice(list.from, list.to) : "",
+    variablesRaw: "#1",
+    listRaw: list ? `{${listRaw}}` : "",
+    prefixRaw: list ? source.slice(list.from, list.to) : "",
+    bodyRaw: bodyNode ? source.slice(bodyNode.from, bodyNode.to) : "",
+    ...(bodyNode ? { bodySpan: toSpan(bodyNode) } : {}),
+    pgfplots: "invoke"
+  };
+}
+
 function mapAddLegendEntryStatement(node: SyntaxNode, source: string, axisId: string, index: number): AddLegendEntryStatement {
   const command = findFirstChildByName(node, "AddLegendEntryCmd");
   const options = findFirstChildByName(node, "OptionList");
@@ -330,7 +382,9 @@ export function mapPgfplotsSetStatement(node: SyntaxNode, source: string, state:
   const statementIndex = allocate(state);
   const payload = findFirstChildByName(node, "StylePayload");
   const payloadRaw = payload ? source.slice(payload.from, payload.to) : "";
-  const optionList = parseStyleValueAsOptionList(payloadRaw, payload?.from ?? node.from) ?? parseOptionListRaw("[]", node.from);
+  const parsedList = parseStyleValueAsOptionList(payloadRaw, payload?.from ?? node.from) ?? parseOptionListRaw("[]", node.from);
+  // `\pgfplotstableset{col sep=comma}` is `\pgfplotsset{table/col sep=comma}` (manual: pgfplotstable).
+  const optionList = source.startsWith("\\pgfplotstableset", node.from) ? prefixTableKeys(parsedList) : parsedList;
   const compatEntry = optionList.entries.filter((entry) => entry.kind === "kv" && entry.key.trim() === "compat").at(-1);
   const compat: PlotSourceText | undefined = compatEntry?.kind === "kv" && compatEntry.valueSpan
     ? { raw: compatEntry.valueRaw.trim(), span: compatEntry.valueSpan }
@@ -347,6 +401,33 @@ export function mapPgfplotsSetStatement(node: SyntaxNode, source: string, state:
     ...(payload ? { payloadSpan: toSpan(payload) } : {}),
     optionList,
     ...(compat ? { compat } : {})
+  };
+}
+
+function prefixTableKeys(list: OptionListAst): OptionListAst {
+  const entries = list.entries.map((entry) => {
+    if (entry.kind === "unknown" || /^\/?pgfplots\//u.test(entry.key)) return entry;
+    return { ...entry, key: `table/${entry.key.trim()}`, raw: `table/${entry.raw.trim()}` };
+  });
+  return { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+}
+
+export function mapPgfplotsTableReadStatement(node: SyntaxNode, source: string, state: AxisMappingState): PgfplotsTableReadStatement {
+  const statementIndex = allocate(state);
+  const options = findFirstChildByName(node, "OptionList");
+  const data = findFirstChildByName(node, "TableData");
+  const macro = findFirstChildByName(node, "CommandName");
+  const inner = data ? braceInner(data, source).span : { from: node.to, to: node.to };
+  return {
+    kind: "PgfplotsTableRead",
+    id: pgfplotsTableReadStatementId(statementIndex),
+    span: toSpan(node),
+    raw: source.slice(node.from, node.to),
+    ...(options ? { optionsSpan: toSpan(options), options: parseOptionListRaw(source.slice(options.from, options.to), options.from) } : {}),
+    dataRaw: source.slice(inner.from, inner.to),
+    dataSpan: inner,
+    macroName: macro ? source.slice(macro.from, macro.to) : "",
+    macroSpan: macro ? toSpan(macro) : { from: node.to, to: node.to }
   };
 }
 

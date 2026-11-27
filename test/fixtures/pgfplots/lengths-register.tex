@@ -1,0 +1,8 @@
+% A length register and a pgfmath dimension in the size. Behaviour Y2.
+\begin{tikzpicture}
+\newlength{\plotw}
+\setlength{\plotw}{0.4\textwidth}
+\begin{axis}[width=\plotw, height=\textwidth/2.5, scale only axis]
+  \addplot coordinates {(0,1) (1,3) (2,2)};
+\end{axis}
+\end{tikzpicture}

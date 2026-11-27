@@ -3,6 +3,7 @@ export type {
   DocumentGraphicsResolution,
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,
+  DocumentTextFileResolution,
 } from "./types.js";
 export {
   createDocumentGraphicsResolverFromPreviewBundle,

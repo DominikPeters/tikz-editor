@@ -219,6 +219,9 @@ function axisOptions(body: string, start: number): string {
 export function injectProbes(body: string): string {
   let axisIndex = 0;
   const ids: string[] = [];
+  // Symbolic axes reject the numeric `axis cs` of the map probe (TeX error): the
+  // map/rect probes are switched off there, in a group (Tier 1 loses them).
+  const symbolic: boolean[] = [];
   let result = body.replace(AXIS_BEGIN, (match, environment: string, offset: number) => {
     axisIndex += 1;
     const id = `a${axisIndex}`;
@@ -227,6 +230,7 @@ export function injectProbes(body: string): string {
     // environment's own options; a log mode set elsewhere (\pgfplotsset,
     // styles) is not detected (README: limitations).
     const options = axisOptions(body, offset + match.length);
+    symbolic.push(/\bsymbolic [xy] coords\s*=/u.test(options));
     const label = (log: boolean) => (log ? "\\axisdefaultticklabellog" : "\\axisdefaultticklabel");
     const xlog = environment === "semilogxaxis" || environment === "loglogaxis" || /\bxmode\s*=\s*log\b/u.test(options);
     const ylog = environment === "semilogyaxis" || environment === "loglogaxis" || /\bymode\s*=\s*log\b/u.test(options);
@@ -235,8 +239,11 @@ export function injectProbes(body: string): string {
   let endIndex = 0;
   result = result.replace(/\\end\{(axis|semilogxaxis|semilogyaxis|loglogaxis)\}/gu, (match) => {
     const id = ids[endIndex] ?? `a${endIndex + 1}`;
+    const noMap = symbolic[endIndex] === true;
     endIndex += 1;
-    return `\\pgfplotsoracleinaxis{${id}}${match}\\pgfplotsoracleafteraxis{${id}}`;
+    return noMap
+      ? `{\\csname pgfplotsoracle@mapfalse\\endcsname\\pgfplotsoracleinaxis{${id}}}${match}{\\csname pgfplotsoracle@mapfalse\\endcsname\\pgfplotsoracleafteraxis{${id}}}`
+      : `\\pgfplotsoracleinaxis{${id}}${match}\\pgfplotsoracleafteraxis{${id}}`;
   });
   if (endIndex !== axisIndex) throw new Error(`Unbalanced axis environments (${axisIndex} begin, ${endIndex} end).`);
   const ends = result.match(/\\end\{tikzpicture\}/gu)?.length ?? 0;

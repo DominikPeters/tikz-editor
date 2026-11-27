@@ -90,7 +90,8 @@ import type { SemanticDependencyGraph } from "./dependencies.js";
 import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
-import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
+import { recordPgfplotsTableRead } from "../pgfplots/table-io.js";
+import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, readPgfplotsSettings, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
 import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
@@ -284,6 +285,7 @@ export function createSemanticEvaluationRun(
     opts.sourceFingerprint,
     opts.graphicsResolver
   );
+  if (opts.documentLengths) context.documentLengths = opts.documentLengths;
   if (opts.currentPage) {
     defineCurrentPage(context, opts.currentPage);
   }
@@ -1450,6 +1452,12 @@ function evaluateStatement(
     });
   }
 
+  if (statement.kind === "PgfplotsTableRead") {
+    markFeature(featureUsage, "pgfplots_addplot_table", "supported");
+    recordPgfplotsTableRead(context, statement, readPgfplotsSettings(context));
+    return [];
+  }
+
   if (statement.kind === "PgfplotsSet") {
     markFeature(featureUsage, "pgfplots_pgfplotsset", "supported");
     const payload = statement.optionList.raw.replace(/^\[|\]$/gu, "");
@@ -1479,6 +1487,23 @@ function evaluateStatement(
     applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
   ) {
     markFeature(featureUsage, "unknown_statement", "supported");
+    return [];
+  }
+
+  // Length registers: pgfplots axis options read them (pgfplots/document-lengths.ts); nothing to draw.
+  if (/^\\(?:newlength|setlength|addtolength)(?![A-Za-z@])/u.test(statement.raw)) {
+    markFeature(featureUsage, "unknown_statement", "supported");
+    return [];
+  }
+
+  const axisCommand = /^\\(addplot3?|addlegendentry|addlegendentryexpanded|addlegendimage|legend|pgfplotsextra)(?![A-Za-z@])/u.exec(statement.raw);
+  if (axisCommand) {
+    diagnostics.push({
+      severity: "warning",
+      code: "pgfplots-command-outside-axis",
+      message: `\`\\${axisCommand[1] ?? "addplot"}\` is only defined inside an axis environment (\`\\begin{axis}…\\end{axis}\`); TeX stops with an undefined control sequence here, and the editor draws nothing for it.`,
+      span: statement.span
+    });
     return [];
   }
 
@@ -1927,9 +1952,11 @@ function applyPgfMathStatement(
     return;
   }
 
+  // `\pgfmathtruncatemacro` stores the result truncated towards zero (pgfmathcalc.code.tex: `\pgfmathsetcount`).
+  const truncated = statement.commandRaw === "\\pgfmathtruncatemacro" ? String(Math.trunc(Number.parseFloat(evaluated.text))) : null;
   writeContextMacroBinding(context, target, {
     kind: "text",
-    value: evaluated.text,
+    value: truncated !== null && truncated !== "NaN" ? truncated : evaluated.text,
     provenance: []
   });
 }

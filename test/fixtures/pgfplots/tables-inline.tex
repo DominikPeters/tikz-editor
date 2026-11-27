@@ -1,0 +1,28 @@
+% Inline tables: column names, an expression, comma separators, an empty
+% line (jump) and unbounded cells (discarded). Behaviour V.
+\begin{tikzpicture}
+\begin{axis}[xlabel={$t$}, ylabel={value}]
+  \addplot table [x=t, y=v] {
+    t   v    w
+    0   1.0  2
+    1   1.5  nan
+    2   0.5  3
+
+    3   2.0  1
+    4   2.5  inf
+  };
+  \addplot table [x expr=\thisrow{t}+0.5, y expr=\thisrowno{2}*0.8] {
+    t   v    w
+    0   1.0  2
+    1   1.5  nan
+    2   0.5  3
+    3   2.0  1
+  };
+  \addplot table [col sep=comma, x index=0, y index=1] {
+    a,b
+    0, 3
+    2, 2.2
+    4, 3.1
+  };
+\end{axis}
+\end{tikzpicture}

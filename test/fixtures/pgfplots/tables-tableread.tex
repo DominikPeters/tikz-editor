@@ -1,0 +1,15 @@
+% \pgfplotstableread (inline, with row sep) and \pgfplotstableset before
+% the axis; the axis plots the loaded table twice. Behaviour V11.
+\begin{tikzpicture}
+\pgfplotstableread[row sep=\\]{n s1 s2\\ 1 2 3\\ 2 4 1\\ 3 3 2\\ 4 5 4\\}\loaded
+\pgfplotstableset{col sep=semicolon}
+\begin{axis}[title={Loaded table}]
+  \addplot table [x=n, y=s1] {\loaded};
+  \addplot table [x=n, y=s2] {\loaded};
+  \addplot table {
+    p;q
+    1;1
+    4;2
+  };
+\end{axis}
+\end{tikzpicture}

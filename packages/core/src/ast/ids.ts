@@ -174,6 +174,10 @@ export function pgfplotsSetStatementId(statementIndex: number): string {
   return `pgfplots-set:${statementIndex}`;
 }
 
+export function pgfplotsTableReadStatementId(statementIndex: number): string {
+  return `pgfplots-table-read:${statementIndex}`;
+}
+
 export function pgfplotsLibraryStatementId(statementIndex: number): string {
   return `pgfplots-library:${statementIndex}`;
 }

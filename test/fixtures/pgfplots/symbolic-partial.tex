@@ -1,0 +1,7 @@
+% symbolic x coords without xtick=data: automatic ticks between positions
+% take the name at the nearest position. Behaviour X1.
+\begin{tikzpicture}
+\begin{axis}[symbolic x coords={a,b,c,d}]
+  \addplot coordinates {(b,2) (c,2.5) (d,3)};
+\end{axis}
+\end{tikzpicture}

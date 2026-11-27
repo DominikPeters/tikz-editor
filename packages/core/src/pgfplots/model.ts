@@ -6,15 +6,16 @@
  */
 import type { AddPlotStatement, AxisStatement, Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
-import type { OptionListAst } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
 import { expandForeachList } from "../foreach/list.js";
-import { evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
+import { convertQuantityToLength, evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
 import {
   cloneStyleRegistry,
   createInitialStyleRegistry,
   expandPgfplotsOptions,
+  flattenStyleEntries,
   type PgfplotsKeyUse,
   type PgfplotsStyleRegistry
 } from "./keys.js";
@@ -56,6 +57,26 @@ export type AxisDirectionModel = {
   tryMinTicks: number;
   /** `x=<length>`: the unit vector length (behaviour A3). */
   unit?: number;
+  /** `symbolic x coords={a,b,c}`: the names, mapped to 0, 1, 2 (behaviour X1). */
+  symbolic?: string[];
+};
+
+/** One direction of `error bars/…` (manual errorbars.tex, behaviour X2). */
+export type ErrorBarDirection = {
+  dir: "none" | "plus" | "minus" | "both";
+  mode: "explicit" | "explicit relative" | "fixed" | "fixed relative";
+  value: number;
+};
+
+export type ErrorBarsModel = {
+  x: ErrorBarDirection;
+  y: ErrorBarDirection;
+  /** `error mark` (initially `-`), null for `none`. */
+  mark: string | null;
+  /** `error mark options` (initially `rotate=90`), as written. */
+  markOptions: string;
+  /** `error bar style` keys, in order. */
+  barStyle: PgfplotsKeyUse[];
 };
 
 export type AxisModel = {
@@ -88,6 +109,12 @@ export type AxisModel = {
   invalid: Array<{ key: string; value: string; span: Span }>;
   /** Plot-level keys given at axis level (`mark=*`, `only marks`), applied to every plot after `every axis plot`. */
   plotDefaults: PgfplotsKeyUse[];
+  /** `table/…` keys from the settings and the axis options, in order (behaviour V). */
+  tableKeys: OptionEntry[];
+  /** The axis-wide bar style (`ybar`, `xbar stacked`, `ybar interval`, …; behaviour U). */
+  bar?: AxisBarStyle;
+  /** `bar shift auto={sep}` given without a bar style (U4). */
+  barShiftAuto?: number;
   /** Legend keys (behaviour L); the legend's TikZ style is `every axis legend` in `styles`. */
   legend: LegendModel;
 };
@@ -107,6 +134,21 @@ export type LegendModel = {
   toName?: string;
 };
 
+export type BarKind = "ybar" | "xbar" | "ybar interval" | "xbar interval";
+
+/** `ybar=<sep>` and friends given to the axis (manual 2dplots.tex `/pgfplots/ybar`). */
+export type AxisBarStyle = {
+  kind: BarKind;
+  stacked: boolean;
+  /** `bar shift auto={sep}` (pt): the gap between adjacent bars of several plots (U4). */
+  sep?: number;
+  /** `ybar interval=<relative width>` (U7). */
+  relative?: number;
+};
+
+/** A bar dimension: `10pt`, or a number in axis units (compat ≥ 1.7, manual `bar width`). */
+export type BarLength = { value: number; unit: "pt" | "axis" };
+
 export const PT_PER_CM = 72.27 / 2.54;
 
 /** The default cycle list, `cycle list name=color` (behaviour G1, measured; the dashed entries draw solid marks, fixture cycle-list). */
@@ -123,6 +165,15 @@ export const COLOR_CYCLE_LIST: readonly string[] = [
   "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=diamond*"
 ];
 
+/** `bar cycle list` (manual 2dplots.tex, colours confirmed in E19). */
+export const BAR_CYCLE_LIST: readonly string[] = [
+  "blue,fill=blue!30!white,mark=none",
+  "red,fill=red!30!white,mark=none",
+  "brown!60!black,fill=brown!30!white,mark=none",
+  "black,fill=gray,mark=none"
+];
+
+/** Named cycle lists whose entries have been measured (the manual shows them only as pictures). */
 /**
  * The predefined cycle lists: the manual prints their definitions
  * (markers-meta.tex, "The definitions of all predefined cycle lists
@@ -215,8 +266,12 @@ export function readPgfFloat(raw: string): number | null {
 }
 
 export function readLength(raw: string): number | null {
-  const value = parseLength(stripBraces(raw), "pt");
-  return value ?? null;
+  const text = stripBraces(raw);
+  const value = parseLength(text, "pt");
+  if (value !== null) return value;
+  // pgfplots reads dimensions with pgfmath (`width=345pt/2.3`, `2*\columnwidth` once substituted).
+  const result = evaluatePgfMathExpression(text);
+  return result.ok ? convertQuantityToLength(result.quantity, "pt") : null;
 }
 
 export function stripBraces(raw: string): string {
@@ -356,6 +411,49 @@ defineAxisKey("cycle list", (ctx, v) => {
   ctx.model.cycleList = entries;
   return true;
 });
+// U: the axis styles `ybar`, `xbar` (bar cycle list, ticks outside across the
+// bars, automatic shifts), `ybar stacked`, `ybar interval` (manual 2dplots.tex).
+for (const kind of ["ybar", "xbar"] as const) {
+  const across = kind === "ybar" ? "x" : "y";
+  defineAxisKey(kind, (ctx, v) => {
+    const sep = v === null ? 2 : readLength(v);
+    if (sep === null) return false;
+    ctx.model.bar = { kind, stacked: false, sep };
+    ctx.model.cycleList = [...BAR_CYCLE_LIST];
+    ctx.model[across].tickAlign = "outside";
+    return true;
+  });
+  defineAxisKey(`${kind} stacked`, (ctx, v) => {
+    if (v !== null && !["plus", "minus"].includes(stripBraces(v))) return false;
+    // Unlike `ybar`, the stacked style leaves the ticks inside (E19 fixture bars-stacked).
+    ctx.model.bar = { kind, stacked: true };
+    ctx.model.cycleList = [...BAR_CYCLE_LIST];
+    return true;
+  });
+  defineAxisKey(`${kind} interval`, (ctx, v) => {
+    const relative = v === null ? 1 : readPgfNumber(v);
+    if (relative === null) return false;
+    ctx.model.bar = { kind: `${kind} interval`, stacked: false, relative };
+    ctx.model.cycleList = [...BAR_CYCLE_LIST];
+    ctx.model[across].ticks = { kind: "data" };
+    ctx.model[across].majorGrids = true;
+    return true;
+  });
+}
+// W3: `area style` = area cycle list, area legend, axis on top (manual 2dplots.tex). The
+// first entry of the area cycle list measured (E20 `closed-area-style`) equals the bar list's.
+defineAxisKey("area style", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; ctx.model.axisOnTop = true; return true; });
+defineAxisKey("area cycle list", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; return true; });
+defineAxisKey("bar cycle list", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; return true; });
+defineAxisKey("bar shift auto", (ctx, v) => {
+  const sep = v === null ? 2 : readLength(v);
+  if (sep === null) return false;
+  // Without a bar style it still installs the shift formula for the bar plots (matlab2tikz writes it alone).
+  if (ctx.model.bar) ctx.model.bar = { ...ctx.model.bar, sep };
+  else ctx.model.barShiftAuto = sep;
+  return true;
+});
+
 defineAxisKey("grid", (ctx, v) => {
   const text = stripBraces(v ?? "major").toLowerCase();
   const major = text === "major" || text === "both" || text === "true";
@@ -371,6 +469,12 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`enlarge ${letter} limits`, (ctx, v) => { const e = readEnlarge(v); if (!e) return false; dir(ctx).enlarge = e; return true; });
   defineAxisKey(`${letter}tick`, (ctx, v) => { dir(ctx).ticks = readTickList(v); return true; });
   defineAxisKey(`minor ${letter}tick`, (ctx, v) => { dir(ctx).minorTicks = readTickList(v); return true; });
+  defineAxisKey(`symbolic ${letter} coords`, (ctx, v) => {
+    const names = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces).filter((name) => name.length > 0);
+    if (names.length === 0) return false;
+    dir(ctx).symbolic = names;
+    return true;
+  });
   defineAxisKey(`${letter}ticklabels`, (ctx, v) => { dir(ctx).tickLabels = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces); return true; });
   defineAxisKey(`${letter}tick distance`, (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; dir(ctx).tickDistance = n; return true; });
   defineAxisKey(`minor ${letter} tick num`, (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n < 0) return false; dir(ctx).minorTickNum = Math.round(n); return true; });
@@ -494,6 +598,13 @@ function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
  */
 export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
+  "every mark", "domain", "samples", "forget plot",
+  "unbounded coords", "each nth point", "skip coords between index", "filter discard warning",
+  "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
+  "restrict expr to domain", "restrict expr to domain*",
+  "bar width", "bar shift", "stack plots", "stack dir", "reverse stacked plots",
+  "nodes near coords", "every node near coord", "nodes near coords align", "point meta", "bar direction",
+  "bar interval width", "bar interval shift",
   "smooth", "tension", "const plot", "const plot mark left", "const plot mark right", "const plot mark mid",
   "jump mark left", "jump mark right", "jump mark mid", "ycomb", "xcomb", "mark repeat", "mark phase", "mark indices",
   // Numbers read the same either way; it only matters for symbolic coordinates, which are diagnosed.
@@ -537,6 +648,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     unsupported: [],
     invalid: [],
     plotDefaults: [],
+    tableKeys: [],
     legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
   const ctx: Ctx = { model };
@@ -544,6 +656,14 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
       if (!handler(ctx, use.value, use)) model.invalid.push({ key: use.key, value: use.value ?? "", span: use.origin.span });
+      return;
+    }
+    if (use.key.startsWith("table/")) {
+      model.tableKeys.push(keyUseToEntry(use));
+      return;
+    }
+    if (use.key.startsWith("error bars/")) {
+      model.plotDefaults.push(use);
       return;
     }
     if (use.key.startsWith("/pgf/number format/") || use.key.startsWith("/pgf/")) {
@@ -582,8 +702,22 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
   return model;
 }
 
+/** A key use as an option entry (its span is where it was written). */
+export function keyUseToEntry(use: PgfplotsKeyUse): OptionEntry {
+  return use.value === null
+    ? { kind: "flag", key: use.key, span: use.origin.span, raw: use.key }
+    : { kind: "kv", key: use.key, valueRaw: use.value, span: use.origin.span, raw: `${use.key}=${use.value}` };
+}
+
 // ---------------------------------------------------------------------------
 // Plots
+
+/** The documented coordinate filters (manual coordfiltering.tex), in the order given. */
+export type PlotFilter =
+  | { kind: "each nth point"; n: number; span: Span }
+  | { kind: "skip coords between index"; from: number; to: number; span: Span }
+  | { kind: "restrict"; axis: "x" | "y"; min: number; max: number; clamp: boolean; span: Span }
+  | { kind: "restrict expr"; expr: string; min: number; max: number; clamp: boolean; span: Span };
 
 export type PlotModel = {
   statement: AddPlotStatement;
@@ -621,6 +755,22 @@ export type PlotModel = {
   /** The legend image kind (`line legend` initially; `area legend`, `empty legend`, …; L5). */
   legendImage: string;
   forget: boolean;
+  filters: PlotFilter[];
+  /** `table/…` keys given to the plot, in order. */
+  tableKeys: OptionEntry[];
+  /** The bar handler of the plot (`/tikz/ybar`, …; behaviour U), with its width and shift. */
+  bar?: { kind: BarKind; width?: BarLength; shift?: BarLength; relative?: number; intervalShift?: number };
+  /** `stack plots=y|x` (U6). */
+  stack?: "x" | "y";
+  /** `nodes near coords[=text]`: the text template, or null when off (X3). */
+  nodesNearCoords: string | null;
+  /** `nodes near coords align`, and the `every node near coord` keys in order. */
+  nodesNearCoordsAlign: "auto" | "vertical" | "horizontal";
+  nodeNearCoordKeys: PgfplotsKeyUse[];
+  /** `point meta` (`explicit symbolic`, `explicit`, `x`, `y`, …), when given. */
+  pointMeta?: string;
+  /** `error bars/…` (X2); undefined when the plot sets none. */
+  errorBars?: ErrorBarsModel;
   unsupported: Array<{ key: string; span: Span }>;
   invalid: Array<{ key: string; value: string; span: Span }>;
 };
@@ -649,9 +799,22 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     pgfmathKeys: [],
     legendImage: "line legend",
     forget: false,
+    filters: [],
+    tableKeys: [],
+    ...(axis.bar ? {
+      bar: { kind: axis.bar.kind, ...(axis.bar.relative !== undefined ? { relative: axis.bar.relative } : {}) },
+      ...(axis.bar.stacked ? { stack: axis.bar.kind.startsWith("y") ? "y" as const : "x" as const } : {})
+    } : {}),
+    nodesNearCoords: null,
+    nodesNearCoordsAlign: "auto",
+    nodeNearCoordKeys: [],
     unsupported: [],
     invalid: []
   };
+  // `bar width`/`bar shift` may come before the bar handler that uses them.
+  const pendingBar: { width?: BarLength; shift?: BarLength; relative?: number; intervalShift?: number } = {};
+  // The axis styles `ybar`/`xbar` (and stacked) also set `ybar legend`/`xbar legend` (manual 2dplots.tex).
+  if (axis.bar && !axis.bar.kind.endsWith("interval")) plot.legendImage = `${axis.bar.kind} legend`;
   const useCycle = statement.increment || !statement.options;
   const lists: OptionListAst[] = [];
   lists.push(...(styles.get("every axis plot") ?? []));
@@ -664,7 +827,10 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     lists.push(parseOptionListRaw(`[${entry}]`));
   }
   if (statement.options) lists.push(statement.options);
+  for (const extra of statement.extraOptions ?? []) lists.push(extra.options);
   if (statement.legacyPlot?.options) lists.push(statement.legacyPlot.options);
+  // `no markers` given to the axis goes to `every axis plot post`, so it beats the cycle list (manual markers-meta.tex).
+  if (axis.plotDefaults.some((use) => use.key === "no marks" || use.key === "no markers")) lists.push(parseOptionListRaw("[no markers]"));
   lists.push(...(styles.get("every axis plot post") ?? []));
   lists.push(...extraLists);
   // `every mark` is a TikZ style: it accumulates through definitions, and is read at the end.
@@ -678,6 +844,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     }
     if (key === "no marks" || key === "no markers") { plot.mark = null; return; }
     if (key === "only marks") { plot.onlyMarks = readBoolean(value) ?? true; return; }
+    if (key === "sharp plot") delete plot.bar;
     const handler = PLOT_HANDLER_KEYS[key];
     if (handler) { plot.handler = handler; return; }
     if (key === "tension") {
@@ -728,6 +895,130 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "forget plot") { plot.forget = readBoolean(value) ?? true; return; }
+    if (key.startsWith("table/")) { plot.tableKeys.push(keyUseToEntry(use)); return; }
+    if (key === "ybar" || key === "xbar" || key === "ybar interval" || key === "xbar interval") {
+      // The plot handler takes no value (tikz.code.tex); its width is `bar interval width` (E19 `bars-interval`).
+      plot.bar = { ...plot.bar, kind: key };
+      if (key.endsWith("interval")) delete plot.bar.relative;
+      return;
+    }
+    if (key === "bar interval width" || key === "bar interval shift") {
+      const n = value === null ? null : readPgfNumber(value);
+      if (n === null) { plot.invalid.push({ key, value: value ?? "", span: use.origin.span }); return; }
+      if (key === "bar interval width") pendingBar.relative = n; else pendingBar.intervalShift = n;
+      if (plot.bar) plot.bar = { ...plot.bar, ...pendingBar };
+      return;
+    }
+    if (key === "ybar stacked" || key === "xbar stacked") {
+      plot.bar = { ...plot.bar, kind: key === "ybar stacked" ? "ybar" : "xbar" };
+      plot.stack = key === "ybar stacked" ? "y" : "x";
+      return;
+    }
+    if (key === "bar width" || key === "bar shift") {
+      const length = readBarLength(value ?? "");
+      if (length === null) { plot.invalid.push({ key, value: value ?? "", span: use.origin.span }); return; }
+      const field = key === "bar width" ? "width" : "shift";
+      if (plot.bar) plot.bar[field] = length;
+      else pendingBar[field] = length;
+      return;
+    }
+    if (key === "stack plots") {
+      const dir = stripBraces(value ?? "y");
+      if (dir === "x" || dir === "y") plot.stack = dir;
+      else if (dir === "false") delete plot.stack;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "stack dir" || key === "reverse stacked plots" || key === "bar direction") return;
+    if (key === "nodes near coords") {
+      plot.nodesNearCoords = value === null || stripBraces(value) === "" ? "\\pgfmathprintnumber{\\pgfplotspointmeta}" : stripBraces(value);
+      return;
+    }
+    if (key === "nodes near coords align") {
+      const align = stripBraces(value ?? "");
+      if (align === "vertical" || align === "horizontal" || align === "auto") plot.nodesNearCoordsAlign = align;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "every node near coord") return;
+    if (key === "point meta") { plot.pointMeta = stripBraces(value ?? ""); return; }
+    // `error bars/.cd, y dir=both, y explicit`: the key names are unambiguous with or without the path.
+    const errorKey = key.replace(/^error bars\//u, "");
+    if (key === "error bars/.cd") return;
+    const errorDir = /^(x|y) (dir|explicit|explicit relative|fixed|fixed relative)$/u.exec(errorKey);
+    if (errorDir || errorKey === "error mark" || errorKey === "error mark options" || errorKey === "error bar style") {
+      plot.errorBars ??= {
+        x: { dir: "none", mode: "fixed", value: 0 }, y: { dir: "none", mode: "fixed", value: 0 },
+        mark: "-", markOptions: "rotate=90", barStyle: []
+      };
+      const bars = plot.errorBars;
+      if (errorDir) {
+        const d = bars[errorDir[1] === "x" ? "x" : "y"];
+        const what = errorDir[2] ?? "";
+        if (what === "dir") {
+          const v = stripBraces(value ?? "");
+          if (v === "none" || v === "plus" || v === "minus" || v === "both") d.dir = v;
+          else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+        } else if (what === "explicit" || what === "explicit relative") d.mode = what;
+        else {
+          const n = value === null ? 0 : readPgfNumber(value);
+          if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+          else { d.mode = what === "fixed" ? "fixed" : "fixed relative"; d.value = n; }
+        }
+      } else if (errorKey === "error mark") {
+        const name = stripBraces(value ?? "");
+        bars.mark = name === "none" || name === "" ? null : name;
+      } else if (errorKey === "error mark options") bars.markOptions = stripBraces(value ?? "");
+      else if (value !== null) {
+        const list = parseOptionListRaw(`[${stripBraces(value)}]`);
+        bars.barStyle.push(...flattenStyleEntries([list], styles));
+      }
+      return;
+    }
+    if (key === "unbounded coords") {
+      const mode = stripBraces(value ?? "");
+      if (mode === "discard" || mode === "jump") plot.unboundedCoords = mode;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "filter discard warning") return;
+    if (key === "each nth point") {
+      const n = value === null ? null : readPgfNumber(value);
+      if (n === null || n < 1) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.filters.push({ kind: "each nth point", n: Math.round(n), span: use.origin.span });
+      return;
+    }
+    if (key === "skip coords between index") {
+      const args = readBraceArguments(value ?? "");
+      const from = args[0] === undefined ? null : readPgfNumber(args[0]);
+      const to = args[1] === undefined ? null : readPgfNumber(args[1]);
+      if (from === null || to === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.filters.push({ kind: "skip coords between index", from, to, span: use.origin.span });
+      return;
+    }
+    const restrict = /^restrict (x|y|expr) to domain(\*?)$/u.exec(key);
+    if (restrict) {
+      const clamp = restrict[2] === "*";
+      let domain: string | undefined;
+      let expr: string | undefined;
+      if (restrict[1] === "expr") {
+        const args = readBraceArguments(value ?? "");
+        expr = args[0];
+        domain = args[1];
+      } else domain = stripBraces(value ?? "");
+      const [lo, hi] = (domain ?? "").split(":");
+      const min = lo === undefined ? null : readPgfNumber(lo);
+      const max = hi === undefined ? null : readPgfNumber(hi);
+      if (min === null || max === null || (restrict[1] === "expr" && expr === undefined)) {
+        plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+        return;
+      }
+      plot.filters.push(restrict[1] === "expr"
+        ? { kind: "restrict expr", expr: expr ?? "", min, max, clamp, span: use.origin.span }
+        : { kind: "restrict", axis: restrict[1] === "x" ? "x" : "y", min, max, clamp, span: use.origin.span });
+      if (!clamp) plot.unboundedCoords = "jump";
+      return;
+    }
     if (LEGEND_IMAGE_KEYS.has(key)) { plot.legendImage = key; return; }
     if (key === "legend image code") { plot.legendImage = "legend image code"; return; }
     if (key === "samples at") {
@@ -749,24 +1040,6 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
       return;
     }
-    if (key === "unbounded coords") {
-      const text = stripBraces(value ?? "");
-      if (text === "discard" || text === "jump") plot.unboundedCoords = text;
-      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
-      return;
-    }
-    const restrict = /^restrict ([xy]) to domain(\*?)$/u.exec(key);
-    if (restrict) {
-      const parts = splitDomain(stripBraces(value ?? ""));
-      const min = parts ? readPgfNumber(parts[0]) : null;
-      const max = parts ? readPgfNumber(parts[1]) : null;
-      if (min === null || max === null) { plot.invalid.push({ key, value: value ?? "", span: use.origin.span }); return; }
-      const truncate = restrict[2] === "*";
-      plot.restrict.push({ axis: restrict[1] === "y" ? "y" : "x", min, max, truncate });
-      // Manual coordfiltering.tex: the non-starred versions also set unbounded coords=jump.
-      if (!truncate) plot.unboundedCoords = "jump";
-      return;
-    }
     if (key === "declare function" || key === "/pgf/declare function" || key === "trig format" || key === "/pgf/trig format") {
       plot.pgfmathKeys.push({ ...use, key: key.replace(/^\/pgf\//u, "") });
       return;
@@ -778,12 +1051,41 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     }
     plot.pathKeys.push(use);
   }, { onProblem: (problem) => plot.unsupported.push({ key: problem.key, span: problem.span }) });
+  if (plot.bar) plot.bar = { ...pendingBar, ...plot.bar };
+  plot.nodeNearCoordKeys = flattenStyleEntries(styles.get("every node near coord") ?? [], styles);
   plot.markKeys = (styles.get("every mark") ?? []).flatMap((list) => list.entries.map((entry): PgfplotsKeyUse => ({
     key: entry.kind === "unknown" ? entry.raw : entry.key,
     value: entry.kind === "kv" ? entry.valueRaw : null,
     origin: entry
   })));
   return plot;
+}
+
+/** `10pt` (a dimension) or `0.5` (axis units). */
+export function readBarLength(raw: string): BarLength | null {
+  const text = stripBraces(raw);
+  if (/^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/u.test(text)) return { value: Number(text), unit: "axis" };
+  const length = readLength(text);
+  return length === null ? null : { value: length, unit: "pt" };
+}
+
+/** `{a}{b}` → ["a", "b"] (TeX arguments of a key value). */
+export function readBraceArguments(raw: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < raw.length; i += 1) {
+    const c = raw.charAt(i);
+    if (c === "\\") { if (depth > 0) current += c + raw.charAt(i + 1); i += 1; continue; }
+    if (c === "{") { if (depth > 0) current += c; depth += 1; continue; }
+    if (c === "}") {
+      depth -= 1;
+      if (depth === 0) { out.push(current.trim()); current = ""; } else current += c;
+      continue;
+    }
+    if (depth > 0) current += c;
+  }
+  return out;
 }
 
 export type PlotHandlerName = "sharp" | "smooth" | "const-left" | "const-right" | "const-mid" | "jump-left" | "jump-right" | "jump-mid" | "ycomb" | "xcomb";

@@ -274,6 +274,18 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
       }
       previousStrayTokenEnd = node.to;
       const preview = formatSourcePreview(source.slice(node.from, node.to));
+      // Inside an axis, a brace pair is a TeX group (its plots still belong to
+      // the axis, experiment E16) and other stray text draws nothing.
+      if (hasAncestor(node, "AxisStatement")) {
+        if (preview === "{" || preview === "}") return;
+        diagnostics.push({
+          severity: "warning",
+          message: `Stray text \`${preview}\` in the axis draws nothing; remove it.`,
+          span: { from: node.from, to: node.to },
+          code: "stray-token"
+        });
+        return;
+      }
       diagnostics.push({
         severity: "error",
         message: preview === ";"

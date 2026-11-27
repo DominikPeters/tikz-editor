@@ -9,7 +9,7 @@
  * the host as `evaluateStatement`), installs the axis coordinate systems
  * and the data map for embedded TikZ, and registers the axis as a node.
  */
-import type { AddPlotStatement, AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
+import type { AddPlotStatement, AxisBodyItem, AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
 import type { FeatureId } from "../capabilities/feature-ids.js";
 import { worldBounds, worldPoint, worldVector, type WorldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -54,7 +54,12 @@ import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
-import { COLOR_CYCLE_LIST, readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { COLOR_CYCLE_LIST, readLength, readPgfNumber, resolveAxisModel, resolvePlotModel, splitTopLevelList, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { readPgfplotsTableFile, readPgfplotsTableMacro } from "./table-io.js";
+import { formatPgfNumber } from "../semantic/pgfmath/number-format.js";
+import { normalizeColor } from "../semantic/style/colors.js";
+import { barCorners, barGroups, barRects, stackPlots } from "./bars.js";
+import { documentClassLengths, scanLengthRegisters, substituteDocumentLengths, type DocumentLengthEnvironment } from "./document-lengths.js";
 import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
@@ -185,15 +190,60 @@ const NUMBER_FORMAT_PREFIX = "/pgf/number format/";
 /** Evaluates one axis; returns its scene elements in paint order. */
 export function evaluateAxisStatement(source: AxisStatement, context: SemanticContext, host: AxisHost): SceneElement[] {
   const { diagnostics, markFeature } = host;
-  const parent = currentFrame(context);
-  // Option values may use macros (`width=\figwidth`), expanded as TikZ options are.
-  const expand = (list: OptionListAst): OptionListAst => expandOptionListMacros([list], parent.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? list;
+  const outer = currentFrame(context);
+  // Macro definitions in the body (`\pgfmathsetmacro`, `\def`) take effect in
+  // order for the plots after them; embedded TikZ is evaluated at `\end{axis}`
+  // and sees the final values (behaviour V0, experiment E16).
+  const parent = childFrame(outer, {});
+  const plotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
+  pushFrame(context, parent);
+  try {
+    for (const item of source.body) {
+      if (isAxisDefinition(item)) host.evaluateStatement(item);
+      else if (item.kind === "AddPlot") plotBindings.set(item, parent.macroBindings.fork());
+    }
+  } finally {
+    popFrame(context);
+  }
+  // Option values may use macros (`width=\figwidth`), expanded as TikZ options are,
+  // and document lengths (`width=0.48\linewidth`, behaviour Y).
+  const lengthsEnv = documentLengthEnvironment(context, source.span.from);
+  const usedLengths = new Set<string>();
+  const withLengths = (list: OptionListAst): OptionListAst => {
+    if (!list.raw.includes("\\")) return list;
+    const entries = list.entries.map((entry) => {
+      if (entry.kind !== "kv") return entry;
+      const { text, used } = substituteDocumentLengths(entry.valueRaw, lengthsEnv);
+      for (const name of used) usedLengths.add(name);
+      return text === entry.valueRaw ? entry : { ...entry, valueRaw: text, raw: `${entry.key}=${text}` };
+    });
+    return { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+  };
+  const expandWith = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => withLengths(expandOptionListMacros([list], bindings, context.macroTraceCollector ?? undefined)[0] ?? list);
+  const expand = (list: OptionListAst): OptionListAst => expandWith(list, outer.macroBindings);
+  const expandedPlotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const axis: AxisStatement = {
     ...source,
     ...(source.options ? { options: expand(source.options) } : {}),
-    body: source.body.map((item) => (item.kind === "AddPlot" && item.options ? { ...item, options: expand(item.options) } : item))
+    body: source.body.map((item) => {
+      if (item.kind !== "AddPlot") return item;
+      const bindings = plotBindings.get(item) ?? parent.macroBindings;
+      const expanded: AddPlotStatement = {
+        ...item,
+        ...(item.options ? { options: expandWith(item.options, bindings) } : {}),
+        ...(item.extraOptions ? { extraOptions: item.extraOptions.map((extra) => ({ ...extra, options: expandWith(extra.options, bindings) })) } : {})
+      };
+      expandedPlotBindings.set(expanded, bindings);
+      return expanded;
+    })
   };
+  const bindingsOf = (statement: AddPlotStatement) => expandedPlotBindings.get(statement) ?? parent.macroBindings;
   const settings = readPgfplotsSettings(context).map(expand);
+  if (usedLengths.size > 0 && lengthsEnv.assumption) {
+    const values: Record<string, number> = { ...lengthsEnv.lengths };
+    const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(values[name])}pt`).join(", ");
+    diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Document lengths are assumed: ${named} (${lengthsEnv.assumption}).`, span: axis.optionsSpan ?? axis.beginSpan });
+  }
   const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));
   markFeature("pgfplots_axis", "supported");
 
@@ -255,8 +305,20 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     if (!plot.forget) cycleCounter += 1;
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings), plotMathEnvironment(axisFrame, plot));
+    const bindings = bindingsOf(statement);
+    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings), plotMathEnvironment(axisFrame, plot), {
+      tableKeys: [...model.tableKeys, ...plot.tableKeys],
+      readFile: (name) => readPgfplotsTableFile(context, name),
+      tableMacro: (name) => readPgfplotsTableMacro(context, name),
+      symbolic: { ...(model.x.symbolic ? { x: model.x.symbolic } : {}), ...(model.y.symbolic ? { y: model.y.symbolic } : {}) }
+    });
     const input = statement.input.kind;
+    if (data.kind === "unavailable") {
+      markFeature("pgfplots_addplot_table", "supported");
+      diagnostics.push({ severity: "warning", code: data.code, message: data.message, span: data.span });
+      plots.push({ model: plot, points: null });
+      return;
+    }
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn: ${data.reason} is not supported yet.`, span: data.span });
@@ -264,8 +326,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
       return;
     }
     markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : "pgfplots_addplot_expression", "supported");
-    if (statement.trailingPath) {
-      diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: "Path operations after an `\\addplot` input (`\\closedcycle`, `node[pos=…]`) are not drawn yet.", span: statement.trailingPath.span });
+    const unhandled = statement.trailingPath ? unsupportedTrailingItem(statement.trailingPath) : null;
+    if (unhandled) {
+      diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: `Path operation \`${unhandled.raw.trim()}\` after an \`\\addplot\` input is not drawn yet (\`\\closedcycle\`, \`-- (…)\`, \`-- cycle\`, \`node[pos=…]\` and \`coordinate[pos=…]\` are).`, span: unhandled.span });
+    }
+    for (const note of data.notes ?? []) {
+      if (warned.has(note.code)) continue;
+      warned.add(note.code);
+      diagnostics.push({ severity: "warning", code: note.code, message: note.message, span: note.span });
     }
     plots.push({ model: plot, points: filterPlotPoints(data.points, plot) });
     if (plot.handler !== "sharp" || plot.markRepeat !== 1 || plot.markPhase !== 1 || plot.markIndices || model.cycleListShift !== 0 || model.cycleList.join("\n") !== COLOR_CYCLE_LIST.join("\n")) markFeature("pgfplots_plot_styles", "supported");
@@ -276,9 +344,19 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
   }
 
+  // U6: stacked plots carry their stacked values from here on (limits, drawing, marks).
+  const stacks = stackPlots(plots);
+  for (const [index, stacked] of stacks) {
+    const plot = plots[index];
+    if (plot) plot.points = stacked.points;
+  }
+  const groups = barGroups(plots.map((plot) => (plot.points ? plot.model : null)), model.bar?.sep ?? model.barShiftAuto, model.bar?.kind.endsWith("interval") ?? false);
+
   // Stage 3.
   const drawn = plots.flatMap((plot) => (plot.points && !plot.model.forget ? [plot.points] : plot.points ? [plot.points] : []));
-  const limitsResult = computeLimits(model, drawn, boxSizeWithoutLimits(model));
+  // X2: error bar ends count for the limits (E20 `err-limits`).
+  const errorEnds = plots.flatMap((plot) => (plot.points && plot.model.errorBars ? [errorBarSegments(plot.points, plot.model.errorBars).flatMap((bar) => [{ x: bar.to.x, y: bar.to.y, jump: false }])] : []));
+  const limitsResult = computeLimits(model, [...drawn, ...errorEnds], boxSizeWithoutLimits(model));
   if (limitsResult.kind === "inverted") {
     diagnostics.push({ severity: "error", code: "pgfplots-inverted-limits", message: `${limitsResult.axis}min (${String(limitsResult.min)}) is larger than ${limitsResult.axis}max (${String(limitsResult.max)}); pgfplots cannot draw this axis.`, span: axis.optionsSpan ?? axis.beginSpan });
     return [];
@@ -303,8 +381,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
     return result.ticks;
   };
-  const ticks = { x: tickFor("x"), y: tickFor("y") };
+  const ticks = { x: symbolicTickLabels(tickFor("x"), model.x.symbolic), y: symbolicTickLabels(tickFor("y"), model.y.symbolic) };
   markFeature("pgfplots_ticks", "supported");
+  if (plots.some((plot) => plot.points && plot.model.bar)) markFeature("pgfplots_bars", "supported");
+  if (axis.body.some((item) => item.kind === "AddPlot" && item.trailingPath)) markFeature("pgfplots_area", "supported");
+  if (plots.some((plot) => plot.points && plot.model.errorBars)) markFeature("pgfplots_error_bars", "supported");
+  if (model.x.symbolic || model.y.symbolic) markFeature("pgfplots_symbolic_coords", "supported");
+  if (plots.some((plot) => plot.points && plot.model.nodesNearCoords !== null)) markFeature("pgfplots_nodes_near_coords", "supported");
+  if (usedLengths.size > 0) markFeature("pgfplots_document_lengths", "supported");
   if (model.x.label || model.y.label || model.title) markFeature("pgfplots_axis_descriptions", "supported");
   if (axis.body.some((item) => item.kind !== "AddPlot" && item.kind !== "AddLegendEntry" && item.kind !== "AddLegendImage" && item.kind !== "Legend" && item.kind !== "PgfplotsExtra" && item.kind !== "PgfplotsSet")) markFeature("pgfplots_axis_coordinates", "supported");
 
@@ -372,7 +456,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     ylabel: styleLists(model.styles, ["every axis label", "every axis y label"]),
     title: styleLists(model.styles, ["every axis title"]),
     legend: [],
-    "legend-entry": []
+    "legend-entry": [],
+    "node near coord": []
   };
 
   // Plot styles (needed for marks in F1 and for emission).
@@ -408,6 +493,119 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     if (!plot.points || !base) return null;
     return marksFor(plot.model, base, true);
   });
+
+  /**
+   * X3 - `nodes near coords`: a node per point, anchored `south` at the point
+   * (or at the bar's end, shifted with the bar) for vertical alignment, `west`
+   * for horizontal (xbar); `north`/`east` for negative values. The text is
+   * `$\pgfmathprintnumber{meta}$` (meta = y, x for xbar) or the symbolic meta
+   * as written, in the plot's colour, `every node near coord` applied
+   * (fixture bars-nodes-near).
+   */
+  const nodesNearCoords = (plotModel: PlotModel, points: readonly PlotPoint[], barTops: Point[] | null): SceneElement[] => {
+    const horizontal = plotModel.nodesNearCoordsAlign === "horizontal" || (plotModel.nodesNearCoordsAlign === "auto" && plotModel.bar?.kind.startsWith("x") === true);
+    const colorKeys = plotModel.pathKeys.filter((use) => use.key === "color" || (use.value === null && isColorName(use.key)));
+    const styles = [...(colorKeys.length > 0 ? [keyUsesToOptionList(colorKeys)] : []), ...(plotModel.nodeNearCoordKeys.length > 0 ? [keyUsesToOptionList(plotModel.nodeNearCoordKeys)] : [])];
+    const symbolic = plotModel.pointMeta === "explicit symbolic";
+    const out: SceneElement[] = [];
+    points.forEach((point, index) => {
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      const value = plotModel.bar?.kind.startsWith("x") ? point.x : point.y;
+      const metaValue = plotModel.pointMeta === "explicit" && point.meta !== undefined ? Number(point.meta) : value;
+      const meta = symbolic ? point.meta ?? "" : `$${formatPgfNumber(metaValue, numberFormat).tex}$`;
+      const template = plotModel.nodesNearCoords ?? "";
+      const text = template === "\\pgfmathprintnumber{\\pgfplotspointmeta}" ? meta : template.split("\\pgfplotspointmeta").join(symbolic ? meta : String(metaValue));
+      const at = barTops?.[index] ?? mapPoint(point.x, point.y);
+      const negative = value < 0;
+      const anchor = horizontal ? (negative ? "east" : "west") : (negative ? "north" : "south");
+      const request: LabelRequest = { role: "node near coord", text, styles, placement: `anchor=${anchor}`, at };
+      out.push(...evaluateLabel(request, at, true).elements);
+    });
+    return out;
+  };
+
+  /**
+   * X2 - error bars, under the clip after the plot's line: per point, x then
+   * y, plus then minus, a stroked bar from the point (plot colour and width,
+   * `error bar style`) and the error mark at its end, rotated by the bar's
+   * direction plus its `rotate` (initially 90), so `-` lies across the bar (E20 `err-*`).
+   */
+  const errorBarElements = (plotModel: PlotModel, points: readonly PlotPoint[], plotStyle: ResolvedStyle, statement: AddPlotStatement): SceneElement[] => {
+    const bars = plotModel.errorBars;
+    if (!bars) return [];
+    const out: SceneElement[] = [];
+    const base: ResolvedStyle = { ...plotStyle, fill: null, markerStart: null, markerEnd: null };
+    const barStyle = bars.barStyle.length > 0 ? resolveStyle(context, axisFrame, base, [keyUsesToOptionList(bars.barStyle)], statement.id, statement.span).style : base;
+    const markParts = splitTopLevelList(bars.markOptions).filter((part) => part.length > 0);
+    const rotateText = markParts.find((part) => /^rotate\s*=/u.test(part));
+    const markRotate = rotateText ? readPgfNumber(rotateText.replace(/^rotate\s*=/u, "")) ?? 0 : 0;
+    const markOther = markParts.filter((part) => part !== rotateText);
+    const markStyleBase: ResolvedStyle = { ...base, stroke: base.stroke ?? "black", fill: base.stroke ?? "black", drawExplicit: true };
+    const markStyle = markOther.length > 0 ? resolveStyle(context, axisFrame, markStyleBase, [parseOptionListRaw(`[${markOther.join(",")}]`)], statement.id, statement.span).style : markStyleBase;
+    const sizeText = markOther.find((part) => /^mark size\s*=/u.test(part));
+    const markSize = sizeText ? readLength(sizeText.replace(/^mark size\s*=/u, "")) ?? 2 : plotModel.markSize ?? 2;
+    const primitives = bars.mark && isPlotMarkName(bars.mark) ? plotMarkPrimitives(bars.mark, { size: markSize, strokeColor: markStyle.stroke ?? "black", fillColor: markStyle.fill ?? markStyle.stroke ?? "black" }) : null;
+    errorBarSegments(points, bars).forEach((bar, n) => {
+      const from = mapPoint(bar.from.x, bar.from.y);
+      const to = mapPoint(bar.to.x, bar.to.y);
+      const path = makePath(statement.id, `error:${String(n)}`, { ...barStyle, fill: null }, axisFrame.styleChain, statement.span);
+      path.commands = [{ kind: "M", to: toWorld(from) }, { kind: "L", to: toWorld(to) }];
+      path.clipChain = [...contentClip];
+      path.pictureSizeRelevant = false;
+      out.push(path);
+      if (!primitives) return;
+      // PGF's `-` runs from (s,0) to (-s,0); the mark turns with the bar, then by its own `rotate` (E20).
+      const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI + markRotate;
+      const rad = (angle * Math.PI) / 180;
+      const cos = Math.cos(rad); const sin = Math.sin(rad);
+      const rotate = (x: number, y: number): Point => ({ x: to.x + x * cos - y * sin, y: to.y + x * sin + y * cos });
+      primitives.forEach((primitive, index) => {
+        if (primitive.kind !== "path") return;
+        const markPath = makePath(statement.id, `error:${String(n)}:mark:${String(index)}`, { ...markStyle, stroke: primitive.stroke, fill: primitive.fill, drawExplicit: primitive.stroke !== null }, axisFrame.styleChain, statement.span);
+        markPath.commands = primitive.segments.map((segment): ScenePathCommand => {
+          switch (segment.op) {
+            case "M": return { kind: "M", to: toWorld(rotate(segment.x, segment.y)) };
+            case "L": return { kind: "L", to: toWorld(rotate(segment.x, segment.y)) };
+            case "C": return { kind: "C", c1: toWorld(rotate(segment.x1, segment.y1)), c2: toWorld(rotate(segment.x2, segment.y2)), to: toWorld(rotate(segment.x, segment.y)) };
+            case "Z": return { kind: "Z" };
+          }
+        });
+        markPath.clipChain = [...contentClip];
+        markPath.pictureSizeRelevant = false;
+        out.push(markPath);
+      });
+    });
+    return out;
+  };
+
+  /** W6: `node[pos=…]{…}` and `coordinate[pos=…] (name)` after the input sit on the plot path, by arc length in data units (E20 `node-pos`). */
+  const trailingNodes = (trailing: PathStatement, plotModel: PlotModel, points: readonly PlotPoint[]): SceneElement[] => {
+    const out: SceneElement[] = [];
+    const colorKeys = plotModel.pathKeys.filter((use) => use.key === "color" || (use.value === null && isColorName(use.key)));
+    trailing.items.forEach((item, index) => {
+      if (item.kind !== "Node" && item.kind !== "CoordinateOperation") return;
+      const optionsRaw = item.kind === "Node" ? item.options?.raw ?? "" : item.options?.raw ?? "";
+      const entries = item.options?.entries ?? [];
+      const posEntry = entries.find((entry) => entry.kind === "kv" && entry.key.trim() === "pos");
+      const pos = posEntry?.kind === "kv" ? readPgfNumber(posEntry.valueRaw) : 1;
+      const at = pointAlong(points, pos ?? 1);
+      if (!at) return;
+      const rest = entries.filter((entry) => entry !== posEntry).map((entry) => entry.raw).join(",");
+      const keys = [...colorKeys.map((use) => (use.value === null ? use.key : `${use.key}=${use.value}`)), rest].filter((text) => text.length > 0).join(",");
+      void optionsRaw;
+      const name = item.kind === "Node" ? item.name : item.name;
+      const text = item.kind === "Node" ? item.text : "";
+      const statementSource = item.kind === "Node"
+        ? `\\begin{tikzpicture}\\node[${keys}]${name ? ` (${name})` : ""} at (${String(at.x)},${String(at.y)}) {${text}};\\end{tikzpicture}`
+        : `\\begin{tikzpicture}\\coordinate${name ? ` (${name})` : ""} at (${String(at.x)},${String(at.y)});\\end{tikzpicture}`;
+      const parsed = parseTikz(statementSource, { recover: true });
+      const synthetic = parsed.figure.body.find((entry): entry is PathStatement => entry.kind === "Path");
+      if (!synthetic) return;
+      const relabeled = relabel(synthetic, `${trailing.id}:pos:${String(index)}`, item.span);
+      out.push(...host.evaluateStatement(relabeled).map((element) => ({ ...element, clipChain: element.clipChain && element.clipChain.length > 0 ? element.clipChain : [...contentClip] })));
+    });
+    return out;
+  };
 
   const insideBox = (q: Point, box: { x0: number; y0: number; x1: number; y1: number }) => {
     const eps = 1e-6 * Math.max(1, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0));
@@ -466,6 +664,18 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     return path;
   };
   const decorations: SceneElement[] = [];
+  // `axis background/.style={fill=white}`: the box, painted first (layer axis background, manual layers.tex).
+  const backgroundUses = flattenStyleEntries(styleLists(model.styles, ["axis background"]), model.styles);
+  if (backgroundUses.length > 0) {
+    const base: ResolvedStyle = { ...axisScope.style, stroke: null, fill: null, drawExplicit: false };
+    const background = resolveStyle(context, axisFrame, base, [keyUsesToOptionList(backgroundUses)], axis.id, axis.span).style;
+    if ((background.fill && background.fill !== "none") || (background.stroke && background.stroke !== "none")) {
+      decorations.push(axisPath("background", background, [
+        { kind: "M", to: toWorld({ x: x0, y: y0 }) }, { kind: "L", to: toWorld({ x: x1, y: y0 }) },
+        { kind: "L", to: toWorld({ x: x1, y: y1 }) }, { kind: "L", to: toWorld({ x: x0, y: y1 }) }, { kind: "Z" }
+      ]));
+    }
+  }
   const gridOrder: Array<["x" | "y", "minor" | "major"]> = [["x", "minor"], ["x", "major"], ["y", "minor"], ["y", "major"]];
   for (const [letter, kind] of gridOrder) {
     const segments = layout.grid[letter][kind];
@@ -519,6 +729,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   pushFrame(context, contentFrame);
   try {
     let plotIndex = 0;
+    let stackedContentIndex: number | null = null;
     for (const item of axis.body) {
       if (item.kind === "AddPlot") {
         const plot = plots[plotIndex];
@@ -528,19 +739,60 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
         pushPlotPointHandles(item, context);
-        if (!plot.model.onlyMarks) {
+        const bar = plot.model.bar;
+        let barTops: Point[] | null = null;
+        if (bar && !plot.model.onlyMarks) {
+          // U2: one path per plot, a closed rectangle per bar, filled and stroked as the plot style says.
+          const stack = stacks.get(plotIndex - 1);
+          const group = groups.get(plotIndex - 1);
+          const rects = barRects(plot.points, bar, {
+            mapX: (x) => mapPoint(x, 0).x, mapY: (y) => mapPoint(0, y).y,
+            unitX: layout.map.xUnit.x, unitY: layout.map.yUnit.y, limits: layout.limits
+          }, { ...(stack ? { base: stack.base } : {}), ...(group ? { group } : {}) });
+          barTops = rects.map((rect) => (rect.vertical ? { x: (rect.x0 + rect.x1) / 2, y: rect.y1 } : { x: rect.x1, y: (rect.y0 + rect.y1) / 2 }));
+          const commands: ScenePathCommand[] = rects.flatMap((rect): ScenePathCommand[] => {
+            const corners = barCorners(rect).map((corner) => toWorld(corner));
+            return [
+              { kind: "M", to: corners[0] ?? toWorld({ x: 0, y: 0 }) },
+              ...corners.slice(1).map((to): ScenePathCommand => ({ kind: "L", to })),
+              { kind: "Z" }
+            ];
+          });
+          if (commands.length > 0) {
+            const path = makePath(statement.id, "bars", style, axisFrame.styleChain, statement.span);
+            path.commands = commands;
+            path.clipChain = [...contentClip];
+            path.pictureSizeRelevant = false;
+            // U6: stacked plots are painted last plot first (E19 `stacked`).
+            if (plot.model.stack) {
+              const first: number = stackedContentIndex ?? content.length;
+              stackedContentIndex = first;
+              content.splice(first, 0, path);
+            } else content.push(path);
+          }
+        } else if (!plot.model.onlyMarks) {
+          const stackIndex = plotIndex - 1;
           // P1: the plot handler (sharp, smooth, const, jump, comb) on the canvas points.
           const canvas = plot.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)).map((point) => ({ p: mapPoint(point.x, point.y), jump: point.jump }));
           const commands: ScenePathCommand[] = plotHandlerCommands(canvas, plot.model.handler, {
             tension: plot.model.tension,
             combBase: (q) => (plot.model.handler === "xcomb" ? { x: mapPoint(0, 0).x, y: q.y } : { x: q.x, y: mapPoint(0, 0).y })
           }).map((c): ScenePathCommand => (c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) }));
+          if (statement.trailingPath) {
+            // W1-W4: \closedcycle and path operations continue the plot's path.
+            const previous = stacks.get(stackIndex) ? previousStackedPoints(plots, stacks, stackIndex) : null;
+            commands.push(...trailingCommands(statement.trailingPath, plot.points, previous, plot.model.stack, layout, mapPoint, toWorld));
+          }
           if (commands.some((command) => command.kind !== "M")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
             path.commands = commands;
             path.clipChain = [...contentClip];
             path.pictureSizeRelevant = false;
-            content.push(path);
+            if (plot.model.stack) {
+              const first: number = stackedContentIndex ?? content.length;
+              stackedContentIndex = first;
+              content.splice(first, 0, path);
+            } else content.push(path);
           }
         }
         if (marks) {
@@ -563,9 +815,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
             n += 1;
           }
         }
+        if (plot.model.errorBars) content.push(...errorBarElements(plot.model, plot.points, style, statement));
+        if (statement.trailingPath) content.push(...trailingNodes(statement.trailingPath, plot.model, plot.points));
+        if (plot.model.nodesNearCoords !== null) markElements.push(...nodesNearCoords(plot.model, plot.points, barTops));
         continue;
       }
       if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend" || item.kind === "PgfplotsExtra" || item.kind === "PgfplotsSet") continue;
+      // Applied in order before the plots were read (above); `\label` only names the plot for `\ref`.
+      if (isAxisDefinition(item) || isLabelCommand(item)) continue;
       const nested = host.evaluateStatement(item);
       content.push(...nested.map((element) => ({ ...element, clipChain: element.clipChain && element.clipChain.length > 0 ? element.clipChain : [...contentClip] })));
     }
@@ -652,6 +909,175 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   list.push(evaluation);
   axisEvaluations.set(context, list);
   return elements;
+}
+
+/** The document lengths for an axis starting at `from` (behaviour Y): the host's, else the class's; registers set before it. */
+function documentLengthEnvironment(context: SemanticContext, from: number): DocumentLengthEnvironment {
+  const known = context.documentLengths ?? {};
+  const fromClass = documentClassLengths(context.source);
+  const lengths = { ...fromClass.lengths, ...known };
+  // The host's text width also fixes the line and column widths, unless it gave them.
+  if (known.textwidth !== undefined) {
+    lengths.linewidth = known.linewidth ?? known.textwidth;
+    lengths.columnwidth = known.columnwidth ?? known.textwidth;
+  }
+  const registers = scanLengthRegisters(context.source, from, lengths);
+  const assumption = known.textwidth === undefined ? fromClass.assumption : undefined;
+  return { lengths, registers, ...(assumption ? { assumption } : {}) };
+}
+
+function isColorName(name: string): boolean {
+  try {
+    return /^#[0-9a-f]{6}$/iu.test(normalizeColor(name));
+  } catch {
+    return false;
+  }
+}
+
+/** X1: tick labels on a symbolic axis are the names (text), the one at the nearest position (E20 `symbolic-partial`). */
+function symbolicTickLabels(ticks: DirectionTicks, names: readonly string[] | undefined): DirectionTicks {
+  if (!names) return ticks;
+  return {
+    ...ticks,
+    scaleExponent: 0,
+    major: ticks.major.map((tick) => {
+      const name = names[Math.floor(tick.value + 0.5)];
+      return { ...tick, label: name ?? "" };
+    })
+  };
+}
+
+/** X2: the error bars of a plot in data units: x before y, plus before minus, per point. */
+function errorBarSegments(points: readonly PlotPoint[], bars: NonNullable<PlotModel["errorBars"]>): Array<{ from: Point; to: Point }> {
+  const out: Array<{ from: Point; to: Point }> = [];
+  for (const point of points) {
+    for (const axisLetter of ["x", "y"] as const) {
+      const d = bars[axisLetter];
+      if (d.dir === "none") continue;
+      const v = axisLetter === "x" ? point.x : point.y;
+      const amount = (side: "Plus" | "Minus"): number | null => {
+        if (d.mode === "fixed") return d.value;
+        if (d.mode === "fixed relative") return d.value * Math.abs(v);
+        const e = point.error?.[`${axisLetter}${side}`];
+        if (e === undefined || !Number.isFinite(e)) return null;
+        return d.mode === "explicit" ? e : e * Math.abs(v);
+      };
+      for (const side of ["Plus", "Minus"] as const) {
+        if ((side === "Plus" && d.dir === "minus") || (side === "Minus" && d.dir === "plus")) continue;
+        const e = amount(side);
+        if (e === null) continue;
+        const end = side === "Plus" ? v + e : v - e;
+        out.push({ from: { x: point.x, y: point.y }, to: axisLetter === "x" ? { x: end, y: point.y } : { x: point.x, y: end } });
+      }
+    }
+  }
+  return out;
+}
+
+/** W6: the point at fraction `pos` of the polyline's arc length, in data units. */
+function pointAlong(points: readonly PlotPoint[], pos: number): Point | null {
+  const finite = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (finite.length === 0) return null;
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < finite.length; i += 1) {
+    const a = finite[i - 1]; const b = finite[i];
+    if (!a || !b) continue;
+    const l = Math.hypot(b.x - a.x, b.y - a.y);
+    lengths.push(l);
+    total += l;
+  }
+  const first = finite[0];
+  if (!first || total === 0) return first ? { x: first.x, y: first.y } : null;
+  let target = Math.min(Math.max(pos, 0), 1) * total;
+  for (let i = 1; i < finite.length; i += 1) {
+    const l = lengths[i - 1] ?? 0;
+    const a = finite[i - 1]; const b = finite[i];
+    if (!a || !b) continue;
+    if (target <= l || i === finite.length - 1) {
+      const t = l === 0 ? 0 : Math.min(target / l, 1);
+      return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+    }
+    target -= l;
+  }
+  return null;
+}
+
+/** The trailing items this evaluator draws: \closedcycle, `-- (…)`, `-- cycle`, nodes and coordinates with `pos`. */
+function unsupportedTrailingItem(trailing: PathStatement): { raw: string; span: Span } | null {
+  for (const item of trailing.items) {
+    if (item.kind === "Node" || item.kind === "CoordinateOperation") continue;
+    if (item.kind === "Coordinate" && item.relativePrefix === undefined) continue;
+    if (item.kind === "PathKeyword" && (item.keyword === "--" || item.keyword === "cycle")) continue;
+    if (item.kind === "PathComment" || item.kind === "PathOption") continue;
+    if (item.kind === "UnknownPathItem" && /^\\closedcycle$/u.test(item.raw.trim())) continue;
+    return { raw: "raw" in item && typeof item.raw === "string" ? item.raw : item.kind, span: item.span };
+  }
+  return null;
+}
+
+/** The stacked points of the stacked plot before `index` (W2: a stacked \closedcycle runs back along them). */
+function previousStackedPoints(plots: ReadonlyArray<{ model: PlotModel; points: PlotPoint[] | null }>, stacks: ReadonlyMap<number, { points: PlotPoint[]; base: number[] }>, index: number): PlotPoint[] | null {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (stacks.has(i) && plots[i]?.model.stack === plots[index]?.model.stack) return plots[i]?.points ?? null;
+  }
+  return null;
+}
+
+/**
+ * W1 - `\closedcycle`: from the last point down to the base line (y = 0
+ * clamped into the limits, as for bars, E20 `closed-*`), back to the first
+ * point's x, closed; for a stacked plot, back along the stacked plot below it
+ * (W2). `-- (axis cs:…)`, `-- cycle` continue the path (W4).
+ */
+function trailingCommands(
+  trailing: PathStatement,
+  points: readonly PlotPoint[],
+  previous: readonly PlotPoint[] | null,
+  stack: "x" | "y" | undefined,
+  layout: AxisLayout,
+  mapPoint: (x: number, y: number) => Point,
+  toWorld: (q: Point) => WorldPoint
+): ScenePathCommand[] {
+  const commands: ScenePathCommand[] = [];
+  const finite = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  const first = finite[0];
+  const last = finite.at(-1);
+  if (!first || !last) return commands;
+  const { limits } = layout;
+  for (const item of trailing.items) {
+    if (item.kind === "UnknownPathItem" && /^\\closedcycle$/u.test(item.raw.trim())) {
+      if (previous && previous.length > 0) {
+        for (const point of [...previous].reverse()) commands.push({ kind: "L", to: toWorld(mapPoint(point.x, point.y)) });
+      } else if (stack === "x") {
+        const base = Math.min(Math.max(0, limits.xmin), limits.xmax);
+        commands.push({ kind: "L", to: toWorld(mapPoint(base, last.y)) }, { kind: "L", to: toWorld(mapPoint(base, first.y)) });
+      } else {
+        const base = Math.min(Math.max(0, limits.ymin), limits.ymax);
+        commands.push({ kind: "L", to: toWorld(mapPoint(last.x, base)) }, { kind: "L", to: toWorld(mapPoint(first.x, base)) });
+      }
+      commands.push({ kind: "Z" });
+    } else if (item.kind === "PathKeyword" && item.keyword === "cycle") {
+      commands.push({ kind: "Z" });
+    } else if (item.kind === "Coordinate" && item.relativePrefix === undefined) {
+      const raw = item.raw.replace(/^\(|\)$/gu, "");
+      const parts = raw.replace(/^\s*axis cs\s*:/u, "").split(",");
+      const x = readPgfNumber(parts[0] ?? "");
+      const y = readPgfNumber(parts[1] ?? "");
+      if (x !== null && y !== null) commands.push({ kind: "L", to: toWorld(mapPoint(x, y)) });
+    }
+  }
+  return commands;
+}
+
+/** Body statements that only define macros: applied in body order, before the plots read their data. */
+function isAxisDefinition(item: AxisBodyItem): item is Statement {
+  return item.kind === "MacroDefinition" || item.kind === "MacroAlias" || item.kind === "MacroCommandDefinition" || item.kind === "PgfMath";
+}
+
+/** `\label{…}` after a plot: names it for `\ref` in the text; nothing to draw. */
+function isLabelCommand(item: AxisBodyItem): boolean {
+  return item.kind === "UnknownStatement" && !item.environment && /^\\label\s*\{/u.test(item.raw);
 }
 
 /** World bounds of an element: path vertices and control points outset by half the line width when stroked, node boxes. */

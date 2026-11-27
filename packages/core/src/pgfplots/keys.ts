@@ -46,7 +46,8 @@ const SHORT_STYLE_KEYS: Record<string, string> = {
   "forget plot style": "every forget plot",
   "legend image post style": "every legend image post",
   "colorbar style": "every colorbar",
-  "extra tick style": "every extra tick"
+  "extra tick style": "every extra tick",
+  "nodes near coords style": "every node near coord"
 };
 for (const a of ["x", "y", "z"]) {
   Object.assign(SHORT_STYLE_KEYS, {
@@ -106,7 +107,9 @@ const INITIAL_STYLES: Record<string, string> = {
   "every minor y grid": "",
   "every major x grid": "",
   "every major y grid": "",
-  "every mark": ""
+  "every mark": "",
+  "every node near coord": "",
+  "axis background": ""
 };
 
 export function createInitialStyleRegistry(): PgfplotsStyleRegistry {

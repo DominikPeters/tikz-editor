@@ -592,6 +592,12 @@ export type EvaluateOptions = {
   textEngine?: NodeTextEngine | null;
   graphicsResolver?: DocumentGraphicsResolver;
   /**
+   * Document lengths the host knows where the picture is set (a Beamer
+   * column's `\textwidth`), pt; pgfplots sizes such as `width=\linewidth`
+   * read them. Unknown ones come from the document class (pgfplots/document-lengths.ts).
+   */
+  documentLengths?: Readonly<Partial<Record<"textwidth" | "textheight" | "linewidth" | "columnwidth" | "paperwidth" | "paperheight", number>>>;
+  /**
    * The page, in this picture's coordinates (pt), for a picture whose place
    * on a page is known: PGF's `current page` node.
    */

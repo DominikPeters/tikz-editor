@@ -14,20 +14,10 @@ export const AXIS_DESCRIPTION_PARTS: readonly AxisDescriptionPart[] = ["xlabel",
 
 /** The scene source id of a label of the given role. */
 export function axisSubSelectionId(axisId: string, role: LabelRole): string {
-  switch (role) {
-    case "xlabel":
-    case "ylabel":
-    case "title":
-      return `${axisId}:${role}`;
-    case "legend":
-    case "legend-entry":
-      return `${axisId}:legend`;
-    case "xtick":
-    case "ytick":
-    case "xscale":
-    case "yscale":
-      return axisId;
-  }
+  // Tick, scale and other generated labels belong to the axis itself.
+  if (role === "xlabel" || role === "ylabel" || role === "title") return `${axisId}:${role}`;
+  if (role === "legend" || role === "legend-entry") return `${axisId}:legend`;
+  return axisId;
 }
 
 /** `axis:N:xlabel` → { axisId: "axis:N", part: "xlabel" }. */

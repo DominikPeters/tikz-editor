@@ -928,7 +928,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_addplot_table"],
-    notes: "Inline `\\addplot table` with `x`/`y` column names, `x index`/`y index`, header detection, `col sep` and `row sep`. Tables from files or macros, `x expr`/`y expr` are omitted with a warning."
+    notes: "Inline tables, files through the document resolver (`readTextFile`; a missing file or a host without a document folder is diagnosed by name) and `\\pgfplotstableread` tables; column names and indices, `x expr`/`y expr` with `\\thisrow`, `\\thisrowno`, `\\coordindex`, `\\lineno`; `col sep`, `row sep` (incl. `crcr`), `header`, `skip first n`, comment/ignore/white space chars, `\\pgfplotstableset`; `unbounded coords`, `each nth point`, `restrict x/y/expr to domain`, `skip coords between index` (behaviour V). `create col/…` and `read completely` are not supported."
   },
   pgfplots_addplot_other_inputs: {
     parser: "partial",
@@ -961,6 +961,54 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["pgfplots_plot_styles"],
     notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). `cycle multi list` is not supported."
+  },
+  pgfplots_bars: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_bars"],
+    notes: "`ybar`/`xbar` as axis styles (bar cycle list, automatic shifts, ticks outside, bar legend images) and plot handlers, `bar width`/`bar shift` in pt or axis units, `ybar/xbar stacked` and `stack plots` (separate positive/negative sums), `ybar/xbar interval` (behaviour U). Bars on log axes (`log origin`) and the interval axis style's tick labels are not reproduced."
+  },
+  pgfplots_area: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_area"],
+    notes: "`\\closedcycle` (to y = 0 clamped into the limits; stacked areas back along the plot below), `-- (axis cs:…) -- cycle` after the input, `node[pos=…]`/`coordinate[pos=…]` on the plot by data-unit arc length, `area style` (behaviour W). Other trailing path operations are diagnosed."
+  },
+  pgfplots_error_bars: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_error_bars"],
+    notes: "`error bars/` x and y: `dir`, `explicit`, `explicit relative`, `fixed`, `fixed relative`, explicit values from `+-`/`+=`/`-=` and table error columns, `error bar style`, `error mark`, `error mark options` (behaviour X2)."
+  },
+  pgfplots_symbolic_coords: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_symbolic_coords"],
+    notes: "`symbolic x coords`/`symbolic y coords` in coordinates and tables, with name tick labels (behaviour X1). `[normalized]` and `dateplot` are not supported."
+  },
+  pgfplots_nodes_near_coords: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_nodes_near_coords"],
+    notes: "`nodes near coords[=text]`, `nodes near coords align`, `every node near coord`, `point meta=explicit symbolic` (behaviour X3). Other `point meta` sources are not used."
+  },
+  pgfplots_document_lengths: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "not-applicable",
+    edit: "none",
+    fixtures: ["pgfplots_document_lengths"],
+    notes: "`\\textwidth`, `\\linewidth`, `\\columnwidth`, `\\textheight`, paper sizes, `\\axisdefaultwidth/height` and `\\setlength` registers in axis options: the host's frame width, else the measured class values (article, standalone, amsart, beamer with size, paper and twocolumn options), else article 10pt with a diagnostic (behaviour Y)."
   },
   pgfplots_pgfplotsset: {
     parser: "partial",
