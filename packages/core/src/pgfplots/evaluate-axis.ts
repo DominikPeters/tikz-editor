@@ -425,7 +425,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
       ...(ratioScaling?.shrunk[letter] ? { ratioShrunk: { keepStart: lowerLimitEnlarged(model[letter]) } } : {})
     };
     const result = model[letter].mode === "log" ? computeLogTicks(tickInput) : computeTicks(tickInput);
-    const extra = result.kind === "ok" ? computeExtraTicks(tickInput, result.ticks.scaleExponent) : [];
+    const extra = result.kind === "ok" ? computeExtraTicks(tickInput) : [];
     numberFormat = before;
     if (extra === null) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:extra ${letter} ticks`, message: "Cannot read the extra tick list; no extra ticks are drawn.", span: axis.optionsSpan ?? axis.beginSpan });
     if (result.kind === "invalid") {

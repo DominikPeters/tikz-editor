@@ -62,6 +62,10 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "tick-none-lengths": { probes: "ticks=none: no tick probe (T1)", singleAxis: "two axes", tickPlacement: "ticks on the upper sides" },
   "tick-rotated": { map: "axis cs probe over a range of 3300 carries ~1e-3 pt noise (behaviour N2)", tickPlacement: "rotated labels hang by their bounding box (T4)", probes: "glyphs of rotated labels fall outside the axis-aligned ink probe of their text boxes" },
   "log-pgfplotsset-mode": { map: "axis cs probe over a range of 600 carries 1e-3 pt noise (behaviour N2)", tickPlacement: "same probe noise" },
+  ...Object.fromEntries(["scaled-ticks-base10", "scaled-ticks-one-axis"]
+    .map((name) => [name, { map: "axis cs probe at |x| ~ 1e4 carries ~0.2pt noise (behaviour N2, K5)", tickPlacement: "\\tick is the scaled value (J4, T6)" }])),
+  ...Object.fromEntries(["scaled-ticks-real", "scaled-ticks-manual", "scaled-ticks-exponent"]
+    .map((name) => [name, { tickPlacement: "\\tick is the scaled value (J4, T6)" }])),
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
   "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },

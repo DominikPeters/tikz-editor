@@ -51,7 +51,11 @@ export type AxisDirectionModel = {
   tickAlign: "inside" | "outside" | "center";
   tickPos: "both" | "lower" | "upper";
   tickLabelPos: "default" | "lower" | "upper";
-  scaledTicks: boolean;
+  /** `scaled x ticks` (manual tickoptions.tex, initially true; behaviour J1, T6). */
+  scaledTicks: ScaledTicksSpec;
+  /** `scale ticks above exponent` / `below exponent` (initially 3 / -1; J1, T6). */
+  scaleTicksAbove: number;
+  scaleTicksBelow: number;
   label?: { text: string; span: Span };
   labelShift: number;
   /** `max space between ticks`, `try min ticks` (behaviour I1). */
@@ -89,6 +93,15 @@ export type AxisDirectionModel = {
   /** `symbolic x coords={a,b,c}`: the names, mapped to 0, 1, 2 (behaviour X1). */
   symbolic?: string[];
 };
+
+/** `scaled x ticks=true|false|base 10:e|real:num|manual:{label}{code}`. */
+export type ScaledTicksSpec =
+  | { kind: "auto" }
+  | { kind: "none" }
+  | { kind: "base10"; exponent: number }
+  | { kind: "real"; divisor: number }
+  /** `code` is `\pgfmathparse{<expression in #1>}`, kept as the expression. */
+  | { kind: "manual"; label: string; expression: string };
 
 /** One direction of `error bars/…` (manual errorbars.tex, behaviour X2). */
 export type ErrorBarDirection = {
@@ -273,7 +286,9 @@ function direction(): AxisDirectionModel {
     tickAlign: "inside",
     tickPos: "both",
     tickLabelPos: "default",
-    scaledTicks: true,
+    scaledTicks: { kind: "auto" },
+    scaleTicksAbove: 3,
+    scaleTicksBelow: -1,
     labelShift: 0,
     maxSpaceBetweenTicks: 35,
     tryMinTicks: 4,
@@ -660,6 +675,8 @@ defineAxisKey("tick pos", forAxes("xy", (d, v) => setTickPos(d, "", v)));
 defineAxisKey("tickpos", forAxes("xy", (d, v) => setTickPos(d, "", v)));
 defineAxisKey("ticklabel pos", forAxes("xy", (d, v) => setTickLabelPos(d, "", v)));
 defineAxisKey("scaled ticks", forAxes("xy", (d, v) => setScaledTicks(d, v)));
+defineAxisKey("scale ticks above exponent", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.scaleTicksAbove = n; return true; }));
+defineAxisKey("scale ticks below exponent", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.scaleTicksBelow = n; return true; }));
 defineAxisKey("label shift", forAxes("xy", (d, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; d.labelShift = n; return true; }));
 defineAxisKey("max space between ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; d.maxSpaceBetweenTicks = n; return true; }));
 defineAxisKey("try min ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.tryMinTicks = Math.round(n); return true; }));
@@ -749,10 +766,58 @@ function setTickLabelPos(d: AxisDirectionModel, letter: string, v: string | null
   return true;
 }
 
+/** Splits `{a}{b}` (two balanced groups, whitespace between) into their contents. */
+function twoGroups(text: string): [string, string] | null {
+  const groups: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && /\s/u.test(text[i] ?? "")) i += 1;
+    if (i >= text.length) break;
+    if (text[i] !== "{") return null;
+    let depth = 0;
+    const start = i;
+    for (; i < text.length; i += 1) {
+      if (text[i] === "{") depth += 1;
+      else if (text[i] === "}") { depth -= 1; if (depth === 0) break; }
+    }
+    if (depth !== 0) return null;
+    groups.push(text.slice(start + 1, i));
+    i += 1;
+  }
+  return groups.length === 2 ? [groups[0] ?? "", groups[1] ?? ""] : null;
+}
+
 function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
   const text = stripBraces(v ?? "true");
-  if (text === "true") { d.scaledTicks = true; return true; }
-  if (text === "false") { d.scaledTicks = false; return true; }
+  if (text === "true") { d.scaledTicks = { kind: "auto" }; return true; }
+  if (text === "false") { d.scaledTicks = { kind: "none" }; return true; }
+  const colon = text.indexOf(":");
+  if (colon < 0) return false;
+  const mode = text.slice(0, colon).trim();
+  const arg = text.slice(colon + 1).trim();
+  if (mode === "base 10") {
+    const e = readPgfNumber(arg);
+    if (e === null || !Number.isInteger(e)) return false;
+    d.scaledTicks = { kind: "base10", exponent: e };
+    return true;
+  }
+  if (mode === "real") {
+    const n = readPgfNumber(arg);
+    if (n === null || n === 0) return false;
+    d.scaledTicks = { kind: "real", divisor: n };
+    return true;
+  }
+  if (mode === "manual") {
+    const groups = twoGroups(arg);
+    if (!groups) return false;
+    // The documented form only: code that assigns \pgfmathresult with \pgfmathparse.
+    const code = /^\\pgfmathparse\s*\{([\s\S]*)\}\s*%?\s*$/u.exec(groups[1].trim());
+    if (!code) return false;
+    const expression = code[1] ?? "";
+    if (!evaluatePgfMathExpression(expression.replaceAll("#1", "(1)"), { mode: "float" }).ok) return false;
+    d.scaledTicks = { kind: "manual", label: groups[0], expression };
+    return true;
+  }
   return false;
 }
 

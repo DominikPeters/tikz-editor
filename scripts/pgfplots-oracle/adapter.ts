@@ -210,7 +210,8 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
   const ticks = (letter: "x" | "y"): OracleTick[] => {
     const t = layout.ticks[letter];
     return t.major.map((tick, position) => {
-      const value = t.scaleExponent === 0 ? tick.value : tick.value / 10 ** t.scaleExponent;
+      // J4/T6: the harness reads \tick, the value the label prints.
+      const value = tick.scaled ?? (t.scaleExponent === 0 ? tick.value : tick.value / 10 ** t.scaleExponent);
       const label = labelOf(`${letter}tick`, position);
       return { index: tick.index, value, valueRaw: String(value), ...(label ? { label } : {}) };
     });

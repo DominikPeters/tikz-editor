@@ -1154,9 +1154,45 @@ label nodes. CONFIRMED on the fixture (exact).
 `std` precision 2 rounds). The editor matches; the repeated labels are
 pgfplots' behaviour, not a bug. CONFIRMED (fixture, exact).
 
-Not done: `xticklabel={…}` custom code, `xticklabel shift`, `scaled x
-ticks=base 10:e|real|manual`, `xtick scale label code`, `minor xtick` with
-`xtick distance`, `xticklabels` with fewer entries than ticks beyond I4.
+**T6 — Scaled tick variants** (2026-11-27). Experiment E23
+(`e23-cases.ts`, discovery 16 cases, fresh set `b` 6 cases;
+`e23-scaled.mts` prints `\tick`, labels and glyphs). Manual
+tickoptions.tex `scaled ticks`.
+- `scaled ticks=true` (initial) is J1; `false` none; `scaled x ticks`/`scaled
+  y ticks` act on one direction (`scaled ticks` sets both).
+- `scale ticks above exponent` / `below exponent`: scaled when e > above or
+  e < below; the documented initial values are not stored as key values
+  (`\pgfkeysvalueof` reads `\pgfkeys@relax`); measured they are **3 and −1**
+  (J1's e ≥ 4 / e ≤ −2; `above=1` scales limits of magnitude 10^2, `above=2`
+  does not; `below=0` scales 10^−1; `below=−3` leaves 10^−3 unscaled).
+- `base 10:e`: labels print **t·10^e** and the scale label is
+  `$\cdot 10^{-e}$` — the opposite sign of the manual's "divide every tick
+  by 10^e" (base 10:3 on x ∈ [2·10^4, 6·10^4] prints 2·10^7 … with
+  `·10^{−3}`; on y ∈ [5·10^−4, 2·10^−3] prints 0.5 … 2). Applied regardless
+  of magnitude; `base 10:0` draws no scale label.
+- `real:num`: labels t/num, scale label `$\cdot \pgfmathprintnumber{num}$`
+  (3.1415 → `·3.14`).
+- `manual:{label}{code}`: labels print the code's `\pgfmathresult` for
+  `#1` = t; the label as given; an empty label draws no scale label. The
+  editor reads the documented form `\pgfmathparse{<expression>}` only and
+  reports other code as an unreadable value.
+- `\tick` (and the harness' tick value) is the printed value in every mode
+  (J4). `xtick scale label code/.code` is reported as unsupported.
+- `xticklabels` and log axes disable scaling (manual).
+VERIFIED: discovery 16 cases pass both tiers except (a) the A7a
+`right of origin` noise (4 cases, 0.051 pt) and (b) `manual` around 65535
+with a range of 2.4: TeX's own tick values come out as 65534.98, 65535.48
+… (limits stored with N2 precision at range/|value| ≈ 4·10^−5), so its
+labels read −2·10^−2, 0.48, …; not emulated. Fresh set: 4/6 clean; `b-real`
+and `b-manual` differ only by TeX's tick-value noise (5.9999, 999.9998 →
+the manual label −2·10^−4). Fixtures scaled-ticks-base10, -real, -manual,
+-one-axis, -exponent pass both tiers (the two with |x| ≈ 10^4 carry the K5
+`map` probe entry, like scaled-ticks).
+
+Not done: `xticklabel={…}` custom code, `xticklabel shift`, `minor xtick`
+with `xtick distance`, `xticklabels` with fewer entries than ticks beyond
+I4, `yminorticks=false` (T1 OPEN), `axis line shift`, `separate axis lines`
+(B4 of the 2026-11-27 task).
 
 ## V. Tables (and how the axis body is read)
 

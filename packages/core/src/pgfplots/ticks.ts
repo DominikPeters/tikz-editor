@@ -6,6 +6,7 @@ import { expandForeachList } from "../foreach/list.js";
 import { DEFAULT_PGF_NUMBER_FORMAT, formatPgfNumber, type PgfNumberFormat } from "../semantic/pgfmath/number-format.js";
 import type { PlotPoint } from "./data.js";
 import { readPgfNumber, type AxisDirectionModel, type TickListSpec } from "./model.js";
+import { evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { displayFactor, toInternal } from "./scale.js";
 
 export type Tick = {
@@ -13,6 +14,8 @@ export type Tick = {
   value: number;
   /** `\ticknum`. */
   index: number;
+  /** `\tick` when scaled ticks change it (J4, T6): the value the label prints. */
+  scaled?: number;
   /** Label text (TeX), absent for no label. */
   label?: string;
 };
@@ -24,6 +27,8 @@ export type DirectionTicks = {
   minor: number[];
   /** The common factor exponent e of scaled ticks (J1), or 0. */
   scaleExponent: number;
+  /** The tick scale label's text (J3, T6) when one is drawn. */
+  scaleLabel?: string;
   /** Whether labels are drawn at all (`xtick=\empty` draws none). */
   labelled: boolean;
 };
@@ -165,22 +170,21 @@ export function computeTicks(input: TickInput): TickResult {
     }
   }
 
-  // Labels (J1–J2).
-  const magnitude = Math.max(Math.abs(lo), Math.abs(hi));
-  const e = magnitude > 0 ? Math.floor(Math.log10(magnitude) + 1e-12) : 0;
-  const scaleExponent = dir.scaledTicks && !dir.tickLabels && (e >= 4 || e <= -2) ? e : 0;
+  // Labels (J1–J2, T6).
   const format = input.numberFormat ?? DEFAULT_PGF_NUMBER_FORMAT;
+  const scaling = tickScaling(dir, lo, hi);
   for (const tick of major) {
     if (dir.tickLabels) {
       const text = dir.tickLabels[tick.index];
       if (text !== undefined) tick.label = text;
       else tick.label = "";
     } else {
-      const scaled = scaleExponent === 0 ? tick.value : Number((tick.value / 10 ** scaleExponent).toPrecision(15));
+      const scaled = scaling.apply(tick.value);
+      if (scaled !== tick.value) tick.scaled = scaled;
       tick.label = `$${formatPgfNumber(scaled, format).tex}$`;
     }
   }
-  return { kind: "ok", ticks: { major, minor, scaleExponent, labelled: spec.kind !== "empty" } };
+  return { kind: "ok", ticks: { major, minor, scaleExponent: scaling.exponent, ...(scaling.label !== null ? { scaleLabel: scaling.label } : {}), labelled: spec.kind !== "empty" } };
 }
 
 /** `xtick=data`: the x coordinates of the first plot (one plot measured; I4). */
@@ -337,7 +341,41 @@ export function computeLogTicks(input: TickInput): TickResult {
  * limits (logarithms on a log axis), numbered in list order, labelled like
  * major ticks unless `extra x tick labels` gives the texts.
  */
-export function computeExtraTicks(input: TickInput, scaleExponent: number): Tick[] | null {
+/**
+ * J1/T6: how tick labels are scaled. `true`: by 10^e (e = floor(log10 of
+ * the larger limit magnitude)) when e > `scale ticks above exponent` or
+ * e < `below exponent`; `base 10:e`: labels t·10^e with the scale label
+ * 10^{-e} (measured, E23: the manual says "divide by 10^e"); `real:num`: by num;
+ * `manual:{label}{\pgfmathparse{f(#1)}}`: label f(t). `xticklabels`
+ * disable scaling. The label is the tick scale label's text, or null.
+ */
+export function tickScaling(dir: AxisDirectionModel, lo: number, hi: number): { exponent: number; label: string | null; apply: (value: number) => number } {
+  const identity = { exponent: 0, label: null, apply: (value: number) => value };
+  const spec = dir.scaledTicks;
+  if (dir.tickLabels || dir.mode === "log" || spec.kind === "none") return identity;
+  const byPower = (e: number) => ({ exponent: e, label: `$\\cdot 10^{${String(e)}}$`, apply: (value: number) => (e === 0 ? value : Number((value / 10 ** e).toPrecision(15))) });
+  if (spec.kind === "auto") {
+    const magnitude = Math.max(Math.abs(lo), Math.abs(hi));
+    const e = magnitude > 0 ? Math.floor(Math.log10(magnitude) + 1e-12) : 0;
+    return e > dir.scaleTicksAbove || e < dir.scaleTicksBelow ? byPower(e) : identity;
+  }
+  if (spec.kind === "base10") return spec.exponent === 0 ? identity : byPower(-spec.exponent);
+  if (spec.kind === "real") {
+    const divisor = spec.divisor;
+    return { exponent: 0, label: `$\\cdot ${formatPgfNumber(divisor, DEFAULT_PGF_NUMBER_FORMAT).tex}$`, apply: (value: number) => Number((value / divisor).toPrecision(15)) };
+  }
+  const { expression, label } = spec;
+  return {
+    exponent: 0,
+    label: label.trim() === "" ? null : label,
+    apply: (value: number) => {
+      const result = evaluatePgfMathExpression(expression.replaceAll("#1", `(${String(value)})`), { mode: "float" });
+      return result.ok ? result.quantity.value : value;
+    }
+  };
+}
+
+export function computeExtraTicks(input: TickInput): Tick[] | null {
   const { dir, lo, hi, length } = input;
   const spec = dir.extraTicks;
   if (!spec || spec.kind === "auto" || spec.kind === "empty") return [];
@@ -351,10 +389,7 @@ export function computeExtraTicks(input: TickInput, scaleExponent: number): Tick
   for (const tick of ticks) {
     if (dir.extraTickLabels) tick.label = dir.extraTickLabels[tick.index] ?? "";
     else if (dir.mode === "log") tick.label = identifiedLogLabel(dir, tick.value, format) ?? logTickLabel(dir, tick.value, format);
-    else {
-      const scaled = scaleExponent === 0 ? tick.value : Number((tick.value / 10 ** scaleExponent).toPrecision(15));
-      tick.label = `$${formatPgfNumber(scaled, format).tex}$`;
-    }
+    else tick.label = `$${formatPgfNumber(tickScaling(dir, lo, hi).apply(tick.value), format).tex}$`;
   }
   return ticks;
 }

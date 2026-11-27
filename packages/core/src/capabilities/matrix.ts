@@ -880,7 +880,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_ticks"],
-    notes: "Automatic ticks (step, list, few-ticks fallback), explicit lists with `...`, `\\empty`, `data`, `xtick distance`, `xticklabels`, minor ticks, tick align/pos, tick label position, number formatting via `\\pgfmathprintnumber`, scaled ticks with the scale label, `extra x ticks` with labels, `xmajorticks`/`ticks=none`, `tickwidth`, rotated tick labels (behaviour I, J, D, T); `xminorticks=false` is diagnosed."
+    notes: "Automatic ticks (step, list, few-ticks fallback), explicit lists with `...`, `\\empty`, `data`, `xtick distance`, `xticklabels`, minor ticks, tick align/pos, tick label position, number formatting via `\\pgfmathprintnumber`, scaled ticks with the scale label (`true|false|base 10:e|real:num|manual:{label}{\\pgfmathparse{…}}`, `scale ticks above/below exponent`; behaviour T6), `extra x ticks` with labels, `xmajorticks`/`ticks=none`, `tickwidth`, rotated tick labels (behaviour I, J, D, T); `xminorticks=false` is diagnosed."
   },
   pgfplots_axis_descriptions: {
     parser: "not-applicable",

@@ -45,6 +45,9 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   "function-trig-rad": {
     tier1: { "axis-anchor": "`right of origin` is 0.054pt off the box edge in the oracle (behaviour A7a: projection noise, 0.042pt on the first 28 fixtures; the y part, 0.02pt, is the limit noise N2)" }
   },
+  ...Object.fromEntries(["scaled-ticks-base10", "scaled-ticks-one-axis"].map((name) => [name, {
+    tier1: { map: "the oracle's axis cs probe at |x| ~ 1e4 is 0.2pt off its own rectangle (TeX fixed point, behaviour N2/K5); plot geometry matches in Tier 2" }
+  }])),
   "scaled-ticks": {
     tier1: { map: "the oracle's axis cs probe at |y| ~ 1e4 is 0.16pt off its own rectangle (TeX fixed point, behaviour N2); plot geometry matches in Tier 2" }
   },

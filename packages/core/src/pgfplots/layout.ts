@@ -366,12 +366,12 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
 
   // J3: scale labels.
   const W = x1 - x0; const H = y1 - y0;
-  if (ticks.x.scaleExponent !== 0 && ticks.x.major.length > 0) {
-    place({ role: "xscale", text: `$\\cdot 10^{${String(ticks.x.scaleExponent)}}$`, styles: input.labelStyles.xscale,
+  if (ticks.x.scaleLabel !== undefined && ticks.x.major.length > 0) {
+    place({ role: "xscale", text: ticks.x.scaleLabel, styles: input.labelStyles.xscale,
       placement: "anchor=north,inner sep=0pt", at: { x: x0 + 0.9 * W, y: bottom - 5 } });
   }
-  if (ticks.y.scaleExponent !== 0 && ticks.y.major.length > 0) {
-    place({ role: "yscale", text: `$\\cdot 10^{${String(ticks.y.scaleExponent)}}$`, styles: input.labelStyles.yscale,
+  if (ticks.y.scaleLabel !== undefined && ticks.y.major.length > 0) {
+    place({ role: "yscale", text: ticks.y.scaleLabel, styles: input.labelStyles.yscale,
       placement: "anchor=south west,inner sep=0pt", at: { x: x0 + 3, y: y0 + 1.03 * H } });
   }
 

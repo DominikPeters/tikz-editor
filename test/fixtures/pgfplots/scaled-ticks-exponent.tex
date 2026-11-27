@@ -1,0 +1,6 @@
+% scale ticks above exponent=1: limits of magnitude 10^2 are scaled (behaviour T6).
+\begin{tikzpicture}
+\begin{axis}[scale only axis,width=200pt,height=150pt,scale ticks above exponent=1]
+  \addplot coordinates {(0,100) (3,900) (6,400)};
+\end{axis}
+\end{tikzpicture}

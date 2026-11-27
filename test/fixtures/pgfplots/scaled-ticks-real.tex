@@ -1,0 +1,6 @@
+% scaled x ticks=real:3.1415: labels t/num, scale label \cdot 3.14 (behaviour T6).
+\begin{tikzpicture}
+\begin{axis}[scale only axis,width=200pt,height=150pt,xtick={0,1.5708,...,7},domain=0:2*pi,scaled x ticks={real:3.1415}]
+  \addplot {sin(deg(x))};
+\end{axis}
+\end{tikzpicture}
