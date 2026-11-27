@@ -648,7 +648,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     plotDefaults: [],
     legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
-  const ctx: Ctx = { model, expandStyle: () => undefined };
+  const ctx: Ctx = { model, expandStyle: () => { /* replaced below, once the sink exists */ } };
   const sink = (use: PgfplotsKeyUse): void => {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
@@ -676,7 +676,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
   };
   const problems = (problem: { key: string; span: Span }) => model.unsupported.push({ key: problem.key, span: problem.span });
   // Styles a key installs immediately (`axis x line` → `every non boxed x axis`), expanded in place.
-  ctx.expandStyle = (name) => expandPgfplotsOptions(styles.get(name) ?? [], styles, sink, { onProblem: problems });
+  ctx.expandStyle = (name) => { expandPgfplotsOptions(styles.get(name) ?? [], styles, sink, { onProblem: problems }); };
   expandPgfplotsOptions(input.settings, styles, (use) => {
     // Settings outside an axis only define defaults: axis keys there apply to every axis.
     sink(use);

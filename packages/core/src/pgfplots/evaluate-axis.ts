@@ -525,7 +525,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   }
   // C2 / R2: the axis lines, each with its `every outer/inner x axis line` style (arrow tips included).
   let tipBounds: Box | null = null;
-  layout.axisLines.forEach((line, index) => {
+  for (const [index, line] of layout.axisLines.entries()) {
     const names = line.letter === "both" ? ["every outer x axis line", "every outer y axis line"] : [`every ${line.inner ? "inner" : "outer"} ${line.letter} axis line`];
     const style = elementStyle(names);
     const commands: ScenePathCommand[] = line.commands.map((c) => (c.op === "Z" ? { kind: "Z" } : { kind: c.op, to: toWorld(c.p) }));
@@ -540,7 +540,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         }
       }
     }
-  });
+  }
   // F1: arrow tips count with their geometric extent (E21: the tip at the box corner).
   if (tipBounds) layout = extendAxisLayout(layout, tipBounds);
   const labelRecords: AxisEvaluation["labels"] = [];
