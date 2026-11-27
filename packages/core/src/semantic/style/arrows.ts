@@ -153,7 +153,9 @@ export function parseArrowSideSpecification(raw: string, side: "start" | "end", 
     const optionBlock = readOptionalBracketOptions(input, cursor);
     cursor = optionBlock.nextIndex;
     // Names are case sensitive: `latex` is PGF's own tip, `Latex` the arrows.meta one.
-    const base = named.name.trim() === "latex" ? makeLegacyLatexTip(style.lineWidth) : makeDefaultArrowTip(resolveArrowTipKind(named.name), style.lineWidth);
+    const base = named.name.trim() === "latex" ? makeLegacyLatexTip(style.lineWidth)
+      : named.name.trim() === "stealth" ? makeLegacyStealthTip(style.lineWidth)
+        : makeDefaultArrowTip(resolveArrowTipKind(named.name), style.lineWidth);
     const tip = applyArrowTipOptions(base, optionBlock.optionsRaw, style.lineWidth);
     tips.push({ ...tip, afterLineEnd });
   }
@@ -265,6 +267,18 @@ function makeLegacyLatexTip(lineWidth: number): ArrowTip {
   const unit = 0.28 + 0.3 * normalizeArrowLineWidth(lineWidth);
   return { kind: "latex", open: false, round: false, reversed: false, bend: false, afterLineEnd: false, color: null, fill: null,
     length: 10 * unit, width: 7.5 * unit, inset: null, sep: 0, lineWidth: 0, arc: null, rayCount: null, legacy: true };
+}
+
+/**
+ * pgfcorearrows.code.tex `stealth` (not arrows.meta `Stealth`): with
+ * d = 0.28pt + 0.3 line width, the filled quadrilateral (5d,0), (-3d,4d),
+ * (0,0), (-3d,-4d) around the line end, which is shortened by 5d; no stroke.
+ * The editor's frame puts the back at 0: length 8d, width 8d, notch 3d.
+ */
+function makeLegacyStealthTip(lineWidth: number): ArrowTip {
+  const unit = 0.28 + 0.3 * normalizeArrowLineWidth(lineWidth);
+  return { kind: "stealth", open: false, round: false, reversed: false, bend: false, afterLineEnd: false, color: null, fill: null,
+    length: 8 * unit, width: 8 * unit, inset: 3 * unit, sep: 0, lineWidth: 0, arc: null, rayCount: null, legacy: true };
 }
 
 function makeDefaultArrowTip(kind: ArrowTipKind, lineWidth = 0.4): ArrowTip {

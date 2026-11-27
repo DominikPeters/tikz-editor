@@ -47,6 +47,11 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   xticklabels: { probes: "ytick=\\empty: no y tick labels, so no y tick probe", tickPlacement: "no y tick probe" },
   ...Object.fromEntries(["log-basis-two", "log-explicit-ticks", "log-loglog-default", "log-semilogy-grid", "log-small-range", "log-wide-range", "log-xmode-discard"]
     .map((name) => [name, { tickPlacement: "log labels print b^k (or a fixed-point value), not \\tick (behaviour Q4)" }])),
+  ...Object.fromEntries(["axis-lines-left", "axis-lines-middle", "axis-lines-center-offset", "axis-lines-right"]
+    .map((name) => [name, { tickPlacement: "ticks and labels hang on the axis lines, centred (behaviour R3, R5)", clip: "no closed box path: separate axis lines (R2)" }])),
+  "axis-lines-mixed": { tickPlacement: "ticks on the axis lines (R3)", clip: "separate axis lines (R2)", singleAxis: "two axes" },
+  "axis-lines-styles": { tickPlacement: "ticks on the axis lines (R3); hide x axis has no x ticks", clip: "separate axis lines (R2)", singleAxis: "two axes" },
+  "axis-lines-hide": { probes: "hide axis: no ticks, so no tick probe", tickPlacement: "no ticks", clip: "no axis lines" },
   "log-pgfplotsset-mode": { map: "axis cs probe over a range of 600 carries 1e-3 pt noise (behaviour N2)", tickPlacement: "same probe noise" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
   "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },

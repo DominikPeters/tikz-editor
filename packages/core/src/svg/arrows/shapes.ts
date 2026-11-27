@@ -87,6 +87,12 @@ function buildRawTipPaths(tip: NormalizedArrowTip): ArrowLocalPathCommand[][] {
     ];
   }
 
+  if (tip.kind === "stealth" && tip.legacy) {
+    const unit = tip.length / 8;
+    // No closepath: PGF fills the open quadrilateral (\pgfusepathqfill).
+    return [[moveTo(8 * unit, 0), lineTo(0, 4 * unit), lineTo(3 * unit, 0), lineTo(0, -4 * unit)]];
+  }
+
   if (tip.kind === "stealth" || tip.kind === "triangle") {
     const params = computeStealthShapeParameters(tip.kind === "triangle" ? { ...tip, inset: 0 } : tip);
     const tipX = params.innerLength + params.backMiter;

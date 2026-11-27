@@ -50,8 +50,9 @@ import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotP
 import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
 import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
-import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
+import { axisLineCoordinate, boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
+import { renderPathWithArrows } from "../svg/arrows/render.js";
 import { COLOR_CYCLE_LIST, readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { computeExtraTicks, computeLogTicks, computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 import { internalBase, internalLimitsModel, toInternal } from "./scale.js";
@@ -315,6 +316,20 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     return extra && extra.length > 0 ? { ...result.ticks, extra } : result.ticks;
   };
   const ticks = { x: tickFor("x"), y: tickFor("y") };
+  // R1: a hidden direction (`axis x line=none`, `hide x axis`) has no ticks.
+  for (const letter of ["x", "y"] as const) {
+    if (model[letter].axisLine === "none") ticks[letter] = { ...ticks[letter], major: [], minor: [], extra: [] };
+  }
+  // R4: `hide obscured x ticks`: the ticks of a middle line where the other line crosses it.
+  for (const letter of ["x", "y"] as const) {
+    const other = letter === "x" ? "y" : "x";
+    const dir = model[letter];
+    if (dir.axisLine !== "middle" || !dir.hideObscuredTicks) continue;
+    if (model[other].axisLine === "box" || model[other].axisLine === "none") continue;
+    const at = axisLineCoordinate(model, limits, other);
+    const range = letter === "x" ? limits.xmax - limits.xmin : limits.ymax - limits.ymin;
+    ticks[letter] = { ...ticks[letter], major: ticks[letter].major.filter((tick) => Math.abs(tick.value - at) > 1e-9 * Math.abs(range)) };
+  }
   markFeature("pgfplots_ticks", "supported");
   if (model.x.label || model.y.label || model.title) markFeature("pgfplots_axis_descriptions", "supported");
   if (axis.body.some((item) => item.kind !== "AddPlot" && item.kind !== "AddLegendEntry" && item.kind !== "AddLegendImage" && item.kind !== "Legend" && item.kind !== "PgfplotsExtra" && item.kind !== "PgfplotsSet")) markFeature("pgfplots_axis_coordinates", "supported");
@@ -362,6 +377,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const labelStyles: Record<LabelRole, OptionListAst[]> = {
     xtick: styleLists(model.styles, ["every tick label", "every x tick label"]),
     ytick: styleLists(model.styles, ["every tick label", "every y tick label"]),
+    xextra: styleLists(model.styles, ["every tick label", "every x tick label"]),
+    yextra: styleLists(model.styles, ["every tick label", "every y tick label"]),
     xscale: styleLists(model.styles, ["every tick label", "every x tick label", "every x tick scale label"]),
     yscale: styleLists(model.styles, ["every tick label", "every y tick label", "every y tick scale label"]),
     xlabel: styleLists(model.styles, ["every axis label", "every axis x label"]),
@@ -475,11 +492,32 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const style = elementStyle(tickStyleNames(letter, kind));
     decorations.push(axisPath(`ticks:${letter}:${kind}`, style, segmentsToCommands(segments, toWorld)));
   }
-  decorations.push(axisPath("box", drawBase(axisScope.style), [
-    { kind: "M", to: toWorld({ x: x0, y: y0 }) }, { kind: "L", to: toWorld({ x: x0, y: y1 }) },
-    { kind: "L", to: toWorld({ x: x1, y: y1 }) }, { kind: "L", to: toWorld({ x: x1, y: y0 }) },
-    { kind: "L", to: toWorld({ x: x0, y: y0 }) }, { kind: "Z" }
-  ]));
+  for (const letter of ["x", "y"] as const) {
+    const segments = layout.extraTickMarks[letter];
+    if (segments.length === 0) continue;
+    const style = elementStyle([...tickStyleNames(letter, "major"), "every extra tick", `every extra ${letter} tick`]);
+    decorations.push(axisPath(`ticks:${letter}:extra`, style, segmentsToCommands(segments, toWorld)));
+  }
+  // C2 / R2: the axis lines, each with its `every outer/inner x axis line` style (arrow tips included).
+  let tipBounds: Box | null = null;
+  layout.axisLines.forEach((line, index) => {
+    const names = line.letter === "both" ? ["every outer x axis line", "every outer y axis line"] : [`every ${line.inner ? "inner" : "outer"} ${line.letter} axis line`];
+    const style = elementStyle(names);
+    const commands: ScenePathCommand[] = line.commands.map((c) => (c.op === "Z" ? { kind: "Z" } : { kind: c.op, to: toWorld(c.p) }));
+    const path = axisPath(index === 0 && line.letter === "both" ? "box" : `axis-line:${line.letter}:${String(index)}`, style, commands);
+    decorations.push(path);
+    if (style.markerStart || style.markerEnd) {
+      for (const tip of renderPathWithArrows(path).tipPaths) {
+        for (const command of tip.commands) {
+          if (command.kind === "Z") continue;
+          const q = toLocal(command.to);
+          tipBounds = unionBox(tipBounds, { minX: q.x, minY: q.y, maxX: q.x, maxY: q.y });
+        }
+      }
+    }
+  });
+  // F1: arrow tips count with their geometric extent (E21: the tip at the box corner).
+  if (tipBounds) layout = extendAxisLayout(layout, tipBounds);
   const labelRecords: AxisEvaluation["labels"] = [];
   const tickLabelElements: SceneElement[] = [];
   const descriptionElements: SceneElement[] = [];

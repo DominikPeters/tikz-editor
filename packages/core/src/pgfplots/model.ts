@@ -66,6 +66,17 @@ export type AxisDirectionModel = {
   logBasisText?: string;
   /** `log ticks with fixed point` (manual numberformatting.tex). */
   logTicksFixedPoint: boolean;
+  /**
+   * `axis x line` (manual axisdescription.tex): where the line of this
+   * direction is drawn — both box edges, the lower (bottom/left) or upper
+   * (top/right) edge, through the other direction's 0 (`middle`/`center`),
+   * or not at all (`none`, `hide x axis`). Behaviour R1.
+   */
+  axisLine: "box" | "lower" | "upper" | "middle" | "none";
+  /** The unstarred key moves the axis label (R6); `axis x line*` does not. */
+  axisLineMovesLabel: boolean;
+  /** `hide obscured x ticks` (initially true, R4). */
+  hideObscuredTicks: boolean;
   /** `extra x ticks`, `extra x tick labels` (manual tickoptions.tex). */
   extraTicks?: TickListSpec;
   extraTickLabels?: string[];
@@ -202,7 +213,10 @@ function direction(): AxisDirectionModel {
     maxSpaceBetweenTicks: 35,
     tryMinTicks: 4,
     mode: "linear",
-    logTicksFixedPoint: false
+    logTicksFixedPoint: false,
+    axisLine: "box",
+    axisLineMovesLabel: false,
+    hideObscuredTicks: true
   };
 }
 
@@ -318,7 +332,7 @@ function readTickList(value: string | null): TickListSpec {
   return { kind: "list", raw: text };
 }
 
-type Ctx = { model: AxisModel };
+type Ctx = { model: AxisModel; expandStyle: (name: string) => void; use?: PgfplotsKeyUse };
 
 type KeyHandler = (ctx: Ctx, value: string | null, use: PgfplotsKeyUse) => boolean;
 
@@ -418,6 +432,44 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`extra ${letter} ticks`, (ctx, v) => { dir(ctx).extraTicks = readTickList(v); return true; });
   defineAxisKey(`extra ${letter} tick labels`, (ctx, v) => { dir(ctx).extraTickLabels = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces); return true; });
 }
+/** `axis x line(*)=…` (R1): `bottom`/`left` → lower, `top`/`right` → upper. */
+function readAxisLine(letter: "x" | "y", v: string | null): AxisDirectionModel["axisLine"] | null {
+  const text = stripBraces(v ?? "");
+  if (text === "box") return "box";
+  if (text === "middle" || text === "center") return "middle";
+  if (text === "none") return "none";
+  if (letter === "x" ? text === "bottom" : text === "left") return "lower";
+  if (letter === "x" ? text === "top" : text === "right") return "upper";
+  return null;
+}
+function setAxisLine(ctx: Ctx, letter: "x" | "y", line: AxisDirectionModel["axisLine"], starred: boolean): void {
+  const dir = ctx.model[letter];
+  dir.axisLine = line;
+  dir.axisLineMovesLabel = !starred && line !== "box";
+  // The unstarred key is a style: it also installs `every (non) boxed x axis` (manual).
+  if (!starred && line !== "none") ctx.expandStyle(line === "box" ? `every boxed ${letter} axis` : `every non boxed ${letter} axis`);
+}
+for (const letter of ["x", "y"] as const) {
+  for (const starred of [false, true]) {
+    defineAxisKey(`axis ${letter} line${starred ? "*" : ""}`, (ctx, v) => { const line = readAxisLine(letter, v); if (!line) return false; setAxisLine(ctx, letter, line, starred); return true; });
+  }
+  defineAxisKey(`hide ${letter} axis`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; if (b) setAxisLine(ctx, letter, "none", true); return true; });
+  defineAxisKey(`hide obscured ${letter} ticks`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model[letter].hideObscuredTicks = b; return true; });
+}
+for (const starred of [false, true]) {
+  defineAxisKey(`axis lines${starred ? "*" : ""}`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    const x = readAxisLine("x", text === "left" ? "bottom" : text === "right" ? "top" : text);
+    const y = readAxisLine("y", text);
+    if (!x || !y) return false;
+    setAxisLine(ctx, "x", x, starred);
+    setAxisLine(ctx, "y", y, starred);
+    return true;
+  });
+}
+defineAxisKey("hide axis", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; if (b) { setAxisLine(ctx, "x", "none", true); setAxisLine(ctx, "y", "none", true); } return true; });
+// `separate axis lines` (initially false): only the closed-box default is implemented.
+defineAxisKey("separate axis lines", (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (b) ctx.model.unsupported.push({ key: "separate axis lines", span: use.origin.span }); return true; });
 defineAxisKey("log ticks with fixed point", (ctx, v) => { if (v !== null) return false; ctx.model.x.logTicksFixedPoint = true; ctx.model.y.logTicksFixedPoint = true; return true; });
 // Only the documented initial value is implemented (behaviour Q3: its effect on the step rule is OPEN).
 defineAxisKey("try min ticks log", (_ctx, v) => v !== null && readPgfNumber(v) === 3);
@@ -565,7 +617,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     plotDefaults: [],
     legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
-  const ctx: Ctx = { model };
+  const ctx: Ctx = { model, expandStyle: () => undefined };
   const sink = (use: PgfplotsKeyUse): void => {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
@@ -592,6 +644,8 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     model.tikzOptions.push(use);
   };
   const problems = (problem: { key: string; span: Span }) => model.unsupported.push({ key: problem.key, span: problem.span });
+  // Styles a key installs immediately (`axis x line` → `every non boxed x axis`), expanded in place.
+  ctx.expandStyle = (name) => expandPgfplotsOptions(styles.get(name) ?? [], styles, sink, { onProblem: problems });
   expandPgfplotsOptions(input.settings, styles, (use) => {
     // Settings outside an axis only define defaults: axis keys there apply to every axis.
     sink(use);

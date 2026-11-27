@@ -1,0 +1,6 @@
+% axis lines=center with 0 outside the limits: the lines sit at the lower limits.
+\begin{tikzpicture}
+\begin{axis}[axis lines=center, xmin=1, xmax=5, ymin=1, ymax=4, xlabel={X}, ylabel={Y}]
+  \addplot coordinates {(1.5,1.5) (3,3) (4.5,2)};
+\end{axis}
+\end{tikzpicture}

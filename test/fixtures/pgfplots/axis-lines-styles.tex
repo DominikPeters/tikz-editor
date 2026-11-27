@@ -1,0 +1,9 @@
+% Axis line styles: thick red lines, no tip on x, inner style on the middle y line; hide x axis keeps the y sides of the box.
+\begin{tikzpicture}
+\begin{axis}[name=a, axis x line=bottom, axis y line=middle, axis line style={thick, red}, x axis line style={-}, width=180pt, height=150pt]
+  \addplot coordinates {(-2,-1) (0,1) (3,2.5)};
+\end{axis}
+\begin{axis}[at={(a.outer south east)}, anchor=outer south west, xshift=10pt, hide x axis, width=180pt, height=150pt]
+  \addplot coordinates {(-2,-1) (0,1) (3,2.5)};
+\end{axis}
+\end{tikzpicture}
