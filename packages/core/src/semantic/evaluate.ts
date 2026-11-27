@@ -117,6 +117,13 @@ import { parseBooleanishNormalized } from "../utils/booleanish.js";
 import { stripWrappingBraces } from "../utils/braces.js";
 import { evaluatePgfMathExpression, formatPgfMathNumber } from "./pgfmath/evaluator.js";
 import { withPgfMathRuntime } from "./pgfmath/runtime.js";
+import {
+  PGF_NUMBER_FORMAT_STATE_BINDING,
+  collectPgfNumberFormatKeys,
+  partitionPgfNumberFormatKeys,
+  diagnosePgfNumberFormatKeys,
+  pgfNumberFormatStateBinding
+} from "./pgfmath/print-number-text.js";
 import { worldPoint, worldBounds } from "../coords/points.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
 import { resolveNodePositionFraction } from "./nodes/placement.js";
@@ -1958,7 +1965,12 @@ function applyTikzSetStatement(
   diagnostics: Diagnostic[],
   featureUsage: FeatureUsage
 ): void {
-  applyOptionListsToCurrentFrame([statement.optionList], context, diagnostics, statement.span, statement.commandRaw, statement.id, featureUsage);
+  const numberFormat = partitionPgfNumberFormatKeys(statement.optionList.entries.map(entry => entry.raw), "tikz");
+  applyNumberFormatKeys(numberFormat.entries, context, diagnostics, statement.payloadSpan ?? statement.span, featureUsage);
+  const optionList = numberFormat.entries.length === 0 && !numberFormat.consumed.includes(true)
+    ? statement.optionList
+    : { ...statement.optionList, entries: statement.optionList.entries.filter((_entry, index) => numberFormat.consumed[index] !== true) };
+  applyOptionListsToCurrentFrame([optionList], context, diagnostics, statement.span, statement.commandRaw, statement.id, featureUsage);
 }
 
 function applyPgfkeysStatement(
@@ -1967,8 +1979,27 @@ function applyPgfkeysStatement(
   diagnostics: Diagnostic[],
   featureUsage: FeatureUsage
 ): void {
+  applyNumberFormatKeys(collectPgfNumberFormatKeys(statement.payloadRaw, "pgfkeys"), context, diagnostics, statement.payloadSpan ?? statement.span, featureUsage);
   const normalized = normalizePgfkeysOptionList(statement.optionList);
   applyOptionListsToCurrentFrame([normalized], context, diagnostics, statement.span, statement.commandRaw, statement.id, featureUsage);
+}
+
+/** Record `/pgf/number format/` keys in the scoped state `\pgfmathprintnumber` reads. */
+function applyNumberFormatKeys(
+  entries: string[],
+  context: ReturnType<typeof createSemanticContext>,
+  diagnostics: Diagnostic[],
+  span: { from: number; to: number },
+  featureUsage: FeatureUsage
+): void {
+  if (entries.length === 0) return;
+  const problems = diagnosePgfNumberFormatKeys(entries);
+  markFeature(featureUsage, "pgfmath_number_printing", problems.some(problem => problem.code === "unsupported-key") ? "unsupported" : "supported");
+  for (const problem of problems) {
+    diagnostics.push({ severity: "warning", code: `pgf-number-format-${problem.code}`, message: problem.message, span });
+  }
+  const frame = currentFrame(context);
+  writeContextMacroBinding(context, PGF_NUMBER_FORMAT_STATE_BINDING, pgfNumberFormatStateBinding(frame.macroBindings, entries));
 }
 
 function applyTikzStyleStatement(

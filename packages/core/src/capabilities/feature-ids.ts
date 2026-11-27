@@ -9,6 +9,7 @@ export const FEATURE_IDS = [
   "pgfmath_expression",
   "pgfmath_seed_commands",
   "pgfmath_random_functions",
+  "pgfmath_number_printing", // \pgfmathprintnumber[to] in node text and the /pgf/number format/ keys.
   "options_structured",
   "transform_cm", // Affine matrices and their xslant/yslant shorthands.
   "path_shading",

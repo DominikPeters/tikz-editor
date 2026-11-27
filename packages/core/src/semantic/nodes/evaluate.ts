@@ -3,7 +3,8 @@ import type { NodeItem, PathStatement } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
 import { worldPoint } from "../../coords/points.js";
 import { worldTransform } from "../../coords/transforms.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindingsMapped } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH } from "../../macros/index.js";
+import { expandNodeTextWithNumberPrinting } from "../pgfmath/print-number-text.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback, type MappedText } from "../../text/source-map.js";
 import { analyzeSimpleTexResources } from "../../text/tex/index.js";
@@ -208,12 +209,11 @@ export function measureNodeAnchorExtents(
   const nodeLocalStyle = resolveNodeStyle(expandedNodeLocalOptions, nodeDecorationBaseStyle, context, 1);
   const nodeShape = resolveNodeShape(expandedNodeOptions);
   const optionalTrace1 = context.macroTraceCollector ?? undefined;
-  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
+  const resolvedNodeText = expandNodeTextWithNumberPrinting(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
     ...(optionalTrace1 === undefined ? {} : { trace: optionalTrace1 }),
     sourceOffset: item.textSpan.from
-  });
-  const resolvedNodeText = expandedNodeText;
+  }).text;
   const normalizedText = normalizeNodeTextFontSize(resolvedNodeText.text, nodeLocalStyle.fontSize);
   const normalizedMappedText = mapTransformedTextWithFallback(
     resolvedNodeText,
@@ -424,12 +424,18 @@ export function evaluateNodeItem(
   }
 
   const optionalTrace2 = context.macroTraceCollector ?? undefined;
-  const expandedNodeText = expandMacroBindingsMapped(item.text, frame.macroBindings, {
+  const numberPrinting = expandNodeTextWithNumberPrinting(item.text, frame.macroBindings, {
     maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
     ...(optionalTrace2 === undefined ? {} : { trace: optionalTrace2 }),
     sourceOffset: item.textSpan.from
   });
-  const resolvedNodeText = expandedNodeText;
+  if (numberPrinting.used) {
+    markFeature("pgfmath_number_printing", numberPrinting.diagnostics.some(diagnostic => diagnostic.code === "unsupported-key") ? "unsupported" : "supported");
+    for (const diagnostic of numberPrinting.diagnostics) {
+      pushDiagnostic(`pgfmathprintnumber-${diagnostic.code}`, `\\pgfmathprintnumber: ${diagnostic.message}`, item.textSpan.from, item.textSpan.to);
+    }
+  }
+  const resolvedNodeText = numberPrinting.text;
   const rawNodeParts = isMultipartShape(nodeShape) ? parseNodeParts(resolvedNodeText.text) : [{ name: "text", text: resolvedNodeText.text }];
   const mainNodeText = rawNodeParts.find((part) => part.name === "text")?.text ?? "";
   const mainNodeMappedText = rawNodeParts.length === 1 && mainNodeText === resolvedNodeText.text

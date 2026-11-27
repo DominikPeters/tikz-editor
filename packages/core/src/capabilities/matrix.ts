@@ -74,6 +74,13 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["pgfmath_random_functions"]
   },
+  pgfmath_number_printing: {
+    parser: "none",
+    semantic: "stable",
+    svg: "stable",
+    edit: "none",
+    fixtures: ["pgfmath_number_printing"]
+  },
   options_structured: {
     parser: "stable",
     semantic: "stable",

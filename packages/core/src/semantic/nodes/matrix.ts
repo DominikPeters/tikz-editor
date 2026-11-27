@@ -1,7 +1,8 @@
 import { requireArrayValue } from "../../utils/collections.js";
 import { currentFrame } from "../context.js";
 import type { NodeItem, PathStatement, Span } from "../../ast/types.js";
-import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings, expandMacroBindingsMapped } from "../../macros/index.js";
+import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
+import { expandNodeTextWithNumberPrinting, expandPgfMathPrintNumber } from "../pgfmath/print-number-text.js";
 import { parseOptionListRaw, splitTopLevel } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";
 import { mapTransformedTextWithFallback } from "../../text/source-map.js";
@@ -197,7 +198,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
       const cellTransformScale = params.inheritedTransformScale * cellOptionScale;
       const cellStyle = resolveNodeStyle(combinedCellOptions, params.style, params.context, cellTransformScale);
       const optionalTrace1 = params.context.macroTraceCollector ?? undefined;
-      const expandedCellText = expandMacroBindingsMapped(
+      const resolvedCellText = expandNodeTextWithNumberPrinting(
         parsedCell.text,
         currentFrame(params.context).macroBindings,
         {
@@ -205,8 +206,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
           ...(optionalTrace1 === undefined ? {} : { trace: optionalTrace1 }),
           sourceOffset: parsedCell.textSpan.from
         }
-      );
-      const resolvedCellText = expandedCellText;
+      ).text;
       const normalizedCellText = normalizeNodeTextFontSize(resolvedCellText.text, cellStyle.fontSize);
       const normalizedMappedCellText = mapTransformedTextWithFallback(
         resolvedCellText,
@@ -970,7 +970,7 @@ export function evaluateMatrixNodeItem(params: EvaluateMatrixNodeParams): Matrix
         textSource: "group",
         textSpan: resolvedCell.cell.textSpan,
         text: expandMacroBindings(
-          resolvedCell.cell.text,
+          expandPgfMathPrintNumber(resolvedCell.cell.text, currentFrame(params.context).macroBindings),
           currentFrame(params.context).macroBindings,
           {
             maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
