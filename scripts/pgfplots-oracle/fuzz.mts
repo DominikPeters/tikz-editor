@@ -55,8 +55,11 @@ function generate(index: number, r: () => number): FuzzCase {
   const axisOpts: string[] = [];
   // Size: avoid exact multiples of 35pt (tick-step transitions decided by noise, behaviour P note).
   const size = pick(["", "w", "wh", "soa"]);
-  const w = Math.round(num(150, 330, 0) / 35 * 35 + 11);
-  const h = Math.round(num(110, 260, 0) / 35 * 35 + 13);
+  // Box lengths (target − 45pt, or the `scale only axis` size − 50 below) at an exact multiple of 35pt
+  // decide the tick count by TeX's fixed-point noise (behaviour I1 note); move them off.
+  const offGrid = (target: number) => [target - 45, target - 50].some((len) => Math.abs(len / 35 - Math.round(len / 35)) * 35 < 1) ? target + 7 : target;
+  const w = offGrid(Math.round(num(150, 330, 0)));
+  const h = offGrid(Math.round(num(110, 260, 0)));
   if (size === "w") axisOpts.push(`width=${w}pt`);
   if (size === "wh") axisOpts.push(`width=${w}pt`, `height=${h}pt`);
   if (size === "soa") axisOpts.push("scale only axis", `width=${w - 50}pt`, `height=${h - 50}pt`);
