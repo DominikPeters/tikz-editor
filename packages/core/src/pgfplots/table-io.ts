@@ -50,8 +50,8 @@ export function readPgfplotsTableMacro(context: SemanticContext, name: string): 
 
 /** A table file through the document's resolver; `unavailable` when the host reads no folder. */
 export function readPgfplotsTableFile(context: SemanticContext, name: string): TableFileRead {
-  const reader = context.graphicsResolver?.readTextFile;
-  if (!reader) return { status: "unavailable" };
-  const result = reader.call(context.graphicsResolver, name);
+  const resolver = context.graphicsResolver;
+  if (!resolver?.readTextFile) return { status: "unavailable" };
+  const result = resolver.readTextFile(name);
   return result.status === "resolved" ? { status: "resolved", text: result.text } : { status: "missing" };
 }

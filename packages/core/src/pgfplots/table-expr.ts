@@ -31,7 +31,7 @@ function letters(index: number): string {
 export function compileTableExpression(expression: string, names: readonly string[] | null): CompiledTableExpression {
   const columns: number[] = [];
   const variableOf = new Map<number, string>();
-  let missing: string | null = null;
+  const missing: string[] = [];
   const reference = (index: number): string => {
     let name = variableOf.get(index);
     if (!name) {
@@ -47,17 +47,17 @@ export function compileTableExpression(expression: string, names: readonly strin
       const name = rawName.trim();
       const at = names ? names.indexOf(name) : /^\d+$/u.test(name) ? Number(name) : -1;
       if (at < 0) {
-        missing ??= name;
+        missing.push(name);
         return " 0 ";
       }
       return reference(at);
     });
-  if (missing !== null) return { ok: false, message: `the table has no column \`${missing}\`` };
+  if (missing.length > 0) return { ok: false, message: `the table has no column \`${missing[0] ?? ""}\`` };
   const variables = [...columns.map((index) => variableOf.get(index) ?? ""), "\\coordindex", "\\lineno"];
   const compiled = compilePgfMathExpression(rewritten, { mode: "float", variables });
   if (!compiled.ok) return { ok: false, message: compiled.message };
   const fn = compiled.fn;
-  const bindings: number[] = new Array<number>(variables.length).fill(0);
+  const bindings: number[] = Array.from({ length: variables.length }, () => 0);
   return {
     ok: true,
     columns,

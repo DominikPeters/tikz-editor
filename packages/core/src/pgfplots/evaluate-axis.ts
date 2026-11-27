@@ -238,7 +238,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const bindingsOf = (statement: AddPlotStatement) => expandedPlotBindings.get(statement) ?? parent.macroBindings;
   const settings = readPgfplotsSettings(context).map(expand);
   if (usedLengths.size > 0 && lengthsEnv.assumption) {
-    const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(lengthsEnv.lengths[name as keyof typeof lengthsEnv.lengths])}pt`).join(", ");
+    const values: Record<string, number> = { ...lengthsEnv.lengths };
+    const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(values[name])}pt`).join(", ");
     diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Document lengths are assumed: ${named} (${lengthsEnv.assumption}).`, span: axis.optionsSpan ?? axis.beginSpan });
   }
   const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));

@@ -268,7 +268,7 @@ export function readPgfFloat(raw: string): number | null {
 export function readLength(raw: string): number | null {
   const text = stripBraces(raw);
   const value = parseLength(text, "pt");
-  if (value !== null && value !== undefined) return value;
+  if (value !== null) return value;
   // pgfplots reads dimensions with pgfmath (`width=345pt/2.3`, `2*\columnwidth` once substituted).
   const result = evaluatePgfMathExpression(text);
   return result.ok ? convertQuantityToLength(result.quantity, "pt") : null;
@@ -648,7 +648,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
       return;
     }
     if (use.key.startsWith("table/")) {
-      model.tableKeys.push(useToEntry(use));
+      model.tableKeys.push(keyUseToEntry(use));
       return;
     }
     if (use.key.startsWith("error bars/")) {
@@ -692,7 +692,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
 }
 
 /** A key use as an option entry (its span is where it was written). */
-export function useToEntry(use: PgfplotsKeyUse): OptionEntry {
+export function keyUseToEntry(use: PgfplotsKeyUse): OptionEntry {
   return use.value === null
     ? { kind: "flag", key: use.key, span: use.origin.span, raw: use.key }
     : { kind: "kv", key: use.key, valueRaw: use.value, span: use.origin.span, raw: `${use.key}=${use.value}` };
@@ -884,7 +884,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "forget plot") { plot.forget = readBoolean(value) ?? true; return; }
-    if (key.startsWith("table/")) { plot.tableKeys.push(useToEntry(use)); return; }
+    if (key.startsWith("table/")) { plot.tableKeys.push(keyUseToEntry(use)); return; }
     if (key === "ybar" || key === "xbar" || key === "ybar interval" || key === "xbar interval") {
       // The plot handler takes no value (tikz.code.tex); its width is `bar interval width` (E19 `bars-interval`).
       plot.bar = { ...plot.bar, kind: key };

@@ -99,7 +99,7 @@ function collectCoordinates(statement: AddPlotStatement, expand: (text: string) 
     const x = symbolic.x ? symbolicIndex(expand(xRaw.raw), symbolic.x) : readCoordinateNumber(expand(xRaw.raw));
     const y = symbolic.y ? symbolicIndex(expand(yRaw.raw), symbolic.y) : readCoordinateNumber(expand(yRaw.raw));
     if (x === null || y === null) {
-      const missing = (symbolic.x && x === null) || (symbolic.y && y === null);
+      const missing = (symbolic.x !== undefined && x === null) || (symbolic.y !== undefined && y === null);
       return { kind: "unsupported", reason: missing ? `coordinate \`(${xRaw.raw},${yRaw.raw})\` outside the symbolic coordinate list (TeX stops: "the input coordinate has not been defined")` : `non-numeric coordinate \`(${xRaw.raw},${yRaw.raw})\` (symbolic coordinates without \`symbolic x coords\`)`, span: point.span };
     }
     const entry: PlotPoint = { x, y, jump: point.afterEmptyLine };
@@ -306,7 +306,7 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
     const row = table.rows[coordindex];
     if (!row) continue;
     const count = Math.max(width, row.cells.length, previous.length);
-    const cells = new Array<number>(count);
+    const cells = Array.from({ length: count }, () => Number.NaN);
     for (let i = 0; i < count; i += 1) {
       const cell = row.cells[i];
       cells[i] = cell === undefined ? previous[i] ?? Number.NaN : readTableNumber(cell);
