@@ -44,7 +44,9 @@ import { expandMacroBindings } from "../macros/index.js";
 import { expandOptionListMacros } from "../semantic/style/macro-options.js";
 import { resolveContextDelta } from "../semantic/style/resolve.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix } from "../semantic/transform.js";
-import type { FeatureUsage, ResolvedStyle, SceneClipPath, SceneElement, ScenePath, ScenePathCommand } from "../semantic/types.js";
+import type { FeatureUsage, PgfplotsAxisEditInfo, ResolvedStyle, SceneClipPath, SceneElement, ScenePath, ScenePathCommand } from "../semantic/types.js";
+import { createEditHandle } from "../semantic/edit-handles.js";
+import { axisDescriptionTextSpan, axisSubSelectionId } from "./edit-ids.js";
 import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
 import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
 import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
@@ -338,7 +340,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (d) diagnostics[i] = { ...d, span: request.role === "xlabel" ? model.x.label?.span ?? axis.beginSpan : request.role === "ylabel" ? model.y.label?.span ?? axis.beginSpan : request.role === "title" ? model.title?.span ?? axis.beginSpan : axis.optionsSpan ?? axis.beginSpan };
       }
     }
-    return { elements: elements.map((element) => attributeTo(element, axis.id, axis.span)), probe };
+    // Descriptions and the legend are sub-selections of the axis; their text keeps a span into the document when it is written there.
+    const textSpan = request.textSpan ?? axisDescriptionTextSpan(request.role, model, source, context.source);
+    const textSpanOk = textSpan !== undefined && context.source.slice(textSpan.from, textSpan.to) === request.text;
+    const sourceId = axisSubSelectionId(axis.id, request.role);
+    return { elements: elements.map((element) => attributeTo(element, sourceId, axis.span, textSpanOk ? textSpan : undefined)), probe };
   };
   const measure = (request: LabelRequest): LabelGeometry | null => {
     const { probe } = evaluateLabel(request, request.at, false);
@@ -462,11 +468,12 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const style = elementStyle(tickStyleNames(letter, kind));
     decorations.push(axisPath(`ticks:${letter}:${kind}`, style, segmentsToCommands(segments, toWorld)));
   }
-  decorations.push(axisPath("box", drawBase(axisScope.style), [
+  const boxPath = axisPath("box", drawBase(axisScope.style), [
     { kind: "M", to: toWorld({ x: x0, y: y0 }) }, { kind: "L", to: toWorld({ x: x0, y: y1 }) },
     { kind: "L", to: toWorld({ x: x1, y: y1 }) }, { kind: "L", to: toWorld({ x: x1, y: y0 }) },
     { kind: "L", to: toWorld({ x: x0, y: y0 }) }, { kind: "Z" }
-  ]));
+  ]);
+  decorations.push(boxPath);
   const labelRecords: AxisEvaluation["labels"] = [];
   const tickLabelElements: SceneElement[] = [];
   const descriptionElements: SceneElement[] = [];
@@ -509,6 +516,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         plotIndex += 1;
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
+        pushPlotPointHandles(item, context);
         if (!plot.model.onlyMarks) {
           // P1: the plot handler (sharp, smooth, const, jump, comb) on the canvas points.
           const canvas = plot.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)).map((point) => ({ p: mapPoint(point.x, point.y), jump: point.jump }));
@@ -599,6 +607,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     },
     path: (sourceId, itemId, style, span, commands) => {
       const path = makePath(sourceId, itemId, style, axisFrame.styleChain, span);
+      // Legend images belong to the legend (a sub-selection of the axis), not to their plot.
+      path.sourceRef = { ...path.sourceRef, sourceId: axisSubSelectionId(axis.id, "legend") };
       path.commands = commands.map((c): ScenePathCommand => c.kind === "Z" ? { kind: "Z" } : c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) });
       path.clipChain = [...parent.clipChain];
       path.pictureSizeRelevant = false;
@@ -625,6 +635,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   registerAxisNode(context, "current axis", layout, toWorld, axis.id);
   if (model.name) registerAxisNode(context, model.name, layout, toWorld, axis.id);
 
+  boxPath.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null);
   const evaluation: AxisEvaluation = { axisId: axis.id, model, layout, frameTransform, labels: labelRecords, clip: model.clip ? clip : null };
   const list = axisEvaluations.get(context) ?? [];
   list.push(evaluation);
@@ -777,11 +788,56 @@ function probeGeometry(probe: NodeGeometryProbe, toLocal: (w: WorldPoint) => Poi
   return { anchors, border: { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) } };
 }
 
-/** Generated label elements belong to the axis; their text is not canvas-editable (no text span into the document). */
-function attributeTo(element: SceneElement, sourceId: string, span: Span): SceneElement {
+/** Generated label elements belong to the axis; their text is canvas-editable only where it is written in the document. */
+function attributeTo(element: SceneElement, sourceId: string, span: Span, textSpan?: Span): SceneElement {
   const copy: SceneElement = { ...element, sourceRef: { sourceId, sourceSpan: span } };
-  if (copy.kind === "Text") delete copy.textSourceSpan;
+  if (copy.kind === "Text") {
+    if (textSpan) copy.textSourceSpan = { from: textSpan.from, to: textSpan.to };
+    else delete copy.textSourceSpan;
+  }
   return copy;
+}
+
+/**
+ * Edit handles for the points of a `coordinates` plot (design 8): each
+ * `(x,y)` is read in the content frame, whose transform is the data map on a
+ * linear axis, so the coordinate writer rewrites it in data units.
+ */
+function pushPlotPointHandles(statement: AddPlotStatement, context: SemanticContext): void {
+  if (statement.input.kind !== "coordinates") return;
+  for (const point of statement.input.points) {
+    const span = point.coordinateSpan;
+    const raw = context.source.slice(span.from, span.to);
+    if (!raw.startsWith("(") || !raw.endsWith(")") || point.components.length !== 2) continue;
+    const evaluated = evaluateRawCoordinate(raw, context);
+    if (!evaluated.world) continue;
+    const handle = createEditHandle(evaluated, span, statement.id, "path-point", context);
+    if (handle && handle.rewriteMode === "direct") context.editHandles.push(handle);
+  }
+}
+
+function axisEditInfo(axisId: string, model: AxisModel, layout: AxisLayout, frame: WorldTransform, legend: { bbox: Box | null; anchor: string } | null): PgfplotsAxisEditInfo {
+  const point = (q: Point) => ({ x: q.x, y: q.y });
+  return {
+    axisId,
+    frame: { a: frame.a, b: frame.b, c: frame.c, d: frame.d, e: frame.e, f: frame.f },
+    box: { ...layout.box },
+    bbox: { ...layout.bbox },
+    anchors: Object.fromEntries(Object.entries(layout.anchors).map(([k, q]) => [k, point(q)])),
+    anchor: model.anchor,
+    map: { origin: point(layout.map.origin), xUnit: point(layout.map.xUnit), yUnit: point(layout.map.yUnit) },
+    limits: { xmin: layout.limits.xmin, xmax: layout.limits.xmax, ymin: layout.limits.ymin, ymax: layout.limits.ymax },
+    size: {
+      ...(model.width === undefined ? {} : { width: model.width }),
+      ...(model.height === undefined ? {} : { height: model.height }),
+      scaleOnlyAxis: model.scaleOnlyAxis,
+      scale: model.scale,
+      ...(model.x.unit === undefined ? {} : { xUnit: model.x.unit }),
+      ...(model.y.unit === undefined ? {} : { yUnit: model.y.unit })
+    },
+    ...(legend?.bbox ? { legend: { bbox: { ...legend.bbox }, anchor: legend.anchor } } : {}),
+    linear: true
+  };
 }
 
 /** `\path node[<styles>,<placement>] at (0pt,0pt) {<text>};`, parsed once per label; ids and spans belong to the axis. */

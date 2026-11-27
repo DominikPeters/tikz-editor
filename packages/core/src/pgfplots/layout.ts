@@ -29,6 +29,8 @@ export type LabelRequest = {
   placement: string;
   /** Where the anchor goes (local coordinates). */
   at: Point;
+  /** Where the label text is written in the document (editing only; no effect on layout). */
+  textSpan?: { from: number; to: number };
 };
 
 export type LabelGeometry = {
