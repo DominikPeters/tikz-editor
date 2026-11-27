@@ -1420,6 +1420,17 @@ function evaluateStatement(
     return [];
   }
 
+  if (statement.environment) {
+    markFeature(featureUsage, "unknown_statement", "unsupported");
+    diagnostics.push({
+      severity: "warning",
+      code: "unsupported-environment",
+      message: `Unsupported environment \`${statement.environment.name}\`; this editor will skip it and draw nothing for it.`,
+      span: statement.environment.beginSpan
+    });
+    return [];
+  }
+
   if (
     applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
   ) {

@@ -647,6 +647,21 @@ export type UnknownStatement = {
   id: string;
   span: Span;
   raw: string;
+  /** Set when the statement is an environment without a rule of its own, `\begin{x}…\end{x}`. */
+  environment?: UnknownEnvironmentInfo;
+};
+
+/**
+ * An environment the editor reads as one unit and skips: its name, its
+ * `\begin{x}` and (when it has one) its `\end{x}`, and the source between them.
+ * An unterminated environment runs to the end of the body around it.
+ */
+export type UnknownEnvironmentInfo = {
+  name: string;
+  beginSpan: Span;
+  bodySpan: Span;
+  endSpan?: Span;
+  terminated: boolean;
 };
 
 export type UnknownPathItem = {

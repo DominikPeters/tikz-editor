@@ -225,7 +225,8 @@ function expandStatement(
     return [expandedPath];
   }
 
-  if (statement.kind === "UnknownStatement") {
+  // An environment is skipped whole: a macro call is a statement on its own.
+  if (statement.kind === "UnknownStatement" && !statement.environment) {
     const macroExpanded = tryExpandMacroStatement(statement, stack, context, templateSource);
     if (macroExpanded != null) {
       return macroExpanded;

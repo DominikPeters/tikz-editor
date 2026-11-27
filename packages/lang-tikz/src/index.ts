@@ -153,7 +153,8 @@ const highlightedTexFragmentParser = texFragmentParser.configure({
   bufferLength: EDITOR_BUFFER_LENGTH,
 });
 
-const mixedTikzParser = baseTikzParser.configure({
+// Typed: it mounts itself over unknown environments.
+const mixedTikzParser: typeof baseTikzParser = baseTikzParser.configure({
   bufferLength: EDITOR_BUFFER_LENGTH,
   props: [
     tikzHighlighting,
@@ -163,14 +164,21 @@ const mixedTikzParser = baseTikzParser.configure({
       Group: foldInside,
     }),
   ],
-  wrap: parseMixed((node) =>
-    node.name === "NodeTextGroup"
-      ? {
-          parser: highlightedTexFragmentParser,
-          bracketed: true,
-        }
-      : null
-  ),
+  wrap: parseMixed((node) => {
+    if (node.name === "NodeTextGroup") {
+      return {
+        parser: highlightedTexFragmentParser,
+        bracketed: true,
+      };
+    }
+    // The grammar skips an environment it has no rule for as one token, so
+    // the editor's model is not misled by its body. For highlighting, read
+    // that body as TikZ commands anyway, as it was before the fallback.
+    if (node.name === "UnknownEnvironmentStatement") {
+      return { parser: mixedTikzParser };
+    }
+    return null;
+  }),
 });
 
 function isTikzEnvironment(node: SyntaxNodeRef, input: Input): boolean {

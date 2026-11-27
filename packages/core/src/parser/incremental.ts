@@ -420,6 +420,11 @@ function identityStructure(statement: Statement): string {
   }).join("|");
   if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
   if (statement.kind === "Path") return `Path(${items(statement.items)})`;
+  // A plain unknown command edited into an environment, or an environment
+  // that loses its `\end`, reaches past its old span: reparse the document.
+  if (statement.kind === "UnknownStatement" && statement.environment) {
+    return `Environment(${JSON.stringify(statement.environment.name)},${statement.environment.terminated})`;
+  }
   return statement.kind;
 }
 

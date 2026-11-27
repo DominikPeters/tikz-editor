@@ -157,4 +157,25 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
     expect(hasClassAt(ranges, helloFrom, helloFrom + "Hello".length, "string")).toBe(true);
     expect(hasClassAt(ranges, xFrom, xFrom + 1, "variableName")).toBe(true);
   });
+  it("highlights the body of an environment the grammar skips, and the statements after it", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{axis}[xmin=0]
+    \draw (0,0) -- (1,1);
+    \node at (0,0) {Hello};
+  \end{axis}
+  \draw (2,2) circle (1);
+\end{tikzpicture}`;
+    const ranges = collectHighlights(source);
+    const innerDrawFrom = source.indexOf(String.raw`\draw`);
+    const innerNodeFrom = source.indexOf(String.raw`\node`);
+    const helloFrom = source.indexOf("Hello");
+    const outerDrawFrom = source.lastIndexOf(String.raw`\draw`);
+    const circleFrom = source.indexOf("circle");
+
+    expect(hasClassAt(ranges, innerDrawFrom, innerDrawFrom + String.raw`\draw`.length, "keyword")).toBe(true);
+    expect(hasClassAt(ranges, innerNodeFrom, innerNodeFrom + String.raw`\node`.length, "keyword")).toBe(true);
+    expect(hasClassAt(ranges, helloFrom, helloFrom + "Hello".length, "string")).toBe(true);
+    expect(hasClassAt(ranges, outerDrawFrom, outerDrawFrom + String.raw`\draw`.length, "keyword")).toBe(true);
+    expect(hasClassAt(ranges, circleFrom, circleFrom + "circle".length, "typeName")).toBe(true);
+  });
 });

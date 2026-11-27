@@ -12,10 +12,16 @@
 }
 
 TikzEnvironment {
-  BeginTikz Comment* (OptionList BodyItem* | bodyStart BodyItem*)? EndTikz
+  BeginTikz Comment* (OptionList pictureItem* | bodyStart pictureItem*)? EndTikz
 }
 
-bodyStart { Statement | StrayToken }
+bodyStart { Statement | StrayToken | UnknownEnvironmentStatement }
+
+// An item of a picture's body (a tikzpicture, scope, \tikz or overlay body).
+// Only here is an unknown environment a statement: around a picture, in a
+// document's preamble or body, `\begin{document}` or `\begin{figure}` would
+// otherwise swallow the pictures and definitions inside it.
+pictureItem { BodyItem | UnknownEnvironmentStatement }
 
 BodyItem {
   Comment |
@@ -24,7 +30,7 @@ BodyItem {
 }
 
 TikzInline {
-  InlineTikzCmd Comment* (OptionList BodyItem* | bodyStart BodyItem*)?
+  InlineTikzCmd Comment* (OptionList pictureItem* | bodyStart pictureItem*)?
 }
 
 Statement {
@@ -52,7 +58,15 @@ StyleDefinitionStatement {
 }
 
 ScopeStatement {
-  BeginScope Comment* (OptionList BodyItem* | bodyStart BodyItem*)? EndScope
+  BeginScope Comment* (OptionList pictureItem* | bodyStart pictureItem*)? EndScope
+}
+
+// The generic environment fallback: `\begin{x}…\end{x}` for an environment
+// without a rule of its own, as one token (environment-tokens.ts). A rule for
+// a specific environment takes it out of the fallback there.
+UnknownEnvironmentStatement {
+  UnknownEnvironment |
+  UnterminatedUnknownEnvironment
 }
 
 ForeachStatement {
@@ -126,7 +140,7 @@ OverlayModifier {
 }
 
 OverlayBody {
-  "{" BodyItem* !overlayContinuation "}"
+  "{" pictureItem* !overlayContinuation "}"
 }
 
 PathCommand {
@@ -896,6 +910,11 @@ CosKw { @specialize<Identifier, "cos"> }
 NodeKw { @specialize<Identifier, "node"> }
 PicKw { @specialize<Identifier, "pic"> }
 ForeachKw { @specialize<Identifier, "foreach"> }
+
+@external tokens unknownEnvironmentTokens from "./environment-tokens.js" {
+  UnknownEnvironment,
+  UnterminatedUnknownEnvironment
+}
 
 @tokens {
   @precedence {

@@ -193,6 +193,17 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
       collectForeachRangeEllipsisDiagnostics(node, source, diagnostics);
     }
 
+    if (node.type.name === "UnterminatedUnknownEnvironment") {
+      const begin = /^\\begin\s*\{([^{}]*)\}/u.exec(source.slice(node.from, node.to));
+      const name = begin?.[1] ?? "";
+      diagnostics.push({
+        severity: "error",
+        message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`; add it before the enclosing environment ends.`,
+        span: { from: node.from, to: node.from + (begin?.[0].length ?? node.to - node.from) },
+        code: "unterminated-environment"
+      });
+    }
+
     if ((node.type.name === "PathStatement" || node.type.name === "UnknownStatement") && source[node.to - 1] !== ";"
       && !(node.type.name === "UnknownStatement" && isImplicitMacroCall(node, source))) {
       diagnostics.push({
