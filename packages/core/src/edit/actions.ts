@@ -100,6 +100,8 @@ import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
 import { applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
+import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
+import { evaluateTikzFigure } from "../semantic/evaluate.js";
 
 export type ResizeRole =
   | "top-left"
@@ -151,6 +153,8 @@ export type EditAction =
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
+  /** A pgfplots axis from a template, placed right of the picture's content. */
+  | { kind: "insertPgfplotsTemplate"; template: PgfplotsTemplateKind }
   /** A new path through world points: what the path and freehand tools draw. */
   | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
@@ -365,6 +369,8 @@ export function applyEditAction(
         return applyAddElement(source, action.template, action.at, parseOptions, evaluateOptions, geometry);
       case "addPath":
         return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
+      case "insertPgfplotsTemplate":
+        return applyInsertPgfplotsTemplate(source, action.template, parseOptions, evaluateOptions);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":
@@ -1281,6 +1287,37 @@ function applyAddPath(
 }
 
 /** Appends a new statement to the figure of `working` and selects it. */
+function applyInsertPgfplotsTemplate(
+  source: string,
+  template: PgfplotsTemplateKind,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
+): EditActionResult {
+  const working = ensurePgfplotsSetup(source);
+  const parsed = parseTikzForEdit(working, parseOptions);
+  // Beside what the picture already shows: 1cm right of its content, bottoms aligned.
+  let text = PGFPLOTS_TEMPLATES[template].text;
+  const hasContent = parsed.figure.body.some((statement) => statement.kind !== "PgfplotsSet" && statement.kind !== "PgfplotsLibrary");
+  if (hasContent) {
+    const bounds = evaluateTikzFigure(parsed.figure, working, evaluateOptions).scene.bounds;
+    if (bounds) {
+      const cm = (value: number) => String(Math.round((value / PT_PER_CM) * 2) / 2);
+      text = text.replace("\\begin{axis}[", `\\begin{axis}[at={(${cm(bounds.maxX + PT_PER_CM)}cm,${cm(bounds.minY)}cm)}, `);
+    }
+  }
+  const snippet = userText(text.replace(/\n/gu, "\n  "), "pasted-tikz");
+  const newSource = insertElementIntoSource(working, snippet, parsed.figure.span);
+  const after = parseTikzForEdit(newSource, parseOptions);
+  const axes = after.figure.body.filter((statement) => statement.kind === "Axis");
+  const inserted = axes.at(-1)?.id;
+  return {
+    kind: "success",
+    newSource,
+    patches: [computeMinimalReplacementPatch(source, newSource)],
+    ...(inserted ? { selectedSourceIds: [inserted], changedSourceIds: [inserted] } : {})
+  };
+}
+
 function appendStatement(
   source: string,
   working: string,

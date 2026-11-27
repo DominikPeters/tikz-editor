@@ -364,3 +364,33 @@ describe("pgfplots editing: inspector", () => {
     expect(set(set(SOURCE, `${id}:plot:1`, "mark", "square"), `${id}:plot:1`, "mark", "default")).toBe(SOURCE);
   });
 });
+
+describe("pgfplots editing: insert templates", () => {
+  it("adds compat once, appends the axis beside existing content and selects it", () => {
+    const bare = "\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}";
+    const result = applyEditAction(bare, [], { kind: "insertPgfplotsTemplate", template: "function" });
+    if (result.kind !== "success") throw new Error("insert failed");
+    expect(result.newSource).toBe(`\\pgfplotsset{compat=1.18}\n\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n  ${String.raw`\begin{axis}[at={(2cm,0cm)}, xlabel={$x$}, ylabel={$f(x)$}, domain=-2:2, samples=50]
+    \addplot {x^2 - 1};
+    \addlegendentry{$x^2 - 1$}
+  \end{axis}`}\n\\end{tikzpicture}`);
+    expect(result.selectedSourceIds).toEqual([AXIS_ID(result.newSource)]);
+    const twice = applyEditAction(result.newSource, [], { kind: "insertPgfplotsTemplate", template: "data" });
+    if (twice.kind !== "success") throw new Error("insert failed");
+    expect(twice.newSource.match(/compat=1\.18/gu)).toHaveLength(1);
+    const evaluated = evaluate(twice.newSource);
+    expect(evaluated.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(evaluated.scene.elements.some((e) => /^axis:\d+:plot:0$/u.test(e.sourceRef.sourceId))).toBe(true);
+  });
+
+  it("in a full document adds \\usepackage{pgfplots} and compat to the preamble", () => {
+    const doc = "\\documentclass{article}\n\\usepackage{tikz}\n\\begin{document}\n\\begin{tikzpicture}\n\\end{tikzpicture}\n\\end{document}";
+    const result = applyEditAction(doc, [], { kind: "insertPgfplotsTemplate", template: "bar" });
+    if (result.kind !== "success") throw new Error("insert failed");
+    expect(result.newSource.startsWith("\\documentclass{article}\n\\usepackage{tikz}\n\\usepackage{pgfplots}\n\\pgfplotsset{compat=1.18}\n\\begin{document}")).toBe(true);
+    expect(result.newSource).toContain("\\begin{axis}[ybar, ymin=0");
+    const kept = applyEditAction(result.newSource, [], { kind: "insertPgfplotsTemplate", template: "bar" });
+    if (kept.kind !== "success") throw new Error("insert failed");
+    expect(kept.newSource.match(/usepackage\{pgfplots\}/gu)).toHaveLength(1);
+  });
+});
