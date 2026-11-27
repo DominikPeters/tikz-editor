@@ -1629,3 +1629,20 @@ The diagnostic says so.
 **Z10 — Silent drops made loud.** `postaction`/`preaction` without a
 decoration (`postaction={pattern=north east lines}` on bars) were ignored
 without a word; they now report `unsupported-option-key:postaction`.
+
+**Z11 — Expression plots on a logarithmic x direction are sampled
+logarithmically** (manual axis-addplot.tex: "If the x-axis is logarithmic,
+samples will be drawn logarithmically"): `samples` points equally spaced in
+ln x over `domain`, ends exact (experiment: `semilogxaxis`, domain 0.1:10,
+5 samples → 0.1, 0.316, 1, 3.16, 10, equally spaced on the canvas). Q6's
+"linear in x, then mapped" was wrong (implemented, never measured). Found by
+the generator fuzz (19 of 20 `semilogxaxis` cases failed). Fixture
+log-x-expression-samples. CONFIRMED.
+
+**Z12 — Axis lines on reversed directions.** `axis x line=bottom` (and `left`,
+`top`, `right`) name box edges: with `y dir=reverse` the bottom line lies at
+y's *upper* limit (the lower box edge). Each line is drawn in the direction of
+increasing data, so its arrow tip (`-stealth` of the non-boxed style) is at
+the upper limit: on a reversed y the y line points down. Found by the
+generator fuzz (`axis lines*=left, y dir=reverse`); fixture
+axis-lines-reverse (two axes, x and y reversed). OBSERVED.

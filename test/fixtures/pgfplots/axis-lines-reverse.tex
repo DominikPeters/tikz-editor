@@ -1,0 +1,11 @@
+% axis lines on reversed directions: `bottom`/`left` stay on the lower/left box
+% edge (the upper limit of a reversed direction) and each line's arrow points to
+% increasing data (behaviour Z12, found by the generator fuzz).
+\begin{tikzpicture}
+\begin{axis}[axis lines=left, y dir=reverse, xlabel={$t$}, ylabel={depth}]
+\addplot coordinates {(0,0.5) (1,2.5) (2,1.5) (3,3)};
+\end{axis}
+\begin{axis}[at={(7cm,0)}, axis lines*=left, x dir=reverse, tick align=outside]
+\addplot coordinates {(0,1) (1,3) (2,2)};
+\end{axis}
+\end{tikzpicture}

@@ -425,7 +425,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
     const bindings = bindingsOf(statement);
-    const mathEnvironment = plotMathEnvironment(axisFrame, plot);
+    const mathEnvironment = { ...plotMathEnvironment(axisFrame, plot), ...(model.x.mode === "log" ? { logSamples: true } : {}) };
     const io = {
       tableKeys: [...model.tableKeys, ...plot.tableKeys],
       readFile: (name: string) => readPgfplotsTableFile(context, name),

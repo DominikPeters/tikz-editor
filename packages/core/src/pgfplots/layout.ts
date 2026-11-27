@@ -206,9 +206,12 @@ export function axisLineCoordinate(model: AxisModel, limits: AxisLimits, letter:
   const line = model[letter].axisLine;
   const lo = letter === "x" ? limits.ymin : limits.xmin;
   const hi = letter === "x" ? limits.ymax : limits.xmax;
-  if (line === "upper") return hi;
   if (line === "middle") return lo <= 0 && 0 <= hi ? 0 : lo;
-  return lo;
+  // `bottom`/`left` are box edges: with the other direction reversed (S1) the lower box
+  // edge is that direction's upper limit (behaviour Z12, found by the generator fuzz).
+  const reversed = model[letter === "x" ? "y" : "x"].reverse;
+  if (line === "upper") return reversed ? lo : hi;
+  return reversed ? hi : lo;
 }
 
 export function computeAxisLayout(input: LayoutInput): AxisLayout {
@@ -304,9 +307,12 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
         if (line === "none") continue;
         const positions = line === "box" ? (letter === "x" ? [y0, y1] : [x0, x1]) : [lineAt[letter]];
         for (const at of positions) {
+          // A line runs in the direction of increasing data (its arrow tip at the upper limit), so a
+          // reversed direction's line runs from the upper box edge (behaviour Z12).
+          const [from, to] = model[letter].reverse ? (letter === "x" ? [x1, x0] : [y1, y0]) : (letter === "x" ? [x0, x1] : [y0, y1]);
           axisLines.push({ letter, inner: line === "middle", commands: letter === "x"
-            ? [{ op: "M", p: { x: x0, y: at } }, { op: "L", p: { x: x1, y: at } }]
-            : [{ op: "M", p: { x: at, y: y0 } }, { op: "L", p: { x: at, y: y1 } }] });
+            ? [{ op: "M", p: { x: from, y: at } }, { op: "L", p: { x: to, y: at } }]
+            : [{ op: "M", p: { x: at, y: from } }, { op: "L", p: { x: at, y: to } }] });
         }
       }
     }

@@ -123,7 +123,12 @@ export function body(c: FuzzCase): string {
 // ---------------------------------------------------------------------------
 // Running
 
-type Outcome = { id: string; status: "pass" | "fail" | "tex-failed" | "editor-error"; codes: string[]; findings: string[]; diagnostics: string[] };
+/**
+ * `visible`: a failure a reader would see — something missing or extra, a different text or tick
+ * count, or a position off by more than 0.5pt. Others are near-tolerance numerical differences.
+ */
+type Outcome = { id: string; status: "pass" | "fail" | "tex-failed" | "editor-error"; codes: string[]; findings: string[]; diagnostics: string[]; visible?: boolean; maxDelta?: number };
+const STRUCTURAL = /-(missing|extra|presence|text|count)$|^(tick-index|tick-value|paint|dash|line-width|paint-order)$/u;
 
 /** Compiles cases in batches; a failing batch is bisected so one bad case does not lose the rest. */
 function oracle(cases: FuzzCase[], label: string): Map<string, CaseResult | null> {
@@ -157,7 +162,10 @@ async function judge(c: FuzzCase, result: CaseResult | null | undefined): Promis
   // A case the editor diagnoses as unsupported is a correct refusal, not a rendering failure.
   const unsupported = picture.diagnostics.some((d) => (d.code ?? "").startsWith("unsupported-") || (d.code ?? "").startsWith("invalid-pgfplots"));
   if (unsupported) return { id: c.id, status: "editor-error", codes, findings, diagnostics };
-  return { id: c.id, status: codes.length === 0 ? "pass" : "fail", codes, findings, diagnostics };
+  const all = [...t1.findings, ...t2.findings];
+  const maxDelta = Math.max(0, ...all.map((f) => f.delta ?? 0));
+  const visible = all.some((f) => STRUCTURAL.test(f.code) && f.code !== "textbox-missing" && f.code !== "textbox-extra") || maxDelta > 0.5;
+  return { id: c.id, status: codes.length === 0 ? "pass" : "fail", codes, findings, diagnostics, visible, maxDelta };
 }
 
 function reductions(c: FuzzCase): FuzzCase[] {
@@ -184,7 +192,7 @@ async function shrink(c: FuzzCase, original: Outcome): Promise<{ c: FuzzCase; ou
     let found = false;
     for (const candidate of candidates) {
       const o = await judge(candidate, results.get(candidate.id));
-      if (o.status === "fail" && o.codes.some((code) => original.codes.includes(code))) {
+      if (o.status === "fail" && o.visible && o.codes.some((code) => original.codes.includes(code))) {
         // Keep the original identity for reporting; the reduced choices replace the old ones.
         current = { ...candidate, id: c.id };
         outcome = { ...o, id: c.id };
@@ -208,11 +216,22 @@ for (let i = 0; i < cases.length; i += batchSize) {
   for (const c of batch) outcomes.push(await judge(c, results.get(c.id)));
   console.log(`${Math.min(i + batchSize, cases.length)}/${cases.length}: pass ${outcomes.filter((o) => o.status === "pass").length}, fail ${outcomes.filter((o) => o.status === "fail").length}, tex-failed ${outcomes.filter((o) => o.status === "tex-failed").length}, diagnosed ${outcomes.filter((o) => o.status === "editor-error").length}`);
 }
+writeFileSync(join(outDir, "outcomes.json"), JSON.stringify(outcomes, null, 1));
+const codeCounts = new Map<string, number>();
+for (const o of outcomes) for (const code of o.codes) codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1);
+console.log(`finding codes over failing cases: ${[...codeCounts].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+// Shrinking costs a TeX batch per round: shrink the first `--shrink-per-signature` (default 2) cases of each code signature.
+const perSignature = Number(opt("--shrink-per-signature") ?? "2");
+const shrunkPerSignature = new Map<string, number>();
 const failures: Array<{ original: FuzzCase; shrunk: FuzzCase; outcome: Outcome; originalCodes: string[]; rounds: number }> = [];
 for (const o of outcomes.filter((x) => x.status === "fail")) {
+  if (!o.visible) continue;
   const c = cases.find((x) => x.id === o.id);
   if (!c) continue;
-  const s = shrinkEnabled ? await shrink(c, o) : { c, outcome: o, rounds: 0 };
+  const signature = o.codes.join(",");
+  const done = shrunkPerSignature.get(signature) ?? 0;
+  shrunkPerSignature.set(signature, done + 1);
+  const s = shrinkEnabled && done < perSignature ? await shrink(c, o) : { c, outcome: o, rounds: 0 };
   failures.push({ original: c, shrunk: s.c, outcome: s.outcome, originalCodes: o.codes, rounds: s.rounds });
   console.log(`shrunk ${o.id} in ${s.rounds} rounds: ${s.outcome.codes.join(",")}\n${body(s.c)}`);
 }
@@ -221,6 +240,7 @@ writeFileSync(join(outDir, "failures.json"), JSON.stringify(failures, null, 1));
 const byCodes = new Map<string, string[]>();
 for (const f of failures) { const key = f.outcome.codes.join(","); byCodes.set(key, [...(byCodes.get(key) ?? []), f.original.id]); }
 const summary = [
+  `visible failures (missing/extra/text/count/paint, or > 0.5pt): ${outcomes.filter((o) => o.status === "fail" && o.visible).length}; near-tolerance only: ${outcomes.filter((o) => o.status === "fail" && !o.visible).length}`,
   `seed ${seed}: cases ${cases.length}; pass ${outcomes.filter((o) => o.status === "pass").length}, fail ${failures.length}, tex-failed ${outcomes.filter((o) => o.status === "tex-failed").length}, diagnosed by the editor ${outcomes.filter((o) => o.status === "editor-error").length}`,
   "failure signatures (shrunk):",
   ...[...byCodes].sort((a, b) => b[1].length - a[1].length).map(([k, ids]) => `  ${String(ids.length).padStart(3)}  ${k}  e.g. ${ids.slice(0, 4).join(" ")}`)

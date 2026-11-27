@@ -336,6 +336,8 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
 export type PlotMathEnvironment = {
   functions?: ReadonlyMap<string, PgfMathDeclaredFunction>;
   trigFormat: PgfMathTrigFormat;
+  /** The x direction is logarithmic: `domain` is sampled logarithmically (manual axis-addplot.tex; behaviour Z11). */
+  logSamples?: boolean;
 };
 
 const DEFAULT_MATH_ENVIRONMENT: PlotMathEnvironment = { trigFormat: "deg" };
@@ -345,7 +347,7 @@ const DEFAULT_MATH_ENVIRONMENT: PlotMathEnvironment = { trigFormat: "deg" };
  * list) when given, else `samples` equally spaced values over `domain`,
  * both ends included (manual pgfplots.reference.axis-addplot.tex; behaviour M).
  */
-export function samplePositions(plot: PlotModel): number[] | { error: string } {
+export function samplePositions(plot: PlotModel, logSamples = false): number[] | { error: string } {
   if (plot.samplesAt !== undefined) {
     let entries: string[];
     try {
@@ -364,8 +366,13 @@ export function samplePositions(plot: PlotModel): number[] | { error: string } {
   const domain = plot.domain ?? DEFAULT_DOMAIN;
   const samples = plot.samples ?? DEFAULT_SAMPLES;
   const out: number[] = [];
+  // Manual axis-addplot.tex: "If the x-axis is logarithmic, samples will be drawn logarithmically"
+  // (equal steps of ln x; measured: domain 0.1:10, 5 samples gives 0.1, 0.316, 1, 3.16, 10).
+  const log = logSamples && domain.from > 0 && domain.to > 0;
+  const a = log ? Math.log(domain.from) : domain.from; const b = log ? Math.log(domain.to) : domain.to;
   for (let i = 0; i < samples; i += 1) {
-    out.push(samples === 1 ? domain.from : i === samples - 1 ? domain.to : domain.from + ((domain.to - domain.from) * i) / (samples - 1));
+    const t = samples === 1 ? a : i === samples - 1 ? b : a + ((b - a) * i) / (samples - 1);
+    out.push(i === 0 || samples === 1 ? domain.from : i === samples - 1 ? domain.to : log ? Math.exp(t) : t);
   }
   return out;
 }
@@ -399,7 +406,7 @@ function compileComponent(expression: string, variable: string, env: PlotMathEnv
 
 /** `\addplot {expr}` and `\addplot ({x expr},{y expr})`. */
 function sampleExpressions(xExpression: string | null, yExpression: string, plot: PlotModel, span: Span, env: PlotMathEnvironment): PlotData {
-  const positions = samplePositions(plot);
+  const positions = samplePositions(plot, env.logSamples === true);
   if (!Array.isArray(positions)) return { kind: "unsupported", reason: positions.error, span };
   const fy = compileComponent(yExpression, plot.variable, env);
   if (typeof fy !== "function") return { kind: "unsupported", reason: `expression \`${yExpression}\` (${fy.error})`, span };

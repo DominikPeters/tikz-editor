@@ -46,6 +46,8 @@ const CANVAS = "the picture transformation reaches the axis as a canvas transfor
 const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip" | "mutation", string>>> = {
   ...Object.fromEntries(["picture-scale", "picture-xscale-rotate"].map((name) => [name, { probes: CANVAS, map: CANVAS, tickPlacement: CANVAS, singleAxis: CANVAS, clip: CANVAS, mutation: "the mutations locate geometry through Tier 1 (rect, ticks), which is in the untransformed frame here" }])),
   "clip-false-marks": { clip: "clip=false" },
+  "axis-lines-reverse": { map: "reversed directions (S1)", singleAxis: "two axes", tickPlacement: "ticks on the axis lines, reversed (R3, S1)", clip: "separate axis lines (R2)" },
+  "log-x-expression-samples": { tickPlacement: "log labels print b^k (behaviour Q4)" },
   "tick-number-format-cd": { tickPlacement: "x range 0.0076 at |x| ~ 1: the tick probe carries ~0.003pt of fixed-point noise (behaviour N2)" },
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
   xticklabels: { probes: "ytick=\\empty: no y tick labels, so no y tick probe", tickPlacement: "no y tick probe" },

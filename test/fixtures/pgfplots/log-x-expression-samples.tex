@@ -1,0 +1,8 @@
+% Expression plots on a logarithmic x direction are sampled logarithmically
+% over `domain` (manual; behaviour Z11, found by the generator fuzz).
+\begin{tikzpicture}
+\begin{semilogxaxis}[xlabel={$x$}]
+\addplot+[domain=0.2:20, samples=7] {sqrt(x)};
+\addplot+[domain=0.5:8, samples=11, mark=none] {3 - 0.4*x};
+\end{semilogxaxis}
+\end{tikzpicture}
