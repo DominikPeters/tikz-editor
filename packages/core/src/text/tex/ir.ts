@@ -168,6 +168,12 @@ export interface SimpleTexTextNode extends SimpleTexSourceRange {
   readonly kind: "text";
   readonly text: string;
   readonly breakAfterPenalty?: number;
+  /**
+   * The TeX-ligature input (`--`, `` ` ``, ...) a dash or quote came from. A
+   * font loaded without TeX ligatures (Latin Modern Mono in tulmtt.fd) sets
+   * these characters as typed.
+   */
+  readonly texLigatureSource?: string;
 }
 
 export interface SimpleTexSpaceNode extends SimpleTexSourceRange {
@@ -655,6 +661,8 @@ export interface SimpleTexToken {
   /** An inner font command committed its correction before an enclosing group closed. */
   readonly italicCorrectionUnconditional?: boolean;
   readonly literal?: SimpleTexTokenLiteralInfo;
+  /** See SimpleTexTextNode.texLigatureSource. */
+  readonly texLigatureSource?: string;
 }
 
 export interface SimpleTexTokenLiteralInfo {
@@ -1986,11 +1994,17 @@ function mergeAdjacentSimpleTexTextNodes(
       previous.text.length === previous.sourceEnd - previous.sourceStart &&
       node.text.length === node.sourceEnd - node.sourceStart
     ) {
+      // Single-character quote ligatures (` and ') keep their typed form,
+      // aligned character for character with the merged text.
+      const ligatureSource = previous.texLigatureSource !== undefined || node.texLigatureSource !== undefined
+        ? (previous.texLigatureSource ?? previous.text) + (node.texLigatureSource ?? node.text)
+        : undefined;
       merged[merged.length - 1] = {
         kind: "text",
         text: previous.text + node.text,
         sourceStart: previous.sourceStart,
         sourceEnd: node.sourceEnd,
+        ...(ligatureSource !== undefined ? { texLigatureSource: ligatureSource } : {}),
       };
     } else {
       merged.push(node);
@@ -2335,6 +2349,7 @@ function scanSimpleTexProseConvention(
           text: replacement,
           sourceStart,
           sourceEnd: sourceStart + source.length,
+          texLigatureSource: source,
         },
         end: start + source.length,
       };
@@ -6510,6 +6525,7 @@ export function simpleTexInlineNodesToTokens(
       sourceStart: node.sourceStart,
       sourceEnd: node.sourceEnd,
       fontState: activeFontState,
+      ...(node.texLigatureSource !== undefined ? { texLigatureSource: node.texLigatureSource } : {}),
     });
     if (node.breakAfterPenalty !== undefined) tokens.push({ kind: "penalty", text: "", sourceStart: node.sourceEnd, sourceEnd: node.sourceEnd, penalty: node.breakAfterPenalty, fontState: activeFontState });
   }

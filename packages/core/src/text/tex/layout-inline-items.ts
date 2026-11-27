@@ -653,7 +653,7 @@ export function simpleTexSegmentToLayoutItems(
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
       items.push({
         kind: "text",
-        text: token.text,
+        text: texTokenTextForFont(token, font),
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
@@ -2042,7 +2042,7 @@ export function simpleTexInlineTokensToLayoutItems(params: {
       spaceFactor = updateSpaceFactorForText(spaceFactor, token.text);
       items.push({
         kind: "text",
-        text: token.text,
+        text: texTokenTextForFont(token, font),
         sourceStart: token.sourceStart,
         sourceEnd: token.sourceEnd,
         font,
@@ -2728,6 +2728,20 @@ function texItalicCorrectionSuppressedByNextToken(
   token: ReturnType<typeof simpleTexInlineNodesToTokens>[number] | undefined
 ): boolean {
   return token?.kind === "text" && (token.text.startsWith(",") || token.text.startsWith("."));
+}
+
+/**
+ * LaTeX loads Latin Modern Mono without TeX ligatures (tulmtt.fd has no
+ * \UnicodeFontTeXLigatures), so `--`, `---` and the ASCII quotes stay as
+ * typed there: `` `` `` is two grave accents, `'` the straight quote.
+ */
+function texTokenTextForFont(
+  token: { readonly text: string; readonly texLigatureSource?: string },
+  font: ResolvedTexFont
+): string {
+  return token.texLigatureSource !== undefined && font.id.startsWith("lmmono")
+    ? token.texLigatureSource
+    : token.text;
 }
 
 function updateSpaceFactorForText(current: number, text: string): number {

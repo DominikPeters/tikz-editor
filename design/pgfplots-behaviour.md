@@ -552,10 +552,54 @@ editor's text engine has the font. Found on the way:
   editor; tikz.code.tex says on 3pt off 2pt / on 3pt off 6pt. Fixed.
 - **K4 — Text at 8–9 pt** (e.g. `label style={font=\small}`) is set by
   LuaLaTeX in LMRoman9/LMRoman8 with their own metrics; the editor's text
-  engine has only lmroman10/12/17 and scales lmroman10, so such labels are
-  up to 0.6 pt wide off (description-styles, axis-font-thick). Math at
-  8 pt (CMR8) is right. Not a pgfplots rule; recorded as the cause of
-  those two fixtures' text findings.
+  engine scaled lmroman10, so such labels were up to 0.6 pt wide off
+  (description-styles, axis-font-thick). Math at 8 pt (CMR8) was right.
+  Not a pgfplots rule. **FIXED (2026-11-27)**: the default (TU, fontspec-less)
+  text profile now follows tulmr.fd/tulmss.fd/tulmtt.fd with NFSS's
+  half-open size ranges (`<8.5-9.5>` = 8.5 ≤ size < 9.5) and substitutions,
+  checked against LuaLaTeX's `\fontname` for every size command × 19
+  family/series/shape combinations in the 10/11/12pt article classes:
+
+  | size (pt) | rm m/n | rm bx/n | rm it | rm sl | sf m/n, sl, it | tt m/n |
+  |---|---|---|---|---|---|---|
+  | 5 | lmroman5 | lmroman5-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 6 | lmroman6 | lmroman6-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 7 | lmroman7 | lmroman7-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 8 | lmroman8 | lmroman8-bold | lmroman8-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 9 | lmroman9 | lmroman9-bold | lmroman9-italic | lmromanslant9 | lmsans9 | lmmono9 |
+  | 10, 10.95 | lmroman10 | lmroman10-bold | lmroman10-italic | lmromanslant10 | lmsans10 | lmmono10 |
+  | 12, 14.4 | lmroman12 | lmroman12-bold | lmroman12-italic | lmromanslant12 | lmsans12 | lmmono12 |
+  | 17.28, 20.74, 24.88 | lmroman17 | lmroman12-bold | lmroman12-italic | lmromanslant17 | lmsans17 | lmmono12 |
+
+  At every size: rm bx/it lmroman10-bolditalic, rm bx/sl lmromanslant10-bold,
+  rm m/sc and sf m/sc lmromancaps10, rm bx/sc = rm bx/n of that size (bx/sc
+  is undeclared; NFSS falls back to the n shape), sf bold (any shape)
+  lmsans10-bold/-boldoblique, tt bold lmmonolt10-bold/-boldoblique, tt it
+  lmmono10-italic, tt sl lmmonoslant10, tt sc lmmonocaps10. Class sizes:
+  10pt `\tiny`…`\Huge` = 5, 7, 8, 9, 10, 12, 14.4, 17.28, 20.74, 24.88;
+  11pt = 6, 8, 9, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88; 12pt = 6, 8,
+  10, 10.95, 12, 14.4, 17.28, 20.74, 24.88, 24.88. Range edges: 15pt is
+  already lmroman17 but still lmsans12 (tulmss `<11-15.5>`).
+  Two neighbouring findings on the way: (a) interword glue of a
+  natural-width TikZ node is the font's space and extra space
+  (`a: b` gets fontdimen 7 after the colon), not `.3333em`/`.5em`: TikZ
+  sets `\spaceskip.3333em \xspaceskip.5em` only inside the minipage of a
+  `text width` node (tikz.code.tex `\tikz@text@action`); (b) Latin Modern
+  Mono is loaded without TeX ligatures (tulmtt.fd has no
+  `\UnicodeFontTeXLigatures`): `--` stays two hyphens, `` ` ``/`'` stay
+  the ASCII grave/straight quote. Verified by
+  `test/tex-lm-optical-text-oracle.spec.ts` (fixture from
+  `scripts/capture-lm-optical-text-oracle.mjs`): 570 selections, 192
+  distinct (face, size) pairs × 197 strings = 37,824 `\wd/\ht/\dp` boxes,
+  max error 0.0002 pt at a 0.005 pt tolerance; the only exclusion is the
+  width of 4 accented strings in italic and small-caps faces, whose pair
+  kerns with non-ASCII letters the generated tables do not carry (an
+  existing generator limit, see the spec). description-styles and
+  axis-font-thick now pass both tiers with no KNOWN entry; E17 `heights`
+  (`\Large`), `entryopts` and `font` (`\small` legend) pass. `font` also
+  needed the legend matrix's `mid` from the ambient font: an empty text
+  box with `text height`/`text depth` (the legend matrix) keeps `mid` at
+  .5ex of the surrounding font (2.155 pt), as K1.
 - **K5 — Oracle `map` probe at large magnitudes.** With limits ≈ 1e4
   (scaled-ticks: y ∈ [10100, 32900]) the `axis cs` probe points are 0.16 pt
   off the oracle's own `rel axis cs` rectangle, while the plotted data in
@@ -803,7 +847,9 @@ first time after the rules below were fixed on the discovery set. Max error
 over the passing cases: layout (legend node anchors, bbox) **0.0077 pt**,
 paths **0.0078 pt**, glyphs **0.0080 pt**. The five failures: `\Large` and
 `\small` legend text (K4: LuaLaTeX uses LMRoman12/LMRoman9, the editor's
-text engine scales lmroman10; 0.14–0.37 pt), `rounded corners` on the legend
+text engine scales lmroman10; 0.14–0.37 pt; **fixed with K4, 2026-11-27**:
+discovery set 29/29, fresh set 16/18 with only the two below failing),
+`rounded corners` on the legend
 (a TikZ node-path start-point difference, not a legend rule), and
 `nodes={text width=…}` multi-line entries (OPEN, below).
 

@@ -427,6 +427,11 @@ function buildTexSharedLayout(params: {
     metricProvider,
     textFontProfile,
     tikzTextWidthNode: true,
+    // TikZ applies `\spaceskip.3333em \xspaceskip.5em` (tikz.code.tex,
+    // \tikz@text@action) only inside the minipage of a `text width` node.
+    // A natural-width node is an \hbox (or \halign rows for `align`), whose
+    // interword glue is the font's own space, extra space and spacekern.
+    ...(isNaturalWidthLayout ? { spaceGlueProfile: "font-fixed" as const } : {}),
     ...(params.namedFontSizes !== undefined ? { namedFontSizes: params.namedFontSizes } : {}),
     // The natural-width sentinel is an implementation detail, not a TeX
     // document register. Keep named width registers unresolved in that mode.

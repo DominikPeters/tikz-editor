@@ -46,8 +46,8 @@ export function createBeamerTexTextFontProfile(
           : state.shape,
     };
   };
-  // TU/lmr optical ranges from tulmr.fd. The generic profile retains its
-  // historical compact selection; Beamer roles include tiny and Large text.
+  // TU/lmr optical ranges from tulmr.fd (the same ranges as the generic
+  // profile's luaLatexDefaultFontIdForState).
   const romanFontId = (state: SimpleTexFontState, atPt: number): DefaultComputerModernTextFont | null => {
     if (state.family !== "roman") return null;
     const size = atPt < 5.5 ? 5 : atPt < 6.5 ? 6 : atPt < 7.5 ? 7 : atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15 ? 12 : 17;

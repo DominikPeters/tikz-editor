@@ -92,7 +92,8 @@ export class TexParagraphLayoutState {
       this.activeAlignmentProfile = blockAlignmentProfile;
       if (
         blockAlignmentProfile === "latex-declaration" &&
-        this.options.tikzTextWidthNode === true
+        this.options.tikzTextWidthNode === true &&
+        this.options.spaceGlueProfile === undefined
       ) {
         this.activeSpaceGlueProfile = "tikz-fixed";
       }

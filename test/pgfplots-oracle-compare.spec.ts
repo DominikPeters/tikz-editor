@@ -27,7 +27,6 @@ const names = readdirSync(dir).filter((f) => f.endsWith(".tex")).map((f) => f.sl
 
 const TOLERANCES = { colour: 0.002 };
 
-const LM_OPTICAL = "text at 8/9pt: TeX uses LMRoman9/8 (own metrics); the editor's text engine has only lmroman10/12/17 and scales lmroman10";
 const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zero-width TeX box (\\pgfsys@hbox); the editor draws the mark as a path, with no box";
 const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
@@ -44,19 +43,11 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   "scaled-ticks": {
     tier1: { map: "the oracle's axis cs probe at |y| ~ 1e4 is 0.16pt off its own rectangle (TeX fixed point, behaviour N2); plot geometry matches in Tier 2" }
   },
-  "description-styles": {
-    tier1: { description: LM_OPTICAL },
-    tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }
-  },
   "log-basis-two": {
     tier1: Object.fromEntries(["bbox", "limits", "map", "axis-anchor"].map((code) => [code, "TeX stores log2(64) as 6.00073 (fixed-point ln of the basis), 0.024pt at the box edge; not emulated (behaviour Q1)"]))
   },
   "log-small-range": {
     tier1: { "axis-anchor": "the origin anchor (data 1) lies 97pt outside the box; TeX's stored xmin ln 2 = 0.69305 (exact 0.693147) moves its extrapolation by 0.021pt (behaviour Q5)" }
-  },
-  "axis-font-thick": {
-    tier1: { description: LM_OPTICAL },
-    tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }
   }
 };
 
