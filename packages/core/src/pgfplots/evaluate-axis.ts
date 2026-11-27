@@ -49,6 +49,7 @@ import { createEditHandle } from "../semantic/edit-handles.js";
 import { axisDescriptionTextSpan, axisSubSelectionId } from "./edit-ids.js";
 import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
 import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
+import { cachedPlotData, stableKeyText } from "./eval-cache.js";
 import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
 import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
@@ -64,6 +65,29 @@ import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
 export const PGFPLOTS_SETTINGS_BINDING = "\\pgfplots settings state";
+
+/**
+ * The cache key of a plot's data (design 4.3): the plot's text with macros
+ * expanded, its resolved model and math environment, table keys and symbolic
+ * coordinates, without source positions. Null (no caching) for tables read
+ * from files or macros, and for expressions with random numbers.
+ */
+function plotDataCacheKey(
+  statement: AddPlotStatement,
+  plot: PlotModel,
+  source: string,
+  bindings: Parameters<typeof expandMacroBindings>[1],
+  env: PlotMathEnvironment,
+  io: { tableKeys: readonly { raw: string }[]; symbolic: unknown }
+): string | null {
+  const input = statement.input;
+  if (input.kind === "other" || (input.kind === "table" && input.source.kind !== "inline")) return null;
+  const text = expandMacroBindings(source.slice(statement.span.from, statement.span.to), bindings);
+  if (/\b(?:rand|rnd|random)\b/u.test(text)) return null;
+  const parts = [stableKeyText(plot), stableKeyText(env), stableKeyText(io.tableKeys.map((entry) => entry.raw)), stableKeyText(io.symbolic)];
+  if (parts.some((part) => part === null)) return null;
+  return [text, ...parts].join("\u0000");
+}
 
 export type AxisHost = {
   /** The ordinary statement evaluator (paths, scopes, …) in the current frame. */
@@ -306,12 +330,15 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
     const bindings = bindingsOf(statement);
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings), plotMathEnvironment(axisFrame, plot), {
+    const mathEnvironment = plotMathEnvironment(axisFrame, plot);
+    const io = {
       tableKeys: [...model.tableKeys, ...plot.tableKeys],
-      readFile: (name) => readPgfplotsTableFile(context, name),
-      tableMacro: (name) => readPgfplotsTableMacro(context, name),
+      readFile: (name: string) => readPgfplotsTableFile(context, name),
+      tableMacro: (name: string) => readPgfplotsTableMacro(context, name),
       symbolic: { ...(model.x.symbolic ? { x: model.x.symbolic } : {}), ...(model.y.symbolic ? { y: model.y.symbolic } : {}) }
-    });
+    };
+    const data = cachedPlotData(plotDataCacheKey(statement, plot, context.source, bindings, mathEnvironment, io),
+      () => collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings), mathEnvironment, io));
     const input = statement.input.kind;
     if (data.kind === "unavailable") {
       markFeature("pgfplots_addplot_table", "supported");
