@@ -1540,3 +1540,92 @@ equal`, the default `unless limits declared`) the box follows the drag
 exactly; under `axis equal image`/`ratio*` the shortened direction's box
 stays Δ·e, so a drag of that edge changes the target but not the edge
 (the other direction follows).
+
+## Z. Real-document findings (2026-11-27)
+
+Source: the real-document differential `scripts/pgfplots-oracle/corpus-compare.mts`
+(design 5.7): every snippet of the untracked arXiv corpus
+(`artifacts/pgfplots-corpus/axes`, 425 snippets, 46 papers) whose axes the
+editor evaluates without unsupported-feature diagnostics is compiled with
+LuaLaTeX as written (own preamble and compat; nothing injected; TEXINPUTS
+extended after the TeX tree with the paper's directories) and compared with
+the editor primitive by primitive (Tier 2, `mutool trace`), aligned by the axis
+clip rectangle. Every rule below was then reproduced on a hand-written fixture
+with our own data and an oracle (`test/fixtures/pgfplots/<name>`), and the
+experiments named are throwaway standalone documents measured with
+`mutool trace`. Corpus counts are in the final report of that run, not here.
+
+**Z1 — A picture transformation acts on the axis as a canvas transformation.**
+`\begin{tikzpicture}[scale=0.7]` (or `xscale`, `yscale`, `rotate`, with or
+without `transform shape`) around an axis: pgfplots computes the whole axis
+(box from `width`/`height`, labels, legend, ticks) in an untransformed frame at
+the picture origin and paints it under a PDF `cm` with the linear part of the
+TikZ transformation, so text, line widths, marks and dash lengths scale too
+(experiment: `scale=0.9` gives every path and glyph under `cm .9 0 0 .9`; the
+page is exactly 0.9 of the unscaled one). Manual scaling.tex: "supply
+`/tikz/scale` to an axis. This will scale the complete resulting image,
+including all text labels." The editor scaled only positions (box 0.9, text
+and line widths 1.0). Found in 8 papers (≈35 snippets). Fixtures
+picture-scale, picture-xscale-rotate (Tier 2 exact; Tier 1 node probes are
+read in the untransformed frame and are not comparable, a harness limit).
+CONFIRMED.
+- **`every picture` transformations are applied twice.** With
+  `\tikzset{every picture/.style={scale=0.9}}` the axis box is 0.81 of the
+  unscaled one: once as the canvas `cm` (above) and once more inside the
+  axis as a coordinate transformation (box and tick lengths 0.9, text not;
+  the trace differs from `/pgfplots/scale=0.9` in the tick lengths). Not
+  emulated; diagnosed (`unsupported-pgfplots-every-picture-transform`).
+  1 paper, 40 snippets. OBSERVED (experiment `everypic`).
+
+**Z2 — `font=\color{c}`** in a description style (matlab2tikz writes
+`xlabel style={font=\color{white!15!black}}`) colours the text: the font code
+runs inside the node's text box. The editor ignored it (glyphs black instead
+of gray 0.15). Fixture label-font-color. 2 papers.
+
+**Z3 — With `clip=false` marks outside the box are drawn** (and count for the
+bounding box); C8's "only points inside the box" holds for `clip=true` only.
+Fixture clip-false-marks. Found while checking Z1 on our own data.
+
+**Z4 — `dotted` uses the option list's final line width.** `dotted` is `dash
+pattern=on \pgflinewidth off 2pt`; TikZ adds the dash with `\tikz@addoption`,
+executed after the line width keys of the same list, so `[dotted, very thick]`
+gives on 1.2pt (a scope's `dotted` keeps the scope's width). `dash dot` and
+its relatives use `\the\pgflinewidth`, expanded when read: `[dash dot, thick]`
+keeps 0.4pt (tikz.code.tex lines 1584–1598; fixture plot-dotted-thick).
+
+**Z5 — Pre-1.11 tick and grid clips.** Below compat 1.11 pgfplots wraps the
+grid and tick paths in clip paths 5cm beyond the box along the line
+direction; they cut nothing visible (the half width of an edge line, under the
+axis box stroke). The differential drops clips that cut no geometry, on both
+sides. OBSERVED (compat 1.3/1.10 vs 1.11/1.18 experiment).
+
+**Z6 — `.cd` in styles.** `x tick label style={/pgf/number format/.cd,
+precision=3, /tikz/.cd}` (tikzplotlib) sets the tick label precision: relative
+keys after a `.cd` live in that directory. The editor dropped them (labels
+1 instead of 1.002). Fixture tick-number-format-cd. 1 paper, 9 snippets.
+
+**Z7 — Exact ties of the tick step.** At a range that hits a threshold exactly
+(0.6 over 4 intervals: m = 1.5 up to float noise) pgfplots takes the larger
+step (I1: transitions sit ~6e-6 relatively early). The editor's float noise
+took the smaller; the comparison now carries a 5e-6 relative margin. Fixture
+tick-number-format-cd (y axis).
+
+**Z8 — `\addlegendentry{}` keeps its image.** An empty (or blank)
+`\addlegendentry` makes a cell with an empty text box (height 0, depth = the
+text depth), unlike an empty `\legend` item, which drops its pair (L4).
+Papers use it to put two images in one row (`legend columns=2`). Empty node
+text has height 0 also when `text depth` is set. Fixture legend-empty-entry.
+1 paper.
+
+**Z9 — compat below 1.11** (policy of design 4.5, measured): each old-compat
+snippet compiled again at compat=1.18 and compared TeX to TeX. No compat
+(pre-1.3 semantics): axis labels at a fixed offset from the axis, 1.4–3.1pt
+from their 1.18 places (15 of 20 snippets; all of 3 of the 5 papers without compat); compat 1.3–1.10: no
+visible difference in 22 of 23 snippets (the remaining one a paint-order
+ambiguity). Manual preliminaries.tex: `compat/labels` (1.3),
+`compat/pgfpoint substitution` (bare coordinates are `axis cs` from 1.11).
+The diagnostic says so.
+
+**Z10 — Silent drops made loud.** `postaction`/`preaction` without a
+decoration (`postaction={pattern=north east lines}` on bars) were ignored
+without a word; they now report `unsupported-option-key:postaction`.

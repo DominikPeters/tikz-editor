@@ -152,6 +152,14 @@ export function readPgfplotsCompat(settings: readonly OptionListAst[]): string |
   return compat;
 }
 
+function compatBelow(compat: string, majorLimit: number, minorLimit: number): boolean {
+  if (compat === "newest") return false;
+  const match = /^(\d+)\.(\d+)/u.exec(compat);
+  if (!match) return true;
+  const major = Number(match[1]); const minor = Number(match[2]);
+  return major < majorLimit || (major === majorLimit && minor < minorLimit);
+}
+
 function compatBelow111(compat: string): boolean {
   if (compat === "newest") return false;
   const match = /^(\d+)\.(\d+)/u.exec(compat);
@@ -352,11 +360,17 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const compat = readPgfplotsCompat(settings);
   // Per axis, so a statement's diagnostics do not depend on what was evaluated before it (incremental replay).
   if (compat === undefined || compatBelow111(compat)) {
+    // Behaviour Z9 (manual preliminaries.tex, `compat/labels`, `compat/pgfpoint substitution`;
+    // measured on the corpus: pre-1.3 documents differ visibly, 1.3-1.10 ones rarely).
+    const pre13 = compat === undefined || compatBelow(compat, 1, 3);
+    const what = pre13
+      ? "axis labels are placed at a fixed offset from the axis instead of next to the tick labels (they move by a few points), and coordinates without a coordinate system in TikZ commands inside the axis are not `axis cs`"
+      : "coordinates without a coordinate system in TikZ commands inside the axis are not `axis cs`; most other output is the same";
     diagnostics.push({
       severity: "warning", code: "pgfplots-compat",
       message: compat === undefined
-        ? "No `\\pgfplotsset{compat=…}` is in effect; pgfplots then uses its oldest label placement. This editor renders compat=1.18 semantics: add `\\pgfplotsset{compat=1.18}` to the preamble to match."
-        : `\`compat=${compat}\` is older than 1.11; this editor renders compat=1.18 semantics. Set \`compat=1.18\` to match.`,
+        ? `No \`\\pgfplotsset{compat=…}\` is in effect, so pgfplots uses its pre-1.3 settings: ${what}. This editor renders compat=1.18 semantics: add \`\\pgfplotsset{compat=1.18}\` to the preamble to match.`
+        : `\`compat=${compat}\` is older than 1.11: ${what}. This editor renders compat=1.18 semantics; set \`compat=1.18\` to match.`,
       span: axis.beginSpan
     });
   }
