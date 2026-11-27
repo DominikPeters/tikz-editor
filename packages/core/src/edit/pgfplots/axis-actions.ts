@@ -88,10 +88,6 @@ function kvEntry(entries: readonly OptionEntry[] | undefined, key: string): Extr
   return found;
 }
 
-function hasFlag(entries: readonly OptionEntry[] | undefined, key: string): boolean {
-  return (entries ?? []).some((entry) => (entry.kind === "flag" || entry.kind === "kv") && normalizeOptionKey(entry.key).replace(/^\/pgfplots\//u, "") === key);
-}
-
 function stripBraces(raw: string): string {
   let text = raw.trim();
   while (text.startsWith("{") && text.endsWith("}")) text = text.slice(1, -1).trim();

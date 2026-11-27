@@ -22,7 +22,10 @@ export function axisSubSelectionId(axisId: string, role: LabelRole): string {
     case "legend":
     case "legend-entry":
       return `${axisId}:legend`;
-    default:
+    case "xtick":
+    case "ytick":
+    case "xscale":
+    case "yscale":
       return axisId;
   }
 }

@@ -99,6 +99,7 @@ import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure
 import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
 import { applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
+import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 
 export type ResizeRole =
   | "top-left"
@@ -943,20 +944,21 @@ function applyMoveElements(
     source = baseline.source;
     editHandles = baseline.editHandles;
   }
-  let current: EditActionResult = { kind: "success", newSource: unchangedSource(source), patches: [] };
+  const state: { current: EditActionResult } = { current: { kind: "success", newSource: unchangedSource(source), patches: [] } };
   const steps: SourcePatch[][] = [];
   const changed = new Set<string>();
+  const reasons: string[] = [];
   const apply = (run: (from: string) => EditActionResult) => {
-    if (current.kind !== "success" && current.kind !== "partial") return;
-    const from = current.newSource;
+    const previous = state.current;
+    if (previous.kind !== "success" && previous.kind !== "partial") return;
+    const from = previous.newSource;
     const next = run(from);
-    if (next.kind !== "success" && next.kind !== "partial") { current = next; return; }
+    if (next.kind !== "success" && next.kind !== "partial") { state.current = next; return; }
     const normalized = normalizeResultPatches(from, next);
     if (normalized.kind === "success" || normalized.kind === "partial") steps.push(normalized.patches);
     for (const id of next.changedSourceIds ?? []) changed.add(id);
-    current = next.kind === "partial" || current.kind === "partial"
-      ? { ...next, kind: "partial", skippedHandles: next.kind === "partial" ? next.skippedHandles : [], reason: next.kind === "partial" ? next.reason : current.kind === "partial" ? current.reason : "" }
-      : next;
+    if (next.kind === "partial") reasons.push(next.reason);
+    state.current = next;
   };
   if (otherIds.length > 0) apply((from) => applyMoveElementsAction(from, editHandles, otherIds, delta, formatPrecision, parseOptions, baseline ? { ...baseline, source: from } : undefined, geometry));
   for (const id of axisIds) apply((from) => applyMoveAxisAction(from, id.trim(), delta, formatPrecision, parseOptions, geometry));
@@ -964,8 +966,11 @@ function applyMoveElements(
     const axisId = parseAxisDescriptionId(id.trim())?.axisId;
     if (axisId && !axisIds.includes(axisId)) apply((from) => applyMoveLegendAction(from, axisId, delta, parseOptions, geometry));
   }
-  if (current.kind !== "success" && current.kind !== "partial") return current;
-  return { ...current, patches: composeSourcePatches(source, steps), changedSourceIds: [...changed] };
+  const final = state.current;
+  if (final.kind !== "success" && final.kind !== "partial") return final;
+  const patches = composeSourcePatches(source, steps);
+  if (reasons.length > 0) return { kind: "partial", newSource: final.newSource, patches, changedSourceIds: [...changed], skippedHandles: [], reason: reasons.join(" ") };
+  return { kind: "success", newSource: final.newSource, patches, changedSourceIds: [...changed] };
 }
 
 function applyPasteStatements(
@@ -1209,6 +1214,11 @@ function applySetProperty(
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
 ): EditActionResult {
+  // pgfplots targets take minimal option edits, without render-equivalence cleanup.
+  if (!action.commentMode) {
+    const pgfplots = applyPgfplotsSetProperty(source, action, parseOptions);
+    if (pgfplots) return pgfplots;
+  }
   return applyPlannedSetPropertyAction(source, action, parseOptions, geometry);
 }
 

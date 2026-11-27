@@ -812,7 +812,7 @@ function pushPlotPointHandles(statement: AddPlotStatement, context: SemanticCont
     const evaluated = evaluateRawCoordinate(raw, context);
     if (!evaluated.world) continue;
     const handle = createEditHandle(evaluated, span, statement.id, "path-point", context);
-    if (handle && handle.rewriteMode === "direct") context.editHandles.push(handle);
+    if (handle?.rewriteMode === "direct") context.editHandles.push(handle);
   }
 }
 

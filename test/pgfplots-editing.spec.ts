@@ -7,6 +7,7 @@ import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { applyEditAction, type EditAction } from "../packages/core/src/edit/actions.js";
 import { readAxisEditInfo } from "../packages/core/src/edit/pgfplots/axis-actions.js";
+import { buildPgfplotsInspectorDescriptor, PGFPLOTS_EXPRESSION_KEY, PGFPLOTS_LEGEND_ENTRY_KEY } from "../packages/core/src/edit/pgfplots/inspector.js";
 import { resolvePropertyTarget } from "../packages/core/src/edit/property-target.js";
 import type { PgfplotsAxisEditInfo, SceneElement } from "../packages/core/src/semantic/types.js";
 import type { Statement } from "../packages/core/src/ast/types.js";
@@ -31,8 +32,8 @@ function worldBox(i: PgfplotsAxisEditInfo) {
   return { sw: w(i.box.x0, i.box.y0), ne: w(i.box.x1, i.box.y1) };
 }
 
-function apply(source: string, action: EditAction): string {
-  const result = applyEditAction(source, evaluate(source).editHandles, action);
+function apply(source: string, action: Record<string, unknown>): string {
+  const result = applyEditAction(source, evaluate(source).editHandles, action as unknown as EditAction);
   if (result.kind !== "success" && result.kind !== "partial") throw new Error(`edit failed: ${result.kind === "error" ? result.message : result.reason}`);
   return result.newSource;
 }
@@ -308,7 +309,58 @@ describe("pgfplots editing: data points", () => {
     const unitX = i.map.xUnit.x; const unitY = i.map.yUnit.y;
     const handle = handles[1];
     if (!handle) throw new Error("no handle");
-    const moved = applyEditAction(source, result.editHandles, { kind: "moveHandle", handleId: handle.id, newWorld: { x: handle.world.x + 0.5 * unitX, y: handle.world.y - unitY }, bypassSnapping: true });
+    const moved = applyEditAction(source, result.editHandles, { kind: "moveHandle", handleId: handle.id, newWorld: { x: handle.world.x + 0.5 * unitX, y: handle.world.y - unitY }, bypassSnapping: true } as unknown as EditAction);
     expect(moved.kind === "success" && moved.newSource).toBe(source.replace("(2,3)", "(2.5,2)"));
+  });
+});
+
+describe("pgfplots editing: inspector", () => {
+  const SOURCE = picture(String.raw`\begin{axis}[xmin=0, xlabel=Time]
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{data}
+\addplot[red, domain=0:2] {x^2};
+\end{axis}`);
+
+  it("axis sections read authored values and show computed limits as auto", () => {
+    const id = AXIS_ID(SOURCE);
+    const descriptor = buildPgfplotsInspectorDescriptor(SOURCE, id, evaluate(SOURCE).scene.elements);
+    const props = new Map(descriptor?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
+    const xmin = props.get("pgfplots-xmin"); const xmax = props.get("pgfplots-xmax");
+    expect(xmin?.kind === "text" && xmin.value).toBe("0");
+    expect(xmax?.kind === "text" && [xmax.value, xmax.label]).toEqual(["", expect.stringMatching(/^X max \(auto: [\d.]+\)$/u)]);
+    expect(props.get("pgfplots-xlabel")?.kind === "text" && (props.get("pgfplots-xlabel") as { value: string }).value).toBe("Time");
+    expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-size", "pgfplots-limits", "pgfplots-labels", "pgfplots-axes", "pgfplots-legend"]);
+  });
+
+  it("plot sections: cycle-list defaults, legend entry, expression", () => {
+    const id = AXIS_ID(SOURCE);
+    const elements = evaluate(SOURCE).scene.elements;
+    const first = buildPgfplotsInspectorDescriptor(SOURCE, `${id}:plot:0`, elements);
+    const p0 = new Map(first?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
+    const mark = p0.get("pgfplots-plot-mark");
+    expect(mark?.kind === "enum" && [mark.value, mark.options[0]?.label]).toEqual(["default", "Default (cycle: *)"]);
+    expect((p0.get("pgfplots-plot-color") as { value: string }).value).toBe("blue");
+    expect((p0.get("pgfplots-plot-legend-entry") as { value: string }).value).toBe("data");
+    const second = buildPgfplotsInspectorDescriptor(SOURCE, `${id}:plot:1`, elements);
+    const p1 = new Map(second?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
+    expect((p1.get("pgfplots-plot-expression") as { value: string }).value).toBe("x^2");
+    expect((p1.get("pgfplots-plot-domain") as { value: string }).value).toBe("0:2");
+  });
+
+  it("writes: braced text, auto/default removal, legend entry insert/edit/remove, expression", () => {
+    const id = AXIS_ID(SOURCE);
+    const set = (src: string, elementId: string, key: string, value: string) => apply(src, { kind: "setProperty", elementId, level: "command", key, value });
+    expect(set(SOURCE, id, "xlabel", "Time, s")).toBe(SOURCE.replace("xlabel=Time", "xlabel={Time, s}"));
+    expect(set(SOURCE, id, "xmin", "auto")).toBe(SOURCE.replace("xmin=0, ", ""));
+    expect(set(SOURCE, id, "grid", "major")).toBe(SOURCE.replace("xlabel=Time]", "xlabel=Time, grid=major]"));
+    expect(set(set(SOURCE, id, "grid", "major"), id, "grid", "none")).toBe(SOURCE);
+    expect(set(SOURCE, id, "xmode", "log")).toBe(SOURCE.replace("xlabel=Time]", "xlabel=Time, xmode=log]"));
+    expect(set(SOURCE, `${id}:plot:0`, PGFPLOTS_LEGEND_ENTRY_KEY, "measured")).toBe(SOURCE.replace("{data}", "{measured}"));
+    expect(set(SOURCE, `${id}:plot:0`, PGFPLOTS_LEGEND_ENTRY_KEY, "")).toBe(SOURCE.replace("\n\\addlegendentry{data}", ""));
+    expect(set(SOURCE, `${id}:plot:1`, PGFPLOTS_LEGEND_ENTRY_KEY, "square")).toBe(SOURCE.replace("{x^2};", "{x^2};\n\\addlegendentry{square}"));
+    expect(set(SOURCE, `${id}:plot:1`, PGFPLOTS_EXPRESSION_KEY, "sin(deg(x))")).toBe(SOURCE.replace("{x^2}", "{sin(deg(x))}"));
+    expect(set(SOURCE, `${id}:plot:1`, "color", "blue")).toBe(SOURCE.replace("[red, domain=0:2]", "[red, domain=0:2, color=blue]"));
+    expect(set(SOURCE, `${id}:plot:0`, "only marks", "true")).toBe(SOURCE.replace("\\addplot coordinates", "\\addplot+[only marks] coordinates"));
+    expect(set(set(SOURCE, `${id}:plot:1`, "mark", "square"), `${id}:plot:1`, "mark", "default")).toBe(SOURCE);
   });
 });
