@@ -50,6 +50,7 @@ export function renderFillPatternPreviewSvg(pattern: PreviewPatternPreset): stri
     kind: "SceneFigure",
     span: PREVIEW_SOURCE_SPAN,
     requiredTikzLibraries: [],
+    requiredPackages: [],
     layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements: [path],
     bounds: worldBounds(pt(4), pt(3), pt(52), pt(13))

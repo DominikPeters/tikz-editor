@@ -38,6 +38,7 @@ import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
 import type { SiteContext } from "../../semantic/site-context.js";
+import { nestedStatements } from "../../ast/walk.js";
 
 const ARRANGE_EPSILON = 1e-6;
 
@@ -1136,8 +1137,9 @@ function findScopeStatementById(
     if (statement.kind === "Scope" && statement.id === scopeId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested = findScopeStatementById(statement.body, scopeId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findScopeStatementById(body, scopeId);
       if (nested) {
         return nested;
       }
@@ -1204,7 +1206,8 @@ function collapseMovedScopeDescendants(
   const visit = (body: readonly Statement[]) => {
     for (const statement of body) {
       spansBySource.set(statement.id, statement.span);
-      if (statement.kind === "Scope") visit(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) visit(nested);
     }
   };
   visit(statements);

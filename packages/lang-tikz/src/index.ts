@@ -15,7 +15,15 @@ const tikzHighlighting = styleTags({
   Comment: t.lineComment,
 
   // Environment delimiters
-  "BeginTikz EndTikz BeginScope EndScope": t.keyword,
+  "BeginTikz EndTikz BeginScope EndScope BeginAxis EndAxis": t.keyword,
+
+  // pgfplots commands and \addplot's input keywords.
+  "AddPlotCmd AddPlot3Cmd AddLegendEntryCmd AddLegendImageCmd LegendCmd PgfplotsSetCmd PgfplotsExtraCmd UsePgfplotsLibraryCmd":
+    t.keyword,
+  "PlotCoordinates/CoordinatesKw PlotTable/TableKw PlotTable/FromKw PlotInputName": t.typeName,
+  AddPlotIncrement: t.operator,
+  // Inline table rows are one raw token.
+  TableData: t.string,
 
   // Path commands and definition-style commands
   "DrawCmd PathCmd FillDrawCmd FillCmd PatternCmd ClipCmd ShadeCmd ShadeDrawCmd UseAsBoundingBoxCmd MatrixCmd ColorletCmd DefineColorCmd DefCmd LetDefCmd NewCommandCmd RenewCommandCmd TikzSetCmd TikzStyleCmd PgfkeysCmd":
@@ -161,7 +169,10 @@ const mixedTikzParser: typeof baseTikzParser = baseTikzParser.configure({
     foldNodeProp.add({
       TikzEnvironment: foldInside,
       ScopeStatement: foldInside,
+      AxisStatement: foldInside,
       Group: foldInside,
+      // One token, so it folds between its own braces.
+      TableData: (node) => (node.to - node.from > 2 ? { from: node.from + 1, to: node.to - 1 } : null),
     }),
   ],
   wrap: parseMixed((node) => {

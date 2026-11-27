@@ -118,6 +118,16 @@ export const FEATURE_IDS = [
   "beamer_frame_continuations",
   "beamer_overlay_pictures", // TikZ `overlay` pictures: empty boxes in the text, drawn over the page.
   "beamer_poster", // beamerposter page sizes, scaled font table and list registers.
+  // pgfplots (design/pgfplots.md): parsed, not yet evaluated or drawn.
+  "pgfplots_axis",
+  "pgfplots_log_axes",
+  "pgfplots_addplot_coordinates",
+  "pgfplots_addplot_expression",
+  "pgfplots_addplot_table",
+  "pgfplots_addplot_other_inputs",
+  "pgfplots_addplot3",
+  "pgfplots_legend",
+  "pgfplots_pgfplotsset",
   "render_pipeline"
 ] as const;
 

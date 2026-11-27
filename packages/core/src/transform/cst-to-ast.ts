@@ -369,7 +369,7 @@ function filterScopedStyleDefinitions(
   definitionSpans: readonly Statement[]
 ): Statement[] {
   const styleByStart = new Map(statements
-    .filter((statement) => statement.kind === "TikzSet" || statement.kind === "TikzStyle" || statement.kind === "Pgfkeys")
+    .filter((statement) => statement.kind === "TikzSet" || statement.kind === "TikzStyle" || statement.kind === "Pgfkeys" || statement.kind === "PgfplotsSet")
     .map((statement) => [statement.span.from, statement]));
   const definitionEndByStart = new Map(definitionSpans.map((statement) => [statement.span.from, statement.span.to]));
   const scopes: Statement[][] = [[]];
@@ -459,7 +459,9 @@ function isRelevantDefinitionNode(node: SyntaxNode): boolean {
     typeName === "TikzLibraryStatement" ||
     typeName === "ColorletStatement" ||
     typeName === "DefineColorStatement" ||
-    typeName === "FontSizeStatement"
+    typeName === "FontSizeStatement" ||
+    typeName === "PgfplotsSetStatement" ||
+    typeName === "UsePgfplotsLibraryStatement"
   ) {
     return true;
   }

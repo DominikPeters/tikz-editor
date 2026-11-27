@@ -397,5 +397,60 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
   \node (a) at (0,0) {};
   \node (b) at (1,1) {};
   \node[draw,fit=(a) (b)] {};
+\end{tikzpicture}`,
+  pgfplots_axis: String.raw`\begin{tikzpicture}
+  \begin{axis}[xmin=0, xmax=2]
+    \addplot coordinates {(0,0) (1,1) (2,0)};
+  \end{axis}
+  \draw (0,0) -- (1,1);
+\end{tikzpicture}`,
+  pgfplots_log_axes: String.raw`\begin{tikzpicture}
+  \begin{loglogaxis}
+    \addplot coordinates {(1,10) (10,100)};
+  \end{loglogaxis}
+\end{tikzpicture}`,
+  pgfplots_addplot_coordinates: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot+[only marks] coordinates {(0,1) +- (0.1,0.2) [1] (1,2)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_addplot_expression: String.raw`\begin{tikzpicture}
+  \begin{axis}[domain=0:1]
+    \addplot {x^2};
+    \addplot ({cos(deg(x))},{sin(deg(x))});
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_addplot_table: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot table [x=a, y=b] {
+      a b
+      0 1
+      1 3
+    };
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_addplot_other_inputs: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot gnuplot [id=sq] {x**2};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_addplot3: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot3 [surf] {x*y};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_legend: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot {x};
+    \addlegendentry{linear}
+    \addlegendimage{red}
+    \legend{a,b}
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_pgfplotsset: String.raw`\begin{tikzpicture}
+  \pgfplotsset{every axis/.append style={thick}}
+  \begin{axis}
+    \addplot {x};
+  \end{axis}
 \end{tikzpicture}`
 };

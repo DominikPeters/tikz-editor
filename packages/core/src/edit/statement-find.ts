@@ -1,4 +1,5 @@
 import type { PathStatement, Statement } from "../ast/types.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export function findPathStatementById(
   statements: readonly Statement[],
@@ -8,8 +9,9 @@ export function findPathStatementById(
     if (statement.kind === "Path" && statement.id === sourceId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementById(body, sourceId);
       if (nested) {
         return nested;
       }

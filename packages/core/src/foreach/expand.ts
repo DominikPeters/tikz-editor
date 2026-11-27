@@ -1,4 +1,12 @@
 import {
+  addLegendEntryId,
+  addLegendImageId,
+  addPlotId,
+  axisStatementId,
+  legendStatementId,
+  pgfplotsExtraId,
+  pgfplotsLibraryStatementId,
+  pgfplotsSetStatementId,
   colorletStatementId,
   defineColorStatementId,
   childForeachClauseId,
@@ -36,7 +44,10 @@ import {
   unknownPathItemId,
   unknownStatementId
 } from "../ast/ids.js";
+import { axisBodyStatements, isAxisCommand, nestedStatements } from "../ast/walk.js";
 import type {
+  AxisBodyItem,
+  AxisStatement,
   ChildForeachClause,
   ChildOperationItem,
   ForeachStatement,
@@ -219,6 +230,19 @@ function expandStatement(
     return [expandedScope];
   }
 
+  // An axis's TikZ statements expand as a scope's do; its axis commands
+  // (`\addplot`, legends) stay as written for the axis evaluator.
+  if (statement.kind === "Axis") {
+    const expandedAxis: AxisStatement = {
+      ...statement,
+      body: statement.body.flatMap((item): AxisBodyItem[] => isAxisCommand(item)
+        ? [item]
+        : expandStatements([item], stack, inheritedBindings, context, templateSource))
+    };
+    maybeRecordStatementAttribution(expandedAxis, stack, context, templateSource);
+    return [expandedAxis];
+  }
+
   if (statement.kind === "Path") {
     const expandedPath = expandPathStatement(statement, stack, inheritedBindings, context);
     maybeRecordStatementAttribution(expandedPath, stack, context, templateSource);
@@ -353,6 +377,8 @@ function recordStatementSourceMaps(
     context.statementSourceMaps.set(statement, existing ? composeExpansionSourceMaps(existing, sourceMap) : sourceMap);
     if (statement.kind === "Scope") {
       recordStatementSourceMaps(statement.body, sourceMap, context);
+    } else if (statement.kind === "Axis") {
+      recordStatementSourceMaps(axisBodyStatements(statement), sourceMap, context);
     }
   }
 }
@@ -1194,6 +1220,24 @@ function reindexStatementsInPlace(
       continue;
     }
 
+    if (statement.kind === "Axis") {
+      if (!preserveExistingId) {
+        statement.id = axisStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      reindexAxisCommands(statement, state, preserveExistingId, templateLocalIdByExpandedId);
+      reindexStatementsInPlace(axisBodyStatements(statement), state, attributionByStatement, templateLocalIdByExpandedId, overlayGroupIds);
+      continue;
+    }
+
+    if (statement.kind === "PgfplotsSet" || statement.kind === "PgfplotsLibrary") {
+      if (!preserveExistingId) {
+        statement.id = statement.kind === "PgfplotsSet" ? pgfplotsSetStatementId(statementIndex) : pgfplotsLibraryStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      continue;
+    }
+
     if (statement.kind === "Foreach") {
       if (!preserveExistingId) {
         statement.id = foreachStatementId(statementIndex);
@@ -1289,6 +1333,38 @@ function reindexStatementsInPlace(
   }
 }
 
+/**
+ * An axis copied by a loop takes the ids of its new statement index: its
+ * commands' ids are the axis's, and each plot's trailing path is a statement.
+ */
+function reindexAxisCommands(
+  axis: AxisStatement,
+  state: { nextStatementIndex: number },
+  preserveExistingId: boolean,
+  templateLocalIdByExpandedId: Map<string, string>
+): void {
+  const counters = { AddPlot: 0, AddLegendEntry: 0, AddLegendImage: 0, Legend: 0, PgfplotsExtra: 0 };
+  for (const item of axis.body) {
+    if (!isAxisCommand(item)) continue;
+    const index = counters[item.kind]++;
+    const previousId = item.id;
+    item.axisId = axis.id;
+    item.id = item.kind === "AddPlot" ? addPlotId(axis.id, index)
+      : item.kind === "AddLegendEntry" ? addLegendEntryId(axis.id, index)
+        : item.kind === "AddLegendImage" ? addLegendImageId(axis.id, index)
+          : item.kind === "Legend" ? legendStatementId(axis.id, index) : pgfplotsExtraId(axis.id, index);
+    if (item.id !== previousId) templateLocalIdByExpandedId.set(item.id, previousId);
+    if (item.kind === "AddPlot" && item.trailingPath && !preserveExistingId) {
+      const trailingIndex = state.nextStatementIndex;
+      state.nextStatementIndex += 1;
+      const previousTrailingId = item.trailingPath.id;
+      item.trailingPath.id = pathStatementId(trailingIndex);
+      templateLocalIdByExpandedId.set(item.trailingPath.id, previousTrailingId);
+      reindexPathItems(item.trailingPath, trailingIndex, templateLocalIdByExpandedId);
+    }
+  }
+}
+
 function findNextStatementIndexSeed(statements: Statement[]): number {
   let maxIndex = -1;
   const visit = (statement: Statement): void => {
@@ -1296,9 +1372,14 @@ function findNextStatementIndexSeed(statements: Statement[]): number {
     if (parsed != null && parsed > maxIndex) {
       maxIndex = parsed;
     }
-    if (statement.kind === "Scope") {
-      for (const nested of statement.body) {
-        visit(nested);
+    for (const nested of nestedStatements(statement) ?? []) {
+      visit(nested);
+    }
+    if (statement.kind === "Axis") {
+      for (const item of statement.body) {
+        const trailing = item.kind === "AddPlot" ? item.trailingPath : undefined;
+        const trailingIndex = trailing ? parseStatementIndex(trailing.id) : null;
+        if (trailingIndex != null && trailingIndex > maxIndex) maxIndex = trailingIndex;
       }
     }
   };

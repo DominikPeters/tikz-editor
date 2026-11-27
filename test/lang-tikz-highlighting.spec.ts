@@ -159,10 +159,10 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
   });
   it("highlights the body of an environment the grammar skips, and the statements after it", () => {
     const source = String.raw`\begin{tikzpicture}
-  \begin{axis}[xmin=0]
+  \begin{plotbox}[xmin=0]
     \draw (0,0) -- (1,1);
     \node at (0,0) {Hello};
-  \end{axis}
+  \end{plotbox}
   \draw (2,2) circle (1);
 \end{tikzpicture}`;
     const ranges = collectHighlights(source);
@@ -177,5 +177,37 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
     expect(hasClassAt(ranges, helloFrom, helloFrom + "Hello".length, "string")).toBe(true);
     expect(hasClassAt(ranges, outerDrawFrom, outerDrawFrom + String.raw`\draw`.length, "keyword")).toBe(true);
     expect(hasClassAt(ranges, circleFrom, circleFrom + "circle".length, "typeName")).toBe(true);
+  });
+
+  it("highlights pgfplots axes, plot commands, inputs, inline tables and legend text", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{axis}[xmin=0]
+    \addplot+[red] coordinates {(0,0) (1,1)};
+    \addplot table {
+      a b
+      0 1
+    };
+    \addlegendentry{Hello}
+    \pgfplotsset{every axis plot/.style={thick}}
+  \end{axis}
+\end{tikzpicture}`;
+    const ranges = collectHighlights(source);
+    const at = (text: string, className: string, nth = 0): boolean => {
+      let from = -1;
+      for (let index = 0; index <= nth; index += 1) from = source.indexOf(text, from + 1);
+      return hasClassAt(ranges, from, from + text.length, className);
+    };
+    expect(at(String.raw`\begin{axis}`, "keyword")).toBe(true);
+    expect(at(String.raw`\end{axis}`, "keyword")).toBe(true);
+    expect(at(String.raw`\addplot`, "keyword")).toBe(true);
+    expect(at(String.raw`\addplot`, "keyword", 1)).toBe(true);
+    expect(at("+", "operator")).toBe(true);
+    expect(at("coordinates", "typeName")).toBe(true);
+    expect(at("table", "typeName")).toBe(true);
+    expect(at(String.raw`\addlegendentry`, "keyword")).toBe(true);
+    expect(at(String.raw`\pgfplotsset`, "keyword")).toBe(true);
+    expect(at("Hello", "string")).toBe(true);
+    const tableFrom = source.indexOf("{\n      a b");
+    expect(ranges.some((range) => range.from === tableFrom && range.classes.split(" ").includes("string"))).toBe(true);
   });
 });

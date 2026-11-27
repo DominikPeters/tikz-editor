@@ -4,6 +4,7 @@ import type { PathItem, Statement } from "../ast/types.js";
 import type { OptionListAst } from "../options/types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { isWrappedBySingleBracePair } from "../utils/braces.js";
+import { nestedStatements } from "../ast/walk.js";
 
 const DECLARATION_OPTION_KEY_REGEX = /(\b(?:name|alias|name\s+path(?:\s+(?:global|local))?)\s*=\s*)(\{[^{}]*\}|\([^()]*\)|[^,\]\s]+)/giu;
 const DECLARATION_OPTION_KEYS = new Set([
@@ -94,8 +95,9 @@ function collectDeclaredNamesFromStatements(
       collectDeclaredNamesFromOptions(statement.options, target);
     }
 
-    if (statement.kind === "Scope") {
-      collectDeclaredNamesFromStatements(statement.body, target);
+    const nested = nestedStatements(statement);
+    if (nested) {
+      collectDeclaredNamesFromStatements(nested, target);
       continue;
     }
 

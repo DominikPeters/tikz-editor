@@ -153,7 +153,34 @@ function isImplicitMacroCall(statement: SyntaxNode, source: string): boolean {
   if (statement.firstChild?.type.name !== "CommandName" || source[statement.to - 1] === ";") {
     return false;
   }
-  return /^(?:\s|%[^\n]*\n)*(?:\\end\s*\{|\})/u.test(source.slice(statement.to));
+  // Before `\end{…}`, `}` or a pgfplots axis command (`\pgfplotsinvokeforeach{…}{…}` then `\addplot`).
+  return /^(?:\s|%[^\n]*\n)*(?:\\end\s*\{|\}|\\(?:addplot|addlegendentry(?:expanded)?|addlegendimage|legend|pgfplotsextra)(?![A-Za-z@]))/u.test(source.slice(statement.to));
+}
+
+/** An axis without its `\end{…}`, or ended by another axis environment's. */
+function collectAxisDelimiterDiagnostics(node: SyntaxNode, source: string, diagnostics: Diagnostic[]): void {
+  const begin = node.getChild("BeginAxis");
+  const end = node.getChild("EndAxis");
+  const nameOf = (delimiter: SyntaxNode | null): string => (delimiter ? /\{([^{}]*)\}/u.exec(source.slice(delimiter.from, delimiter.to))?.[1] ?? "" : "");
+  const name = nameOf(begin);
+  if (!end) {
+    diagnostics.push({
+      severity: "error",
+      message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`; add it before the picture or scope ends.`,
+      span: begin ? { from: begin.from, to: begin.to } : { from: node.from, to: node.from },
+      code: "unterminated-environment"
+    });
+    return;
+  }
+  const endName = nameOf(end);
+  if (endName !== name) {
+    diagnostics.push({
+      severity: "error",
+      message: `\`\\begin{${name}}\` ends with \`\\end{${endName}}\`; use \`\\end{${name}}\`.`,
+      span: { from: end.from, to: end.to },
+      code: "mismatched-environment-end"
+    });
+  }
 }
 
 function spanForParseError(errorNode: SyntaxNode): Diagnostic["span"] {
@@ -204,7 +231,11 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
       });
     }
 
-    if ((node.type.name === "PathStatement" || node.type.name === "UnknownStatement") && source[node.to - 1] !== ";"
+    if (node.type.name === "AxisStatement") {
+      collectAxisDelimiterDiagnostics(node, source, diagnostics);
+    }
+
+    if ((node.type.name === "PathStatement" || node.type.name === "UnknownStatement" || node.type.name === "AddPlotStatement") && source[node.to - 1] !== ";"
       && !(node.type.name === "UnknownStatement" && isImplicitMacroCall(node, source))) {
       diagnostics.push({
         severity: "warning",

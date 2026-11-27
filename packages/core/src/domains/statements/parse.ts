@@ -36,6 +36,7 @@ import type {
   TikzStyleStatement
 } from "../../ast/types.js";
 import { mapOverlaySpec, mapPathStatement } from "../paths/parse.js";
+import { mapAxisStatement, mapPgfplotsLibraryStatement, mapPgfplotsSetStatement } from "../pgfplots/parse.js";
 import { mapUnknownEnvironmentStatement, mapUnknownStatement } from "../../transform/unknown.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
@@ -49,19 +50,21 @@ export function mapBodyStatements(node: SyntaxNode, source: string, state: State
   const statements: Statement[] = [];
 
   forEachChild(node, (child) => {
-    const maybeStatement = unwrapStatementLikeNode(child);
-
-    if (maybeStatement.type.name === "OverlayGroupStatement") {
-      statements.push(...mapOverlayGroupStatement(maybeStatement, source, state));
-      return;
-    }
-    const mapped = mapStatementNode(maybeStatement, source, state);
-    if (mapped) {
-      statements.push(mapped);
-    }
+    statements.push(...mapBodyChild(child, source, state));
   });
 
   return statements;
+}
+
+/** One child of a picture, scope or axis body: a statement, or none for a comment or stray token. */
+function mapBodyChild(child: SyntaxNode, source: string, state: StatementMappingState): Statement[] {
+  const maybeStatement = unwrapStatementLikeNode(child);
+
+  if (maybeStatement.type.name === "OverlayGroupStatement") {
+    return mapOverlayGroupStatement(maybeStatement, source, state);
+  }
+  const mapped = mapStatementNode(maybeStatement, source, state);
+  return mapped ? [mapped] : [];
 }
 
 const OVERLAY_GROUP_COMMANDS: readonly OverlayGroupCommand[] = ["only", "uncover", "visible", "invisible", "alt", "temporal", "onslide"];
@@ -185,6 +188,18 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
 
   if (node.type.name === "ForeachStatement") {
     return mapForeachStatement(node, source, state);
+  }
+
+  if (node.type.name === "AxisStatement") {
+    return mapAxisStatement(node, source, state, (child) => mapBodyChild(child, source, state));
+  }
+
+  if (node.type.name === "PgfplotsSetStatement") {
+    return mapPgfplotsSetStatement(node, source, state);
+  }
+
+  if (node.type.name === "UsePgfplotsLibraryStatement") {
+    return mapPgfplotsLibraryStatement(node, source, state);
   }
 
   return null;

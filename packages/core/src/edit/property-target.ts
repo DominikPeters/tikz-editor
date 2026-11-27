@@ -18,7 +18,7 @@ import { readBalancedBlock } from "../semantic/style/option-utils.js";
 import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/nodes/matrix.js";
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
-import { walkPathItems } from "../ast/walk.js";
+import { axisBodyStatements, nestedStatements, walkPathItems } from "../ast/walk.js";
 import { ForeachSnippetParseCache } from "../foreach/snippet-parse-cache.js";
 
 // Every foreach-template target reparses its loop's body, and the canvas
@@ -42,7 +42,8 @@ function targetStatements(parse: ParseTikzResult): Map<string, Statement> {
   const visit = (statements: readonly Statement[]) => {
     for (const statement of statements) {
       index.set(statement.id, statement);
-      if (statement.kind === "Scope") visit(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) visit(nested);
       if (statement.kind === "Path") {
         const add = (item: { id?: string }) => { if (item.id) index.set(item.id, statement); };
         walkPathItems(statement.items, { onPathItem: add, onNode: add });
@@ -683,8 +684,9 @@ function resolvePathStatementNodeTextSpan(statements: readonly Statement[], stat
       const nodeItem = statement.items.find((item): item is NodeItem => item.kind === "Node");
       return nodeItem?.textSpan ?? null;
     }
-    if (statement.kind === "Scope") {
-      const nested = resolvePathStatementNodeTextSpan(statement.body, statementId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = resolvePathStatementNodeTextSpan(body, statementId);
       if (nested) {
         return nested;
       }
@@ -715,6 +717,14 @@ function findTargetInStatements(statements: Statement[], source: string, element
         return makeScopeTarget(statement, source);
       }
       const nested = findTargetInStatements(statement.body, source, elementId);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    // The axis itself is no property target yet; the TikZ statements in it are.
+    if (statement.kind === "Axis") {
+      const nested = findTargetInStatements(axisBodyStatements(statement), source, elementId);
       if (nested) {
         return nested;
       }
@@ -985,12 +995,13 @@ function resolveMatrixCellTargetInStatements(
 }
 
 function findNodeItemInStatements(
-  statements: Statement[],
+  statements: readonly Statement[],
   nodeId: string
 ): { statement: PathStatement; node: NodeItem } | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findNodeItemInStatements(statement.body, nodeId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findNodeItemInStatements(body, nodeId);
       if (nested) {
         return nested;
       }
@@ -1009,12 +1020,13 @@ function findNodeItemInStatements(
 }
 
 function findForeachStatementById(
-  statements: Statement[],
+  statements: readonly Statement[],
   statementId: string
 ): Extract<Statement, { kind: "Foreach" }> | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findForeachStatementById(statement.body, statementId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findForeachStatementById(body, statementId);
       if (nested) {
         return nested;
       }

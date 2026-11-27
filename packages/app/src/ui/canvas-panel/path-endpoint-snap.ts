@@ -3,6 +3,7 @@ import type { WorldPoint } from "../coords/types";
 import { analyzeExplicitPathStatement } from "@tikz-editor/core/edit/path-editing";
 import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 const ENDPOINT_SNAP_RADIUS_PX = 10;
 
@@ -100,8 +101,8 @@ function collectPathStatements(statements: readonly Statement[], into: Map<strin
   for (const statement of statements) {
     if (statement.kind === "Path") {
       into.set(statement.id, statement);
-    } else if (statement.kind === "Scope") {
-      collectPathStatements(statement.body, into);
+    } else {
+      collectPathStatements(nestedStatements(statement) ?? [], into);
     }
   }
 }

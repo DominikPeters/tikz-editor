@@ -16,6 +16,7 @@ import { collectSourceWorldBounds } from "./snapping/geometry.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
 import { createStatementFrameResolver, type StatementFrameResolver } from "./parent-frame.js";
 import type { SiteContext } from "../semantic/site-context.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export type EditGeometrySnapshot = {
   source: string;
@@ -166,7 +167,8 @@ function innermostStatementId(
 ): string | undefined {
   for (const statement of statements) {
     if (statement.span.from > span.from || statement.span.to < span.to) continue;
-    const nested = statement.kind === "Scope" ? innermostStatementId(statement.body, span, indexById) : undefined;
+    const body = nestedStatements(statement);
+    const nested = body ? innermostStatementId(body, span, indexById) : undefined;
     return nested ?? (indexById[statement.id] != null ? statement.id : undefined);
   }
 }

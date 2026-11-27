@@ -5,6 +5,7 @@ import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import { resolveMatrixMode } from "@tikz-editor/core/semantic/nodes/matrix";
 import type { NodeAnchorTarget, SceneElement } from "@tikz-editor/core/semantic/types";
 import type { CanvasSnapshot } from "./types";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 export type NodePositioningContextMenuAction = "position-relative" | "convert-absolute";
 
@@ -137,8 +138,9 @@ function collectNodeInfoBySourceId(snapshot: CanvasSnapshot): Map<string, NodeIn
 
 function visitStatements(statements: readonly Statement[], nodes: Map<string, NodeInfo>): void {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      visitStatements(statement.body, nodes);
+    const nested = nestedStatements(statement);
+    if (nested) {
+      visitStatements(nested, nodes);
       continue;
     }
     if (statement.kind !== "Path") {

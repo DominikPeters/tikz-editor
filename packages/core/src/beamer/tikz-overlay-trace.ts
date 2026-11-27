@@ -2,6 +2,7 @@ import type { OverlayGroupCommand, OverlaySpecAst, Span, Statement } from "../as
 import { walkStatements } from "../ast/walk.js";
 import { expandForeachFigure } from "../foreach/index.js";
 import { parseTikz } from "../parser/index.js";
+import { nestedStatements } from "../ast/walk.js";
 
 /** A specification where the source has it, with its text after a loop's substitutions (`2-` for `\x-`). */
 export type TikzOverlaySpecSite = {
@@ -121,7 +122,8 @@ function traceRelative(text: string): TikzOverlayTrace {
   const expanded = seen.expanding ? expandForeachFigure(figure, text) : null;
   const visit = (statements: readonly Statement[]): void => {
     for (const statement of statements) {
-      if (statement.kind === "Scope") { visit(statement.body); continue; }
+      const nested = nestedStatements(statement);
+      if (nested) { visit(nested); continue; }
       if (!isOverlay(statement)) continue;
       const attribution = expanded?.statementAttribution.get(statement);
       const stack = attribution?.foreachStack ?? [];

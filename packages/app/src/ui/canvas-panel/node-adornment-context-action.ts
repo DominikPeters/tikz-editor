@@ -8,6 +8,7 @@ import type { WorldPoint } from "../coords/types";
 import type { SvgViewBox } from "@tikz-editor/core/svg/index";
 import { collectSourceBounds } from "./panel-helpers";
 import { worldToSvgPoint } from "./geometry";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 export type ResolveNodeAdornmentContextActionInput = {
   source: string;
@@ -124,8 +125,9 @@ function findPathStatementById(statements: readonly Statement[], sourceId: strin
     if (statement.kind === "Path" && statement.id === sourceId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested: PathStatement | null = findPathStatementById(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested: PathStatement | null = findPathStatementById(body, sourceId);
       if (nested) {
         return nested;
       }

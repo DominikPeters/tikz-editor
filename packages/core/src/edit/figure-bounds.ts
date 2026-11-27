@@ -102,7 +102,7 @@ export function applySetFigureBoundsAction(
 
 function firstGeometryStatement(statements: readonly Statement[]): Statement | null {
   for (const statement of statements) {
-    if (statement.kind === "Path" || statement.kind === "Scope" || statement.kind === "Foreach") {
+    if (statement.kind === "Path" || statement.kind === "Scope" || statement.kind === "Foreach" || statement.kind === "Axis") {
       return statement;
     }
   }

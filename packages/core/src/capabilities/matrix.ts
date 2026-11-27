@@ -834,6 +834,78 @@ export const capabilityMatrix: CapabilityMatrix = {
     fixtures: ["beamer_frame_continuations"],
     notes: "Beamer allowframebreaks renders forced and automatic continuation pages at legal vertical breaks, with stock continuation titles, list glue, split topskip, and footnotes on the final page. Continuation page count is distinct from overlay step count. LuaLaTeX glyph and rule snapshots cover these contracts. Arbitrary continuation template definitions and custom output-routine changes are not implemented.",
   },
+  pgfplots_axis: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_axis"],
+    notes: "The axis environment parses with its options and a body of axis commands and TikZ statements; it is skipped with an `unsupported-pgfplots-axis` warning and draws nothing yet. Package requirements are exported."
+  },
+  pgfplots_log_axes: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_log_axes"],
+    notes: "semilogxaxis, semilogyaxis and loglogaxis parse as axes; log scaling is not implemented."
+  },
+  pgfplots_addplot_coordinates: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_addplot_coordinates"],
+    notes: "`\\addplot coordinates` parses with per-point spans, error parts, meta and empty-line jumps."
+  },
+  pgfplots_addplot_expression: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_addplot_expression"],
+    notes: "Expression `{…}`, `expression {…}` and parametric `(…,…)` inputs parse; nothing is sampled yet."
+  },
+  pgfplots_addplot_table: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_addplot_table"],
+    notes: "`\\addplot table` parses inline data as one raw span, file names and loaded-table macros; a small reader splits inline rows and cells."
+  },
+  pgfplots_addplot_other_inputs: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_addplot_other_inputs"],
+    notes: "gnuplot, function, shell, file, graphics and fill between inputs are recorded as raw text only."
+  },
+  pgfplots_addplot3: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_addplot3"],
+    notes: "`\\addplot3` parses and is marked 3D; 3D axes are out of scope for now."
+  },
+  pgfplots_legend: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_legend"],
+    notes: "`\\addlegendentry`, `\\addlegendimage` and `\\legend` parse; legends are not drawn."
+  },
+  pgfplots_pgfplotsset: {
+    parser: "partial",
+    semantic: "none",
+    svg: "none",
+    edit: "none",
+    fixtures: ["pgfplots_pgfplotsset"],
+    notes: "`\\pgfplotsset` parses in pictures, axes and the preamble (with `compat`), and `\\usepgfplotslibrary` in the preamble; the `/pgfplots/` key tree is not implemented."
+  },
   render_pipeline: {
     parser: "not-applicable",
     semantic: "none",

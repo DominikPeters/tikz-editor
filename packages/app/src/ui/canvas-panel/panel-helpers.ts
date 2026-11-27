@@ -42,6 +42,7 @@ import {
   vectorLengthSquared,
   worldToSvgPoint
 } from "./geometry";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 type GuideOrientation = "vertical" | "horizontal";
 
@@ -630,8 +631,9 @@ export function collectMatrixStatementSourceIds(statements: readonly Statement[]
         }
         continue;
       }
-      if (statement.kind === "Scope") {
-        visitStatements(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) {
+        visitStatements(nested);
       }
     }
   };
@@ -719,8 +721,9 @@ export function findPathStatementById(
     if (statement.kind === "Path" && statement.id === sourceId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementById(body, sourceId);
       if (nested) {
         return nested;
       }

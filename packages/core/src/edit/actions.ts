@@ -96,6 +96,7 @@ import { composeSourcePatches, patchesMatchSourceTransition } from "./source-pat
 import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export type ResizeRole =
   | "top-left"
@@ -505,8 +506,9 @@ function collectSourceIdsInSpan(
         continue;
       }
 
-      if (statement.kind === "Scope") {
-        visitStatements(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) {
+        visitStatements(nested);
       }
     }
   };
@@ -1003,8 +1005,9 @@ function resolveNodeTextTargetForElementId(
   const stack: Statement[] = [...parsed.figure.body];
   while (stack.length > 0) {
     const statement = requireDefined(stack.shift(), "Missing required stack.shift()");
-    if (statement.kind === "Scope") {
-      stack.unshift(...statement.body);
+    const nested = nestedStatements(statement);
+    if (nested) {
+      stack.unshift(...nested);
       continue;
     }
     if (statement.kind !== "Path") {

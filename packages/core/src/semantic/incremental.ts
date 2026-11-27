@@ -33,6 +33,7 @@ import {
   type EvaluateTikzResult
 } from "./evaluate.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
+import { inferRequiredPackages } from "./required-packages.js";
 import { captureSiteContext, type StatementEntryContext } from "./site-context.js";
 import { mergeFeatureUsage } from "./feature-usage.js";
 import type {
@@ -825,6 +826,7 @@ function assembleSelectiveSemanticResult(args: {
       featureUsage: finalFeatureUsage,
       elements
     }),
+    requiredPackages: inferRequiredPackages(finalFeatureUsage),
     layers: [{ name: MAIN_SCENE_LAYER, order: 0 }],
     elements,
     // As a full evaluation: clipping and `use as bounding box` paths bound the picture, not all of its elements.

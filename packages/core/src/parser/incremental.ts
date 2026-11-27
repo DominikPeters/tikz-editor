@@ -5,7 +5,8 @@ import { parseSyntax } from "@tikz-editor/lezer-tikz";
 
 import { FeatureFlags } from "../ast/features.js";
 import type { Diagnostic } from "../diagnostics/types.js";
-import type { NodeItem, PathItem, TikzFigure, TikzFigureInventoryItem, Span, Statement } from "../ast/types.js";
+import type { AxisBodyItem, NodeItem, PathItem, TikzFigure, TikzFigureInventoryItem, Span, Statement } from "../ast/types.js";
+import { isAxisCommand, nestedStatements } from "../ast/walk.js";
 import type { ParseTikzOptions, ParseTikzResult } from "./index.js";
 import type { SourcePatch } from "../edit/types.js";
 import {
@@ -420,6 +421,13 @@ function identityStructure(statement: Statement): string {
   }).join("|");
   if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
   if (statement.kind === "Path") return `Path(${items(statement.items)})`;
+  // Axis commands are numbered per axis, and their trailing paths take
+  // statement ids: an added or removed one renumbers what follows.
+  if (statement.kind === "Axis") {
+    return `Axis(${statement.environment},${statement.terminated};${statement.body.map((item) => isAxisCommand(item)
+      ? item.kind === "AddPlot" ? `AddPlot(${item.trailingPath ? identityStructure(item.trailingPath) : ""})` : item.kind
+      : identityStructure(item)).join("|")})`;
+  }
   // A plain unknown command edited into an environment, or an environment
   // that loses its `\end`, reaches past its old span: reparse the document.
   if (statement.kind === "UnknownStatement" && statement.environment) {
@@ -440,6 +448,32 @@ function alignStatementIds(previous: Statement, next: Statement): void {
   if (previous.kind === "Scope" && next.kind === "Scope") {
     alignStatements(previous.body, next.body);
     return;
+  }
+  if (previous.kind === "Axis" && next.kind === "Axis") {
+    alignAxisBody(previous.body, next.body, previous.id);
+  }
+}
+
+/** An axis reparsed alone takes the ids of the one it replaces; `identityStructure` matched their shapes. */
+function alignAxisBody(previous: readonly AxisBodyItem[], next: AxisBodyItem[], axisId: string): void {
+  const limit = Math.min(previous.length, next.length);
+  for (let index = 0; index < limit; index += 1) {
+    const previousItem = previous[index];
+    const nextItem = next[index];
+    if (!previousItem || previousItem.kind !== nextItem?.kind) {
+      continue;
+    }
+    if (isAxisCommand(previousItem) && isAxisCommand(nextItem)) {
+      nextItem.id = previousItem.id;
+      nextItem.axisId = axisId;
+      if (previousItem.kind === "AddPlot" && nextItem.kind === "AddPlot" && previousItem.trailingPath && nextItem.trailingPath) {
+        alignStatementIds(previousItem.trailingPath, nextItem.trailingPath);
+      }
+      continue;
+    }
+    if (!isAxisCommand(previousItem) && !isAxisCommand(nextItem)) {
+      alignStatementIds(previousItem, nextItem);
+    }
   }
 }
 
@@ -679,11 +713,11 @@ function buildCache(
   };
 }
 
-function buildStatementIndex(statements: readonly Statement[], parentPath: number[] = []): Map<string, StatementRef> {
+function buildStatementIndex(statements: readonly (Statement | AxisBodyItem)[], parentPath: number[] = []): Map<string, StatementRef> {
   const refs = new Map<string, StatementRef>();
   for (let index = 0; index < statements.length; index += 1) {
     const statement = statements.at(index);
-    if (!statement) {
+    if (!statement || isAxisCommand(statement)) {
       continue;
     }
     refs.set(statement.id, {
@@ -692,7 +726,10 @@ function buildStatementIndex(statements: readonly Statement[], parentPath: numbe
       parentPath,
       index
     });
-    if (statement.kind === "Scope") {
+    if (statement.kind === "Scope" || statement.kind === "Axis") {
+      // An axis indexes its TikZ statements by their place in its whole body,
+      // so an edit inside one reparses that statement alone. An edit in an
+      // axis command (a plot's coordinates) reparses the axis.
       const nested = buildStatementIndex(statement.body, [...parentPath, index]);
       for (const [sourceId, ref] of nested) {
         refs.set(sourceId, ref);
@@ -982,8 +1019,8 @@ function resolveFigureDelimiterSpans(figures: readonly TikzFigureInventoryItem[]
 }
 
 function getStatementAtPath(figure: TikzFigure, parentPath: readonly number[], index: number): Statement | null {
-  const body = getBodyAtPath(figure, parentPath);
-  return body.at(index) ?? null;
+  const entry = getBodyAtPath(figure, parentPath).at(index);
+  return entry && !isAxisCommand(entry) ? entry : null;
 }
 
 function setStatementAtPath(figure: TikzFigure, parentPath: readonly number[], index: number, statement: Statement): void {
@@ -991,12 +1028,12 @@ function setStatementAtPath(figure: TikzFigure, parentPath: readonly number[], i
   body[index] = statement;
 }
 
-function getBodyAtPath(figure: TikzFigure, parentPath: readonly number[]): Statement[] {
-  let body = figure.body;
+function getBodyAtPath(figure: TikzFigure, parentPath: readonly number[]): Array<Statement | AxisBodyItem> {
+  let body: Array<Statement | AxisBodyItem> = figure.body;
   for (const scopeIndex of parentPath) {
     const statement = body.at(scopeIndex);
-    if (statement?.kind !== "Scope") {
-      throw new Error(`Expected scope at path ${parentPath.join("/")}`);
+    if (statement?.kind !== "Scope" && statement?.kind !== "Axis") {
+      throw new Error(`Expected scope or axis at path ${parentPath.join("/")}`);
     }
     body = statement.body;
   }
@@ -1102,8 +1139,9 @@ function countStatements(statements: readonly Statement[]): number {
   let count = 0;
   for (const statement of statements) {
     count += 1;
-    if (statement.kind === "Scope") {
-      count += countStatements(statement.body);
+    const nested = nestedStatements(statement);
+    if (nested) {
+      count += countStatements(nested);
     }
   }
   return count;

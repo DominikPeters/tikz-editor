@@ -6,6 +6,8 @@ import type {
 } from "../ast/types.js";
 import { parseTikz } from "../parser/index.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
+import { nestedStatements } from "../ast/walk.js";
+import { collectPgfplotsPreamble, pgfplotsPreambleLines, type PgfplotsPreamble } from "../pgfplots/preamble.js";
 
 export const STANDALONE_LATEX_EXPORT_MIME_TYPE = "application/x-tex;charset=utf-8";
 export const DEFAULT_STANDALONE_LATEX_EXPORT_FILE_NAME = "tikz-export.tex";
@@ -88,8 +90,9 @@ function collectStatementById(statements: readonly Statement[]): Map<string, Sta
   const visit = (entries: readonly Statement[]): void => {
     for (const statement of entries) {
       byId.set(statement.id, statement);
-      if (statement.kind === "Scope") {
-        visit(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) {
+        visit(nested);
       }
     }
   };
@@ -251,6 +254,8 @@ function analyzeMinimalFigureDependencies(
   definitionChunks: string[];
   figureSource: string;
   requiredLibraries: readonly string[];
+  /** Set when the picture needs pgfplots: what the document's preamble says about it. */
+  pgfplots: PgfplotsPreamble | null;
 } {
   const parseResult = parseTikz(options.source, {
     recover: true,
@@ -294,23 +299,37 @@ function analyzeMinimalFigureDependencies(
     usedIds.add(id);
   }
   const definitionChunks = collectDefinitionSpans(options.source, statementById, usedIds);
+  const pictureFrom = parseResult.figures.find((figure) => figure.id === parseResult.activeFigureId)?.span.from ?? parseResult.figure.span.from;
+  const pgfplots = semanticResult.scene.requiredPackages?.includes("pgfplots")
+    ? collectPgfplotsPreamble(options.source, parseResult.figure.body, pictureFrom)
+    : null;
   return {
     diagnostics,
     complete: !diagnostics.some((diagnostic) => diagnostic.severity === "error"),
     definitionChunks,
     figureSource,
-    requiredLibraries: semanticResult.scene.requiredTikzLibraries
+    requiredLibraries: semanticResult.scene.requiredTikzLibraries,
+    pgfplots
   };
 }
 
 function mergeDefinitionChunksWithInferredLibraries(
+  source: string,
   definitionChunks: readonly string[],
-  requiredLibraries: readonly string[]
+  requiredLibraries: readonly string[],
+  pgfplots: PgfplotsPreamble | null
 ): string[] {
+  // The document's own pgfplots libraries and settings; the package itself is the including document's.
+  const pgfplotsChunks = pgfplots
+    ? [
+        ...(pgfplots.libraries.length > 0 ? [`\\usepgfplotslibrary{${pgfplots.libraries.join(",")}}`] : []),
+        ...pgfplots.settings.map((setting) => source.slice(setting.span.from, setting.span.to).trim())
+      ]
+    : [];
   if (requiredLibraries.length === 0) {
-    return [...definitionChunks];
+    return [...pgfplotsChunks, ...definitionChunks];
   }
-  return [`\\usetikzlibrary{${requiredLibraries.join(",")}}`, ...definitionChunks];
+  return [`\\usetikzlibrary{${requiredLibraries.join(",")}}`, ...pgfplotsChunks, ...definitionChunks];
 }
 
 export function createMinimalTikzSourceArtifact(
@@ -318,8 +337,10 @@ export function createMinimalTikzSourceArtifact(
 ): MinimalTikzSourceArtifact {
   const analysis = analyzeMinimalFigureDependencies(options);
   const definitionChunks = mergeDefinitionChunksWithInferredLibraries(
+    options.source,
     analysis.definitionChunks,
-    analysis.requiredLibraries
+    analysis.requiredLibraries,
+    analysis.pgfplots
   );
   const chunks = [...definitionChunks, analysis.figureSource].filter((chunk) => chunk.trim().length > 0);
   return {
@@ -345,6 +366,9 @@ export function createStandaloneLatexExportArtifact(
   lines.push("\\usepackage{tikz}");
   if (requiredLibraries.length > 0) {
     lines.push(`\\usetikzlibrary{${requiredLibraries.join(",")}}`);
+  }
+  if (analysis.pgfplots) {
+    lines.push(...pgfplotsPreambleLines(options.source, analysis.pgfplots));
   }
   lines.push("\\begin{document}");
   if (definitionChunks.length > 0) {

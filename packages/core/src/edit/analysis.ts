@@ -10,6 +10,7 @@ import {
   buildStatementSnapshotFromStatements,
   type StatementSnapshot
 } from "./statement-ops.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export type EditAnalysisOptions = {
   activeFigureId?: string | null;
@@ -165,8 +166,9 @@ function findPathStatementInStatements(
     if (statement.kind === "Path" && statement.id === sourceId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementInStatements(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementInStatements(body, sourceId);
       if (nested) {
         return nested;
       }

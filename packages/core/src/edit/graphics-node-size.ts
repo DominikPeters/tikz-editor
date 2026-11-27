@@ -3,6 +3,7 @@ import type { SceneElement, SceneText } from "../semantic/types.js";
 import type { ImageCropPlacement } from "../beamer/deck-crop.js";
 import { applyFragments, plainNumber, sourceSlice, tikz, type EditedSource, type FragmentEdit, type TikzFragment } from "./fragment.js";
 import { shortestDecimal } from "./format.js";
+import { nestedStatements } from "../ast/walk.js";
 
 /**
  * A node whose text is a single `\includegraphics`, as inserted images are:
@@ -115,8 +116,9 @@ export function imageNodeCommandSpan(source: string, statements: readonly Statem
 
 function findNode(statements: readonly Statement[], id: string): NodeItem | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findNode(statement.body, id);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findNode(body, id);
       if (nested) return nested;
       continue;
     }

@@ -1,5 +1,6 @@
 import { ExternalTokenizer, type InputStream } from "@lezer/lr";
 
+import { AXIS_ENVIRONMENT_NAMES } from "./pgfplots-tokens.js";
 import { UnknownEnvironment, UnterminatedUnknownEnvironment } from "./tikz-parser.terms.js";
 
 /**
@@ -12,6 +13,7 @@ export const ENVIRONMENTS_WITH_RULES: ReadonlySet<string> = new Set([
   "tikzpicture",
   "tikzpicture*",
   "tikzlayer",
+  ...AXIS_ENVIRONMENT_NAMES,
   // PGF environments whose bodies are ordinary picture statements. They have
   // no rule yet, but skipping them whole would drop drawings that the
   // statement-by-statement reading mostly gets right, so they stay out of

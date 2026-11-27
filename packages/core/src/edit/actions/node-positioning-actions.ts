@@ -18,6 +18,7 @@ import { collectSourceWorldBounds } from "../snapping/index.js";
 import { applyTextReplacements, parseStatementSnapshot, type TextReplacement } from "../statement-ops.js";
 import type { EditActionResult } from "../actions.js";
 import { createCoordinateWriter } from "../writer/index.js";
+import { nestedStatements } from "../../ast/walk.js";
 
 export type PositionNodeRelativeToAction = {
   kind: "positionNodeRelativeTo";
@@ -516,8 +517,9 @@ function wrapSerializedOptions(content: TikzFragment, format: PropertyTargetOpti
 
 function findNodeRefBySourceId(statements: readonly Statement[], sourceId: string): NodeRef | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findNodeRefBySourceId(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findNodeRefBySourceId(body, sourceId);
       if (nested) {
         return nested;
       }

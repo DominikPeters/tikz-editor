@@ -9,6 +9,7 @@ import type { SourcePatch } from "../types.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "../option-mutations.js";
 import { normalizeElementIds } from "../statement-find.js";
+import { nestedStatements } from "../../ast/walk.js";
 
 
 type DeleteTarget = {
@@ -104,7 +105,7 @@ export function applyDeleteAdornmentAction(
   };
 }
 
-function resolveDeleteTarget(statements: Statement[], elementId: string): DeleteTarget | null {
+function resolveDeleteTarget(statements: readonly Statement[], elementId: string): DeleteTarget | null {
   for (const statement of statements) {
     if (statement.id === elementId) {
       return { span: statement.span, scope: "statement" };
@@ -122,8 +123,9 @@ function resolveDeleteTarget(statements: Statement[], elementId: string): Delete
       continue;
     }
 
-    if (statement.kind === "Scope") {
-      const nested = resolveDeleteTarget(statement.body, elementId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = resolveDeleteTarget(body, elementId);
       if (nested) {
         return nested;
       }
@@ -441,8 +443,9 @@ function collectNodeItems(statements: readonly Statement[]): NodeItem[] {
         visitPathItems(statement.items);
         continue;
       }
-      if (statement.kind === "Scope") {
-        visitStatements(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) {
+        visitStatements(nested);
       }
     }
   };

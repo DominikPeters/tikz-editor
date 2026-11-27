@@ -4,6 +4,7 @@ import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/
 import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { ToolMode } from "../../store/types";
 import { clamp } from "./geometry";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 export type ContextMenuSelectionAction =
   | { kind: "preserve" }
@@ -119,8 +120,9 @@ function resolveMatrixContextKind(
 
 function findPathStatementById(statements: readonly Statement[], sourceId: string): PathStatement | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementById(body, sourceId);
       if (nested) {
         return nested;
       }

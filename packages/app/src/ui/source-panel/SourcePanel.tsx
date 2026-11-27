@@ -91,6 +91,7 @@ import css from "./SourcePanel.module.css";
 import { formatTikzSource } from "@tikz-editor/core/edit/source-format";
 import { hasMultipleRoots } from "../../root-inventory";
 import type { SessionSnapshot } from "../../compute";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 // ── Dynamic configuration compartments ──────────────────────────────────────
 
@@ -1856,8 +1857,8 @@ function collectParseSpansById(statements: readonly Statement[]): Map<string, So
       addSpan(statement.id, statement.span);
       if (statement.kind === "Path") {
         collectItems(statement.items);
-      } else if (statement.kind === "Scope") {
-        collectStatements(statement.body);
+      } else {
+        collectStatements(nestedStatements(statement) ?? []);
       }
     }
   };

@@ -1,12 +1,14 @@
 import type { Statement } from "../ast/types.js";
 import { resolveColorToCss, resolveDefineColorModel } from "./style/colors.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export function collectDeclaredColorsFromStatements(statements: readonly Statement[]): ReadonlyMap<string, string> {
   const declared = new Map<string, string>();
 
   const visit = (statement: Statement): void => {
-    if (statement.kind === "Scope") {
-      for (const nested of statement.body) {
+    const body = nestedStatements(statement);
+    if (body) {
+      for (const nested of body) {
         visit(nested);
       }
       return;

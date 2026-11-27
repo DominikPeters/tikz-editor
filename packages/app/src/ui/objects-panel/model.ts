@@ -1,4 +1,5 @@
-import type { NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { AxisStatement, NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
@@ -58,6 +59,13 @@ export function buildObjectsPanelModel(args: {
   return { nodes, byId };
 }
 
+const AXIS_LABELS: Record<AxisStatement["environment"], string> = {
+  axis: "Axis",
+  semilogxaxis: "Semilog-x Axis",
+  semilogyaxis: "Semilog-y Axis",
+  loglogaxis: "Log-log Axis"
+};
+
 function buildNode(
   statement: Statement,
   analysisView: EditAnalysisView,
@@ -66,12 +74,13 @@ function buildNode(
   byId: Map<string, ObjectsPanelNode>,
   boundingBoxSourceId: string | null
 ): ObjectsPanelNode | null {
-  if (statement.kind !== "Path" && statement.kind !== "Scope") {
+  if (statement.kind !== "Path" && statement.kind !== "Scope" && statement.kind !== "Axis") {
     return null;
   }
 
-  const children = statement.kind === "Scope"
-    ? statement.body
+  // A pgfplots axis is a container like a scope; its children are the TikZ statements in it.
+  const children = statement.kind !== "Path"
+    ? (nestedStatements(statement) ?? [])
         .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
         .filter((node): node is ObjectsPanelNode => node != null)
     : [];
@@ -110,7 +119,10 @@ function buildNode(
   return node;
 }
 
-function deriveStatementLabel(statement: PathStatement | ScopeStatement, elements: readonly SceneElement[]): string {
+function deriveStatementLabel(statement: PathStatement | ScopeStatement | AxisStatement, elements: readonly SceneElement[]): string {
+  if (statement.kind === "Axis") {
+    return AXIS_LABELS[statement.environment];
+  }
   if (statement.kind === "Scope") {
     if (hasOptionFlag(statement.options, "on background layer")) {
       return "Background Layer";

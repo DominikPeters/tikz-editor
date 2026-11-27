@@ -22,10 +22,11 @@ function errors(source: string, parsed = parseTikz(source)) {
 }
 
 describe("generic environment fallback", () => {
-  const AXIS = String.raw`  \begin{axis}[xmin=0, xmax=1]
+  // An environment with no rule (pgfplots axes have one now).
+  const AXIS = String.raw`  \begin{plotbox}[xmin=0, xmax=1]
     \addplot coordinates {(0,0) (1,1)};
     \addlegendentry{data}
-  \end{axis}`;
+  \end{plotbox}`;
 
   it("skips an unknown environment as one statement and keeps the statement after it", () => {
     const source = picture(`${AXIS}\n  \\draw (0,0) -- (1,1);`);
@@ -35,10 +36,10 @@ describe("generic environment fallback", () => {
     const environment = environmentStatement(parsed.figure.body[0]);
     expect(environment.raw).toBe(AXIS.trim());
     expect(environment.environment).toEqual({
-      name: "axis",
-      beginSpan: { from: source.indexOf("\\begin{axis}"), to: source.indexOf("\\begin{axis}") + "\\begin{axis}".length },
-      bodySpan: { from: source.indexOf("\\begin{axis}") + "\\begin{axis}".length, to: source.indexOf("\\end{axis}") },
-      endSpan: { from: source.indexOf("\\end{axis}"), to: source.indexOf("\\end{axis}") + "\\end{axis}".length },
+      name: "plotbox",
+      beginSpan: { from: source.indexOf("\\begin{plotbox}"), to: source.indexOf("\\begin{plotbox}") + "\\begin{plotbox}".length },
+      bodySpan: { from: source.indexOf("\\begin{plotbox}") + "\\begin{plotbox}".length, to: source.indexOf("\\end{plotbox}") },
+      endSpan: { from: source.indexOf("\\end{plotbox}"), to: source.indexOf("\\end{plotbox}") + "\\end{plotbox}".length },
       terminated: true
     });
     expect(errors(source, parsed)).toEqual([]);
@@ -49,7 +50,7 @@ describe("generic environment fallback", () => {
     const unsupported = semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-environment");
     expect(unsupported).toHaveLength(1);
     expect(unsupported[0]?.severity).toBe("warning");
-    expect(unsupported[0]?.message).toContain("`axis`");
+    expect(unsupported[0]?.message).toContain("`plotbox`");
     expect(unsupported[0]?.span).toEqual(environment.environment?.beginSpan);
   });
 
@@ -100,14 +101,14 @@ describe("generic environment fallback", () => {
 
   it("runs an unterminated environment to the end of the picture and diagnoses it", () => {
     const source = picture(String.raw`  \draw (0,0) -- (1,0);
-  \begin{axis}
+  \begin{plotbox}
     \addplot coordinates {(0,0)};
     \draw (0,1) -- (1,1);`);
     const parsed = parseTikz(source);
 
     expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["Path", "UnknownStatement"]);
     const environment = environmentStatement(parsed.figure.body[1]);
-    expect(environment.raw.startsWith("\\begin{axis}")).toBe(true);
+    expect(environment.raw.startsWith("\\begin{plotbox}")).toBe(true);
     expect(environment.raw.endsWith("\\draw (0,1) -- (1,1);")).toBe(true);
     expect(environment.environment?.terminated).toBe(false);
     expect(environment.environment?.endSpan).toBeUndefined();
@@ -116,7 +117,7 @@ describe("generic environment fallback", () => {
     const unterminated = parsed.diagnostics.filter((diagnostic) => diagnostic.code === "unterminated-environment");
     expect(unterminated).toHaveLength(1);
     expect(unterminated[0]?.severity).toBe("error");
-    expect(unterminated[0]?.message).toContain("\\end{axis}");
+    expect(unterminated[0]?.message).toContain("\\end{plotbox}");
     expect(unterminated[0]?.span).toEqual(environment.environment?.beginSpan);
     // The picture itself still closes: nothing else is reported.
     expect(errors(source, parsed).map((diagnostic) => diagnostic.code)).toEqual(["unterminated-environment"]);
@@ -139,7 +140,7 @@ describe("generic environment fallback", () => {
   });
 
   it("does not crash on an environment left open at the end of input", () => {
-    for (const source of ["\\begin{tikzpicture}\n\\begin{axis}", "\\begin{tikzpicture}\n\\begin{axis}\\", "\\begin{tikzpicture}\\begin{axis}%", "\\begin{tikzpicture}\\begin{axis"]) {
+    for (const source of ["\\begin{tikzpicture}\n\\begin{plotbox}", "\\begin{tikzpicture}\n\\begin{plotbox}\\", "\\begin{tikzpicture}\\begin{plotbox}%", "\\begin{tikzpicture}\\begin{axis"]) {
       expect(() => evaluateTikzFigure(parseTikz(source).figure, source)).not.toThrow();
     }
   });
@@ -192,9 +193,9 @@ describe("generic environment fallback", () => {
 });
 
 describe("generic environment fallback: incremental parsing", () => {
-  const BASE = picture(String.raw`  \begin{axis}[xmin=0]
+  const BASE = picture(String.raw`  \begin{plotbox}[xmin=0]
     \addplot coordinates {(0,0) (1,1)};
-  \end{axis}
+  \end{plotbox}
   \draw (0,0) -- (1,1);
   \foo bar;
   \node at (2,0) {A};`);
@@ -203,9 +204,9 @@ describe("generic environment fallback: incremental parsing", () => {
     { name: "a coordinate after the environment", next: BASE.replace("(1,1);\n  \\foo", "(2,3);\n  \\foo"), strategy: "incremental" },
     { name: "the environment's body", next: BASE.replace("(0,0) (1,1)}", "(0,0) (2,2)}"), strategy: "incremental" },
     { name: "the environment's options", next: BASE.replace("xmin=0", "xmin=-1") },
-    { name: "the environment's end, deleted", next: BASE.replace("  \\end{axis}\n", "") },
-    { name: "the environment's name in its end", next: BASE.replace("\\end{axis}", "\\end{axes}") },
-    { name: "a nested end typed into the body", next: BASE.replace("\\addplot", "\\end{axis} \\addplot") },
+    { name: "the environment's end, deleted", next: BASE.replace("  \\end{plotbox}\n", "") },
+    { name: "the environment's name in its end", next: BASE.replace("\\end{plotbox}", "\\end{plotboxes}") },
+    { name: "a nested end typed into the body", next: BASE.replace("\\addplot", "\\end{plotbox} \\addplot") },
     { name: "an unknown command made an environment", next: BASE.replace("\\foo bar;", "\\begin{foo} bar;") },
     { name: "an environment typed into a path", next: BASE.replace("\\draw (0,0) -- (1,1);", "\\begin{x}\\draw (0,0) -- (1,1);") }
   ];
@@ -224,10 +225,10 @@ describe("generic environment fallback: incremental parsing", () => {
 });
 
 describe("generic environment fallback: source-preserving edits", () => {
-  const ENV = String.raw`\begin{axis}[xmin=0]
+  const ENV = String.raw`\begin{plotbox}[xmin=0]
     \addplot coordinates {(0,0) (1,1)};
-    \draw (5,5) -- (6,6); % \end{axis} in a comment
-  \end{axis}`;
+    \draw (5,5) -- (6,6); % \end{plotbox} in a comment
+  \end{plotbox}`;
   const SOURCE = picture(`  \\draw (0,0) -- (1,0);\n  ${ENV}\n  \\draw (0,1) -- (1,1);\n  \\draw (0,2) -- (1,2);`);
 
   function succeed(result: ReturnType<typeof applyEditAction>): string {

@@ -145,3 +145,35 @@ export function coordinateOperationItemId(statementIndex: number, itemIndex: num
 export function unknownPathItemId(statementIndex: number, itemIndex: number): string {
   return `unknown-path-item:${statementIndex}:${itemIndex}`;
 }
+
+export function axisStatementId(statementIndex: number): string {
+  return `axis:${statementIndex}`;
+}
+
+export function addPlotId(axisId: string, plotIndex: number): string {
+  return `${axisId}:plot:${plotIndex}`;
+}
+
+export function addLegendEntryId(axisId: string, index: number): string {
+  return `${axisId}:legend-entry:${index}`;
+}
+
+export function addLegendImageId(axisId: string, index: number): string {
+  return `${axisId}:legend-image:${index}`;
+}
+
+export function legendStatementId(axisId: string, index: number): string {
+  return `${axisId}:legend:${index}`;
+}
+
+export function pgfplotsExtraId(axisId: string, index: number): string {
+  return `${axisId}:extra:${index}`;
+}
+
+export function pgfplotsSetStatementId(statementIndex: number): string {
+  return `pgfplots-set:${statementIndex}`;
+}
+
+export function pgfplotsLibraryStatementId(statementIndex: number): string {
+  return `pgfplots-library:${statementIndex}`;
+}

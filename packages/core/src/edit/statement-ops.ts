@@ -15,6 +15,7 @@ import {
 import type { Statement, Span, TikzFigureInventoryItem } from "../ast/types.js";
 import type { SourcePatch } from "./types.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
+import { nestedStatements as containedStatements } from "../ast/walk.js";
 
 export type StatementRef = {
   id: string;
@@ -78,8 +79,10 @@ export function buildStatementSnapshotFromStatements(
       all.push(ref);
       byId.set(ref.id, ref);
 
-      if (statement.kind === "Scope") {
-        visitStatements(statement.body, `${parentKey}/${index}`, depth + 1);
+      // An axis is a parent like a scope; its axis commands are not statements.
+      const nested = containedStatements(statement);
+      if (nested) {
+        visitStatements(nested, `${parentKey}/${index}`, depth + 1);
       }
     }
     byParentKey.set(parentKey, refs);

@@ -62,6 +62,7 @@ import { getActiveEditorPlatformGeneration } from "./platform/current";
 import { BoundedLru } from "./bounded-lru";
 import { buildSourceRevisionFingerprint } from "./source-identity";
 import type { DocumentFileRef } from "./store/types";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 /**
  * An atomic snapshot of a fully evaluated document and its local text layouts.
@@ -1630,7 +1631,7 @@ function collectNodeSourceIdsOfStatements(statements: readonly Statement[], stat
   const visit = (list: readonly Statement[]): void => {
     for (const statement of list) {
       if (wanted.has(statement.id)) collect(statement);
-      else if (statement.kind === "Scope") visit(statement.body);
+      else visit(nestedStatements(statement) ?? []);
     }
   };
   visit(statements);
@@ -1648,25 +1649,24 @@ function collectNestedScopeSourceIds(
   const changedSourceIdSet = new Set(changedSourceIds);
   const nestedSourceIds = new Set<string>();
 
+  // An axis contains statements as a scope does: a change to it changes them.
   const collectStatementIds = (statement: Statement): void => {
     nestedSourceIds.add(statement.id);
-    if (statement.kind !== "Scope") {
-      return;
-    }
-    for (const nested of statement.body) {
+    for (const nested of nestedStatements(statement) ?? []) {
       collectStatementIds(nested);
     }
   };
 
   const visit = (statement: Statement): void => {
-    if (statement.kind !== "Scope") {
+    const body = nestedStatements(statement);
+    if (!body) {
       return;
     }
     if (changedSourceIdSet.has(statement.id)) {
       collectStatementIds(statement);
       return;
     }
-    for (const nested of statement.body) {
+    for (const nested of body) {
       visit(nested);
     }
   };

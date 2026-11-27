@@ -85,6 +85,9 @@ export type Statement = (
   | DefineColorStatement
   | OverlayGroupStatement
   | OverlayDeclarationStatement
+  | AxisStatement
+  | PgfplotsSetStatement
+  | PgfplotsLibraryStatement
   | UnknownStatement
 ) & OverlayGroupMember;
 
@@ -674,3 +677,268 @@ export type UnknownPathItem = {
 export type CoordinateForm = "cartesian" | "xyz" | "polar" | "named" | "calc" | "explicit" | "unknown";
 
 export type RelativeCoordinatePrefix = "+" | "++";
+
+// ---------------------------------------------------------------------------
+// pgfplots (design/pgfplots.md, section 4.1). Parsed only; an axis is not yet
+// evaluated.
+
+/** The axis environments with a grammar rule. `groupplot` and `polaraxis` will join them. */
+export type AxisEnvironmentName = "axis" | "semilogxaxis" | "semilogyaxis" | "loglogaxis";
+
+/**
+ * `\begin{axis}[options] … \end{axis}` (or a log-scaled variant) in a picture
+ * or scope. A container like a scope: its body holds ordinary statements,
+ * which keep their own ids, and the axis commands, whose ids are the axis's
+ * (`axis:N:plot:M`).
+ */
+export type AxisStatement = {
+  kind: "Axis";
+  /** `axis:N`. */
+  id: string;
+  /** From `\begin` to the end of `\end{…}`, or to the end of the body read when unterminated. */
+  span: Span;
+  environment: AxisEnvironmentName;
+  /** `\begin{axis}`. */
+  beginSpan: Span;
+  /** `\end{axis}`; absent when the environment is unterminated. */
+  endSpan?: Span;
+  /** The name in `\end{…}`, when it is a different axis environment from the one begun. */
+  endEnvironment?: AxisEnvironmentName;
+  terminated: boolean;
+  /** The option list after `\begin{axis}`, with its brackets. */
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** Between the option list (or `\begin{axis}`) and `\end{axis}`. */
+  bodySpan: Span;
+  body: AxisBodyItem[];
+};
+
+/** What an axis body holds, in source order. */
+export type AxisBodyItem = Statement | AxisCommand;
+
+/** The commands only an axis body has. */
+export type AxisCommand =
+  | AddPlotStatement
+  | AddLegendEntryStatement
+  | AddLegendImageStatement
+  | LegendStatement
+  | PgfplotsExtraStatement;
+
+export type AxisCommandKind = AxisCommand["kind"];
+
+/**
+ * `\addplot[options] <input> <trailing path>;`, `\addplot+[…]` and `\addplot3[…]`.
+ */
+export type AddPlotStatement = {
+  kind: "AddPlot";
+  /** `axis:N:plot:M`: M counts the `\addplot` commands of the axis, from 0. */
+  id: string;
+  axisId: string;
+  plotIndex: number;
+  span: Span;
+  /** `\addplot` or `\addplot3`. */
+  commandSpan: Span;
+  dimension: 2 | 3;
+  /** `\addplot+`: the options are appended to the cycle list's, not replacing them. */
+  increment: boolean;
+  incrementSpan?: Span;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** The older `\addplot[style] plot[options] <input>`: the `plot` keyword and its own options. */
+  legacyPlot?: { keywordSpan: Span; optionsSpan?: Span; options?: OptionListAst };
+  input: PlotInput;
+  /**
+   * Path operations after the input (`\closedcycle`, `-- (1,0)`,
+   * `node[pos=1]{…}`), mapped as a `\path` with its own statement id. Its
+   * coordinates may use `axis cs:`, which the coordinate parser keeps raw.
+   */
+  trailingPath?: PathStatement;
+  /** Whether the closing `;` is there. A missing one is diagnosed. */
+  terminated: boolean;
+};
+
+export type PlotInput =
+  | PlotCoordinatesInput
+  | PlotExpressionInput
+  | PlotParametricInput
+  | PlotTableInput
+  | PlotOtherInput;
+
+export type PlotInputKind = PlotInput["kind"];
+
+/** `coordinates {(x,y) (x,y) +- (ex,ey) [meta] …}`. */
+export type PlotCoordinatesInput = {
+  kind: "coordinates";
+  span: Span;
+  keywordSpan: Span;
+  /** The braces' content. */
+  bodySpan: Span;
+  bodyRaw: string;
+  points: PlotCoordinatePoint[];
+  /** Text the reader could not read as points, errors or meta. */
+  unparsed: PlotSourceText[];
+  /** Whether the closing brace is there. */
+  terminated: boolean;
+};
+
+export type PlotSourceText = { raw: string; span: Span };
+
+/**
+ * One point of a coordinate list, with exact spans so an edit can rewrite
+ * one coordinate. Components are kept as written: numbers, expressions
+ * (`{sin(0.5)}`, `\h*8`) or symbolic text.
+ */
+export type PlotCoordinatePoint = {
+  /** 0-based position in the list. */
+  index: number;
+  /** From `(` to the end of the last error or meta part. */
+  span: Span;
+  /** The parenthesised coordinate, `(x,y)`. */
+  coordinateSpan: Span;
+  /** The components between the commas, trimmed; an outer `{…}` stays. */
+  components: PlotSourceText[];
+  errors: PlotCoordinateError[];
+  /** `[meta]`: the bracket content. */
+  meta?: PlotSourceText & { bracketSpan: Span };
+  /** An empty line comes before this point: a jump in the plot (`empty line=jump`, compat 1.4+). */
+  afterEmptyLine: boolean;
+};
+
+/** `+- (ex,ey)` (symmetric), `+= (ex,ey)` (upper) or `-= (ex,ey)` (lower). */
+export type PlotCoordinateError = {
+  kind: "+-" | "+=" | "-=";
+  span: Span;
+  operatorSpan: Span;
+  coordinateSpan: Span;
+  components: PlotSourceText[];
+};
+
+/** `{math expression}` or `expression {math expression}`. */
+export type PlotExpressionInput = {
+  kind: "expression";
+  span: Span;
+  keywordSpan?: Span;
+  expression: string;
+  expressionSpan: Span;
+};
+
+/** `({x expr},{y expr})` or `({x},{y},{z})`. */
+export type PlotParametricInput = {
+  kind: "parametric";
+  span: Span;
+  components: PlotSourceText[];
+};
+
+/** `table [options] {inline rows or file name}`, `table [options] \macro`, with the legacy `from`. */
+export type PlotTableInput = {
+  kind: "table";
+  span: Span;
+  keywordSpan: Span;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  fromSpan?: Span;
+  source: PlotTableSource;
+};
+
+export type PlotTableSource =
+  /** Rows in braces: `raw` and `span` are the braces' content, whitespace and newlines kept. See `readInlineTable`. */
+  | { kind: "inline"; raw: string; span: Span; braceSpan: Span; terminated: boolean }
+  /** `{file.dat}`: a file name, trimmed. */
+  | { kind: "file"; name: string; span: Span; braceSpan: Span }
+  /** `\loadedtable` or `{\loadedtable}`: a table read by `\pgfplotstableread`. */
+  | { kind: "macro"; name: string; span: Span; braceSpan?: Span };
+
+/**
+ * An input named by words the editor only records: `gnuplot`, `function`,
+ * `shell`, `file`, `graphics`, `fill between`, or anything else.
+ */
+export type PlotOtherInput = {
+  kind: "other";
+  span: Span;
+  /** The words, space-normalized: `gnuplot`, `fill between`. */
+  name: string;
+  nameSpan: Span;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** The brace argument's content. */
+  argumentRaw?: string;
+  argumentSpan?: Span;
+  raw: string;
+};
+
+/** `\addlegendentry[options]{text}` or `\addlegendentryexpanded`, with no `;` needed. */
+export type AddLegendEntryStatement = {
+  kind: "AddLegendEntry";
+  /** `axis:N:legend-entry:M`. */
+  id: string;
+  axisId: string;
+  span: Span;
+  expanded: boolean;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  text: string;
+  textSpan: Span;
+};
+
+/** `\addlegendimage{options}`. */
+export type AddLegendImageStatement = {
+  kind: "AddLegendImage";
+  /** `axis:N:legend-image:M`. */
+  id: string;
+  axisId: string;
+  span: Span;
+  payloadSpan: Span;
+  options: OptionListAst;
+};
+
+/** `\legend{a,b,c}` or `\legend{a\\b\\}`. */
+export type LegendStatement = {
+  kind: "Legend";
+  /** `axis:N:legend:M`. */
+  id: string;
+  axisId: string;
+  span: Span;
+  listRaw: string;
+  listSpan: Span;
+  /** `,` (a `\foreach` list, dots allowed) or `\\` (each entry terminated). */
+  delimiter: "," | "\\\\";
+  entries: PlotSourceText[];
+};
+
+/** `\pgfplotsextra{low-level commands}`. */
+export type PgfplotsExtraStatement = {
+  kind: "PgfplotsExtra";
+  /** `axis:N:extra:M`. */
+  id: string;
+  axisId: string;
+  span: Span;
+  bodyRaw: string;
+  bodySpan: Span;
+};
+
+/** `\pgfplotsset{…}` in a picture, an axis, or the preamble. */
+export type PgfplotsSetStatement = {
+  kind: "PgfplotsSet";
+  id: string;
+  span: Span;
+  raw: string;
+  commandRaw: "\\pgfplotsset";
+  /** With its braces. */
+  payloadRaw: string;
+  payloadSpan?: Span;
+  optionList: OptionListAst;
+  /** `compat=…`, the last one when there are several. */
+  compat?: PlotSourceText;
+};
+
+/** `\usepgfplotslibrary{a,b}`. */
+export type PgfplotsLibraryStatement = {
+  kind: "PgfplotsLibrary";
+  id: string;
+  span: Span;
+  raw: string;
+  commandRaw: "\\usepgfplotslibrary";
+  librariesRaw: string;
+  librariesSpan?: Span;
+  libraries: string[];
+};

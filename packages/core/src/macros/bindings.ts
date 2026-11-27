@@ -9,6 +9,7 @@ import type {
   MacroBinding,
   MacroOriginFrame,
 } from "./types.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export type MacroBindingStatement =
   | MacroDefinitionStatement
@@ -120,8 +121,8 @@ export function collectMacroBindings(
       collectMacroCommandDefinition(statement, bindings);
     } else if (statement.kind === "MacroAlias") {
       collectMacroAlias(statement, bindings);
-    } else if (statement.kind === "Scope") {
-      const scoped = collectMacroBindings(statement.body);
+    } else if (statement.kind === "Scope" || statement.kind === "Axis") {
+      const scoped = collectMacroBindings(nestedStatements(statement) ?? []);
       for (const [name, binding] of scoped) {
         bindings.set(name, binding);
       }

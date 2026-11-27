@@ -58,6 +58,7 @@ import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, propertyTargetUsesFit, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById } from "../statement-find.js";
 import { nodeGraphicsSize, scaleNodeGraphics } from "../graphics-node-size.js";
+import { nestedStatements } from "../../ast/walk.js";
 
 
 const RESIZE_EPSILON = 1e-3;
@@ -810,8 +811,9 @@ function findScopeStatementById(
     if (statement.kind === "Scope" && statement.id === scopeId) {
       return statement;
     }
-    if (statement.kind === "Scope") {
-      const nested = findScopeStatementById(statement.body, scopeId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findScopeStatementById(body, scopeId);
       if (nested) {
         return nested;
       }
@@ -2159,8 +2161,9 @@ function findPathStatementContainingNodeId(
       }
       continue;
     }
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementContainingNodeId(statement.body, nodeId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementContainingNodeId(body, nodeId);
       if (nested) {
         return nested;
       }

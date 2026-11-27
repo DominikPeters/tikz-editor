@@ -8,20 +8,24 @@
   picGrouped,
   picOptionOnly,
   pgfMathSemicolon,
-  overlayContinuation
+  overlayContinuation,
+  plotInputGroup,
+  plotInputOptions,
+  plotInputName,
+  pgfplotsSemicolon
 }
 
 TikzEnvironment {
   BeginTikz Comment* (OptionList pictureItem* | bodyStart pictureItem*)? EndTikz
 }
 
-bodyStart { Statement | StrayToken | UnknownEnvironmentStatement }
+bodyStart { Statement | StrayToken | UnknownEnvironmentStatement | AxisStatement }
 
 // An item of a picture's body (a tikzpicture, scope, \tikz or overlay body).
 // Only here is an unknown environment a statement: around a picture, in a
 // document's preamble or body, `\begin{document}` or `\begin{figure}` would
 // otherwise swallow the pictures and definitions inside it.
-pictureItem { BodyItem | UnknownEnvironmentStatement }
+pictureItem { BodyItem | UnknownEnvironmentStatement | AxisStatement }
 
 BodyItem {
   Comment |
@@ -48,6 +52,8 @@ Statement {
   MacroAliasStatement |
   MacroCommandDefinitionStatement |
   PgfMathStatement |
+  PgfplotsSetStatement |
+  UsePgfplotsLibraryStatement |
   UnknownStatement
 }
 
@@ -67,6 +73,94 @@ ScopeStatement {
 UnknownEnvironmentStatement {
   UnknownEnvironment |
   UnterminatedUnknownEnvironment
+}
+
+// pgfplots' axis environments (pgfplots-tokens.ts names them). The body
+// holds the axis commands as well as every picture statement. Later axis
+// environments, `groupplot` or `polaraxis`, join BeginAxis and EndAxis.
+AxisStatement {
+  BeginAxis Comment* (OptionList axisItem* | axisBodyStart axisItem*)? EndAxis
+}
+
+axisBodyStart { bodyStart | axisCommand }
+
+axisItem { pictureItem | axisCommand }
+
+axisCommand {
+  AddPlotStatement |
+  AddLegendEntryStatement |
+  AddLegendImageStatement |
+  LegendStatement |
+  PgfplotsExtraStatement
+}
+
+// `\addplot[options] <input> <trailing path>;`, `\addplot+` and `\addplot3`.
+AddPlotStatement {
+  addPlotHead plotInput AddPlotTrailingPath? (";" | insertPlotSemicolon)
+}
+
+addPlotHead {
+  (AddPlotCmd | AddPlot3Cmd) AddPlotIncrement? Comment* (OptionList Comment*)? AddPlotLegacyPlot?
+}
+
+// The older `\addplot[style] plot[options] <input>`, which the manual still uses.
+AddPlotLegacyPlot { PlotKw Comment* (OptionList Comment*)? }
+
+// Path operations after the input, continuing the plot's path: `\closedcycle`, `-- (1,0)`, `node[pos=1]{…}`.
+AddPlotTrailingPath { PathItem+ }
+
+AddPlotIncrement { "+" }
+
+plotInput {
+  PlotCoordinates |
+  PlotExpression |
+  PlotParametric |
+  PlotTable |
+  PlotKeywordInput
+}
+
+PlotCoordinates { CoordinatesKw Comment* Group }
+
+PlotExpression { Group }
+
+PlotParametric { Coordinate }
+
+// Inline table data is one raw token: rows and columns are whitespace- and
+// newline-separated, which the grammar's tokens do not keep.
+PlotTable {
+  TableKw Comment* (OptionList Comment*)? (FromKw Comment*)? (TableData | CommandName)
+}
+
+// Any other input named by words: `expression {…}`, `gnuplot [opts] {…}`,
+// `function {…}`, `file {…}`, `shell {…}`, `graphics {…}`, `fill between [opts]`.
+PlotKeywordInput {
+  PlotInputName (!plotInputName PlotInputName)* (!plotInputOptions OptionList)? (!plotInputGroup Group)?
+}
+
+PlotInputName { Identifier }
+
+AddLegendEntryStatement {
+  AddLegendEntryCmd Comment* (OptionList Comment*)? NodeTextGroup (!pgfplotsSemicolon ";")?
+}
+
+AddLegendImageStatement {
+  AddLegendImageCmd Comment* StylePayload (!pgfplotsSemicolon ";")?
+}
+
+LegendStatement {
+  LegendCmd Comment* Group (!pgfplotsSemicolon ";")?
+}
+
+PgfplotsExtraStatement {
+  PgfplotsExtraCmd Comment* Group (!pgfplotsSemicolon ";")?
+}
+
+PgfplotsSetStatement {
+  PgfplotsSetCmd StylePayload
+}
+
+UsePgfplotsLibraryStatement {
+  UsePgfplotsLibraryCmd Group
 }
 
 ForeachStatement {
@@ -110,16 +204,19 @@ ForeachList {
 PathStatement {
   PicPathStatement |
   NodePathStatement |
-  PathCommand OverlaySpec? PathItem* ";" |
-  PathCommand OptionList OverlaySpec PathItem* ";"
+  PathCommand OverlaySpec? PathItem* statementEnd |
+  PathCommand OptionList OverlaySpec PathItem* statementEnd
 }
 
+// A statement's `;`, or its absence right before `\end{axis}` (pgfplots-tokens.ts).
+statementEnd { ";" | insertSemicolon }
+
 PicPathStatement {
-  PicCmd OverlaySpec? PicForeachClause* PicQualifier* Group? ";"
+  PicCmd OverlaySpec? PicForeachClause* PicQualifier* Group? statementEnd
 }
 
 NodePathStatement {
-  NodeCmd OverlaySpec? NodeCommandItem* ";"
+  NodeCmd OverlaySpec? NodeCommandItem* statementEnd
 }
 
 // Beamer's overlay commands at statement level. Their braces delimit an
@@ -360,7 +457,7 @@ DecorateOperation {
 }
 
 UnknownStatement {
-  CommandName UnknownPart* ";"
+  CommandName UnknownPart* statementEnd
 }
 
 UnknownPart {
@@ -526,6 +623,8 @@ OptionPart {
   Coordinate |
   GroupPathOperator |
   PathKeyword |
+  // pgfplots' `row sep=\\`.
+  MatrixRowSepCmd |
   EscapedAmpersandCmd |
   EscapedPercentCmd |
   EscapedDollarCmd |
@@ -687,6 +786,7 @@ StylePayloadPart {
   Coordinate |
   OptionList |
   PathKeyword |
+  MatrixRowSepCmd |
   EscapedAmpersandCmd |
   EscapedPercentCmd |
   EscapedDollarCmd |
@@ -799,7 +899,8 @@ Coordinate {
 
 IdentifierLike {
   Identifier |
-  OfKw
+  OfKw |
+  TableKw
 }
 
 KnownCommand {
@@ -910,6 +1011,23 @@ CosKw { @specialize<Identifier, "cos"> }
 NodeKw { @specialize<Identifier, "node"> }
 PicKw { @specialize<Identifier, "pic"> }
 ForeachKw { @specialize<Identifier, "foreach"> }
+TableKw { @specialize<Identifier, "table"> }
+
+@external tokens pgfplotsTokens from "./pgfplots-tokens.js" {
+  BeginAxis,
+  EndAxis,
+  AddPlotCmd,
+  AddPlot3Cmd,
+  AddLegendEntryCmd,
+  AddLegendImageCmd,
+  LegendCmd,
+  PgfplotsSetCmd,
+  PgfplotsExtraCmd,
+  UsePgfplotsLibraryCmd,
+  TableData,
+  insertSemicolon,
+  insertPlotSemicolon
+}
 
 @external tokens unknownEnvironmentTokens from "./environment-tokens.js" {
   UnknownEnvironment,

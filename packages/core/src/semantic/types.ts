@@ -103,6 +103,12 @@ export type SceneFigure = {
   kind: "SceneFigure";
   span: Span;
   requiredTikzLibraries: readonly string[];
+  /**
+   * LaTeX packages beyond `tikz` the picture needs to compile, such as
+   * `pgfplots` for an axis. The exporter adds each package's preamble.
+   * Absent when there are none.
+   */
+  requiredPackages?: readonly string[];
   layers: SceneLayer[];
   elements: SceneElement[];
   bounds?: WorldBounds;

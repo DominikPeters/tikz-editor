@@ -49,6 +49,7 @@ import {
 } from "./editor-clipboard";
 import { getActiveEditorPlatform } from "../platform/current";
 import { parseWindowRootId } from "../root-inventory";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 type Dispatch = (action: EditorAction) => void;
 
@@ -1205,8 +1206,9 @@ function resolveTreeCommandTarget(
 
 function findPathStatementById(statements: readonly Statement[], sourceId: string): PathStatement | null {
   for (const statement of statements) {
-    if (statement.kind === "Scope") {
-      const nested = findPathStatementById(statement.body, sourceId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathStatementById(body, sourceId);
       if (nested) {
         return nested;
       }

@@ -1,8 +1,10 @@
 import { defBinding } from "../macros/bindings.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
+import { nestedStatements } from "../ast/walk.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
+  AxisStatement,
   ColorletStatement,
   DefineColorStatement,
   MacroAliasStatement,
@@ -110,6 +112,7 @@ import { applyMatrix, identityMatrix, multiplyMatrix, rotationMatrix, translatio
 import { worldTransform, type WorldTransform } from "../coords/transforms.js";
 import { cloneResolvedStyle, cloneStyleChain, diffResolvedStyle, type StyleChainEntry, type StyleSourceRef, type StyleTraceLayerInput } from "./style-chain.js";
 import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
+import { inferRequiredPackages } from "./required-packages.js";
 import { parseBooleanishNormalized } from "../utils/booleanish.js";
 import { stripWrappingBraces } from "../utils/braces.js";
 import { evaluatePgfMathExpression, formatPgfMathNumber } from "./pgfmath/evaluator.js";
@@ -607,6 +610,7 @@ export function finalizeSemanticEvaluationRun(
       kind: "SceneFigure",
       span: run.figure.span,
       requiredTikzLibraries,
+      requiredPackages: inferRequiredPackages(run.featureUsage),
       layers,
       elements: orderedElements,
       ...(optionalBounds1 === undefined ? {} : { bounds: optionalBounds1 }),
@@ -773,10 +777,8 @@ function buildSourceStatementSpanById(
   const spans = new Map<string, { from: number; to: number }>();
   const visit = (statement: Statement) => {
     spans.set(statement.id, { ...statement.span });
-    if (statement.kind === "Scope") {
-      for (const nested of statement.body) {
-        visit(nested);
-      }
+    for (const nested of nestedStatements(statement) ?? []) {
+      visit(nested);
     }
   };
   for (const statement of statements) {
@@ -1420,6 +1422,24 @@ function evaluateStatement(
     return [];
   }
 
+  // pgfplots is parsed but not yet evaluated: an axis draws nothing, and the
+  // statements after it go on as if it were not there.
+  if (statement.kind === "Axis") {
+    markPgfplotsAxisFeatures(statement, featureUsage);
+    diagnostics.push({
+      severity: "warning",
+      code: "unsupported-pgfplots-axis",
+      message: `pgfplots axes are not rendered yet; this editor skips this \`${statement.environment}\` environment and everything inside it.`,
+      span: statement.beginSpan
+    });
+    return [];
+  }
+
+  if (statement.kind === "PgfplotsSet" || statement.kind === "PgfplotsLibrary") {
+    markFeature(featureUsage, "pgfplots_pgfplotsset", "unsupported");
+    return [];
+  }
+
   if (statement.environment) {
     markFeature(featureUsage, "unknown_statement", "unsupported");
     diagnostics.push({
@@ -1446,6 +1466,24 @@ function evaluateStatement(
     span: statement.span
   });
   return [];
+}
+
+function markPgfplotsAxisFeatures(axis: AxisStatement, featureUsage: FeatureUsage): void {
+  markFeature(featureUsage, "pgfplots_axis", "unsupported");
+  if (axis.environment !== "axis") markFeature(featureUsage, "pgfplots_log_axes", "unsupported");
+  for (const item of axis.body) {
+    if (item.kind === "AddPlot") {
+      if (item.dimension === 3) markFeature(featureUsage, "pgfplots_addplot3", "unsupported");
+      const input = item.input.kind;
+      markFeature(featureUsage, input === "coordinates" ? "pgfplots_addplot_coordinates"
+        : input === "table" ? "pgfplots_addplot_table"
+          : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
+    } else if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend") {
+      markFeature(featureUsage, "pgfplots_legend", "unsupported");
+    } else if (item.kind === "PgfplotsSet") {
+      markFeature(featureUsage, "pgfplots_pgfplotsset", "unsupported");
+    }
+  }
 }
 
 function evaluatePicOperationInStatement(

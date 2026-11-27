@@ -1,5 +1,6 @@
 import type { Span, Statement } from "@tikz-editor/core/ast/types";
 import { parseTikzForEdit, type EditParseOptions } from "@tikz-editor/core/edit/parse-options";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 export type EquationDelimiter = "inline-dollar" | "inline-paren" | "display-dollar";
 
@@ -122,8 +123,9 @@ function resolveNodeTextTarget(
     if (!statement) {
       continue;
     }
-    if (statement.kind === "Scope") {
-      stack.unshift(...statement.body);
+    const nested = nestedStatements(statement);
+    if (nested) {
+      stack.unshift(...nested);
       continue;
     }
     if (statement.kind !== "Path") {

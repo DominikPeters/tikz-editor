@@ -54,6 +54,7 @@ import {
   resizeCursorForRole,
   sourceHasSingleResizablePathShape
 } from "./panel-helpers";
+import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
 export type UseCanvasSelectionDerivedStateArgs = {
   snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult" | "overlayLayer">;
@@ -990,8 +991,9 @@ function collectNodeNamesBySourceId(statements: readonly Statement[]): Map<strin
   const names = new Map<string, string>();
   const visit = (nested: readonly Statement[]): void => {
     for (const statement of nested) {
-      if (statement.kind === "Scope") {
-        visit(statement.body);
+      const body = nestedStatements(statement);
+      if (body) {
+        visit(body);
         continue;
       }
       if (statement.kind !== "Path") {
@@ -1053,8 +1055,9 @@ function collectPathAttachedNodeSourceIds(statements: readonly Statement[]): Set
 
   const collectFromStatements = (entries: readonly Statement[]): void => {
     for (const statement of entries) {
-      if (statement.kind === "Scope") {
-        collectFromStatements(statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) {
+        collectFromStatements(nested);
         continue;
       }
       if (statement.kind !== "Path" || statement.command === "node") {

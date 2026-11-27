@@ -11,6 +11,7 @@ import { sourceFingerprintForEdit } from "./parse-options.js";
 import { resolvePropertyTarget } from "./property-target.js";
 import { applyOptionMutationsToTarget, normalizeOptionKey, type OptionMutation } from "./option-mutations.js";
 import type { EditParseOptions } from "./parse-options.js";
+import { nestedStatements } from "../ast/walk.js";
 
 export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEditResult {
   const target = findPathItem(parseResult.figure.body, edit.targetId);
@@ -46,7 +47,7 @@ export function applyEdit(parseResult: ParseTikzResult, edit: TikzEdit): ApplyEd
   };
 }
 
-function findPathItem(statements: Statement[], targetId: string): PathItem | null {
+function findPathItem(statements: readonly Statement[], targetId: string): PathItem | null {
   for (const statement of statements) {
     if (statement.kind === "Path") {
       for (const item of statement.items) {
@@ -56,8 +57,9 @@ function findPathItem(statements: Statement[], targetId: string): PathItem | nul
       }
     }
 
-    if (statement.kind === "Scope") {
-      const nested = findPathItem(statement.body, targetId);
+    const body = nestedStatements(statement);
+    if (body) {
+      const nested = findPathItem(body, targetId);
       if (nested) {
         return nested;
       }
