@@ -153,6 +153,26 @@ legend style={legend cell align=left, align=left, draw=white!15!black}
     expect(semantic.scene.elements.filter((element) => element.id.endsWith(":line"))).toHaveLength(2);
   });
 
+  it("shifts matlab2tikz bar plots with `bar shift auto` alone in the axis options (U4)", () => {
+    const source = String.raw`\pgfplotsset{compat=1.18}\begin{tikzpicture}\begin{axis}[bar shift auto, xmin=0, xmax=3, ymin=0, ymax=3]
+\addplot[ybar, bar width=0.2, fill=blue] table[row sep=crcr] {1 1\\ 2 2\\};
+\addplot[ybar, bar width=0.2, fill=red] table[row sep=crcr] {1 2\\ 2 1\\};
+\end{axis}\end{tikzpicture}`;
+    const parsed = parseTikz(source, { includeContextDefinitions: true });
+    const semantic = evaluateTikzFigure(parsed.figure, source);
+    const axis = getAxisEvaluations(semantic.scene)[0];
+    const bars = semantic.scene.elements.filter((element) => element.id.endsWith(":bars"));
+    expect(bars).toHaveLength(2);
+    const left = (index: number): number => {
+      const bar = bars[index];
+      const first = bar?.kind === "Path" ? bar.commands[0] : undefined;
+      return first?.kind === "M" && axis ? (first.to.x - axis.layout.map.origin.x) / axis.layout.map.xUnit.x : Number.NaN;
+    };
+    // n = 2, w = 0.2 units, sep 2pt: the two bars sit side by side around x = 1.
+    expect(left(0)).toBeLessThan(0.8);
+    expect(left(1)).toBeGreaterThan(1);
+  });
+
   it("evaluates a 20,000-row inline table quickly", () => {
     const rows = ["x y"];
     for (let i = 0; i < 20000; i += 1) rows.push(`${(i / 1000).toFixed(4)} ${Math.sin(i / 300).toFixed(6)}`);

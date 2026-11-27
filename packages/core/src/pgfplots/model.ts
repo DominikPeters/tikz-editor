@@ -113,6 +113,8 @@ export type AxisModel = {
   tableKeys: OptionEntry[];
   /** The axis-wide bar style (`ybar`, `xbar stacked`, `ybar interval`, …; behaviour U). */
   bar?: AxisBarStyle;
+  /** `bar shift auto={sep}` given without a bar style (U4). */
+  barShiftAuto?: number;
   /** Legend keys (behaviour L); the legend's TikZ style is `every axis legend` in `styles`. */
   legend: LegendModel;
 };
@@ -446,7 +448,9 @@ defineAxisKey("bar cycle list", (ctx, v) => { if (v !== null) return false; ctx.
 defineAxisKey("bar shift auto", (ctx, v) => {
   const sep = v === null ? 2 : readLength(v);
   if (sep === null) return false;
+  // Without a bar style it still installs the shift formula for the bar plots (matlab2tikz writes it alone).
   if (ctx.model.bar) ctx.model.bar = { ...ctx.model.bar, sep };
+  else ctx.model.barShiftAuto = sep;
   return true;
 });
 

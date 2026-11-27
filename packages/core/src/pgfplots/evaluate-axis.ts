@@ -347,7 +347,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const plot = plots[index];
     if (plot) plot.points = stacked.points;
   }
-  const groups = barGroups(plots.map((plot) => (plot.points ? plot.model : null)), model.bar?.sep, model.bar?.kind.endsWith("interval") ?? false);
+  const groups = barGroups(plots.map((plot) => (plot.points ? plot.model : null)), model.bar?.sep ?? model.barShiftAuto, model.bar?.kind.endsWith("interval") ?? false);
 
   // Stage 3.
   const drawn = plots.flatMap((plot) => (plot.points && !plot.model.forget ? [plot.points] : plot.points ? [plot.points] : []));
