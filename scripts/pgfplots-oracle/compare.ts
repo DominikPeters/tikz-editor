@@ -148,19 +148,32 @@ export function compareTier1(expected: Tier1, observed: Tier1, options: CompareO
       }
     }
     anchors("axis-anchor", `${where}.anchors`, e.anchors, o.anchors);
+    if (e.scale && (!o.scale || e.scale.x !== o.scale.x || e.scale.y !== o.scale.y)) add("scale", `${where}.scale`, `expected ${JSON.stringify(e.scale)}, observed ${JSON.stringify(o.scale)}`);
     if (e.ticks) {
-      for (const letter of ["x", "y"] as const) {
+      for (const letter of ["x", "y", "xExtra", "yExtra"] as const) {
         const et = e.ticks[letter]; const ot = o.ticks?.[letter];
+        if (!et) { if (ot && ot.length > 0) add("tick-count", `${where}.ticks.${letter}`, `expected no ticks, observed ${ot.length}`); continue; }
         const twhere = `${where}.ticks.${letter}`;
         if (!ot) { add("ticks-missing", twhere, "missing in observed"); continue; }
         if (et.length !== ot.length) add("tick-count", twhere, `expected ${et.length} ticks [${et.map((t) => t.value).join(", ")}], observed ${ot.length} [${ot.map((t) => t.value).join(", ")}]`);
-        const range = letter === "x" ? (e.limits ? e.limits.xmax - e.limits.xmin : 1) : (e.limits ? e.limits.ymax - e.limits.ymin : 1);
+        const range = letter.startsWith("x") ? (e.limits ? e.limits.xmax - e.limits.xmin : 1) : (e.limits ? e.limits.ymax - e.limits.ymin : 1);
         et.forEach((tick: OracleTick, i) => {
           const other = ot[i];
           if (!other) return;
-          const d = Math.abs(tick.value - other.value) / Math.abs(range || 1);
-          noteDelta(stats, "tick-value-relative", d);
-          if (d > tol.tickRelative) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value}`, d, tol.tickRelative);
+          const logDirection = e.scale?.[letter.startsWith("x") ? "x" : "y"] === "log";
+          const dirUnit = letter.startsWith("x") ? unit?.x : unit?.y;
+          if (logDirection && dirUnit !== undefined) {
+            // On a log direction TeX writes \tick (a logarithm) with 5 decimals
+            // and its fractional-step ticks carry fixed-point drift (behaviour
+            // Q3): compared as the canvas distance it causes, like the limits.
+            const canvas = Math.abs(tick.value - other.value) * dirUnit;
+            noteDelta(stats, "tick-value-canvas", canvas);
+            if (canvas > tol.layoutPt) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value} (${canvas.toFixed(4)}pt on canvas)`, canvas, tol.layoutPt);
+          } else {
+            const d = Math.abs(tick.value - other.value) / Math.abs(range || 1);
+            noteDelta(stats, "tick-value-relative", d);
+            if (d > tol.tickRelative) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value}`, d, tol.tickRelative);
+          }
           if (tick.index !== other.index) add("tick-index", `${twhere}[${i}].index`, `expected \\ticknum ${tick.index}, observed ${other.index}`);
           node("tick-label", `${twhere}[${i}].label`, tick.label, other.label);
         });

@@ -4,6 +4,7 @@ import { requireArrayValue } from "../../utils/collections.js";
 import { applyFrameToWorldPoint } from "../../coords/frame.js";
 import { coordinateSourceUnit, parseLengthWithInfo } from "../../semantic/coords/parse-length.js";
 import { spelledCoordinateFrame, type CoordinateSpelling, type SiteContext } from "../../semantic/site-context.js";
+import { axisCoordinateToUnitless } from "../../semantic/coords/axis-basis.js";
 import { isFrameLocalCoordinateEditHandle, isRelativeCoordinateEditHandle, type CoordinateEditHandle } from "../../semantic/types.js";
 import { worldDeltaToLocalDelta, worldToLocal } from "../coords.js";
 import { EXACT_TOLERANCE_PT, formatNumber, writeTolerancePt, type NumberFormatOptions } from "../format.js";
@@ -198,8 +199,34 @@ function componentTolerances(frame: FrameTransform, precision: PointPrecision): 
   return { x: x > 0 ? ptToCm(pt(world / (Math.SQRT2 * x))) : 0, y: y > 0 ? ptToCm(pt(world / (Math.SQRT2 * y))) : 0 };
 }
 
+/**
+ * Component tolerances for a log direction: a written data value v may be
+ * off by v·(b^t − 1) when its logarithm may be off by t (cm units).
+ */
+function logTolerances(context: SiteContext, spelling: CoordinateSpelling, local: FrameLocalPoint, linear: { x: number; y: number }): { x: number; y: number } {
+  const scale = (letter: "x" | "y", unitless: boolean, value: number, tolerance: number): number => {
+    const base = context.axes.log?.[letter];
+    if (base === undefined || !unitless) return tolerance;
+    const data = axisCoordinateToUnitless(context.axes, letter, value) / (72.27 / 2.54);
+    return Math.abs(data) * (base ** tolerance - 1);
+  };
+  return { x: scale("x", spelling.unitlessX, local.x, linear.x), y: scale("y", spelling.unitlessY, local.y, linear.y) };
+}
+
 function writtenValues(units: { x: number; y: number }, tolerance: { x: number; y: number }): { x: WrittenValue; y: WrittenValue } {
   return { x: { value: units.x, tolerance: tolerance.x }, y: { value: units.y, tolerance: tolerance.y } };
+}
+
+/**
+ * Inside a pgfplots log axis the frame maps the logarithm of a plain number;
+ * the number written is the data value (design/pgfplots.md 8).
+ */
+function dataLocal(context: SiteContext, spelling: CoordinateSpelling, local: FrameLocalPoint): FrameLocalPoint {
+  if (!context.axes.log) return local;
+  return frameLocalPoint(
+    pt(spelling.unitlessX ? axisCoordinateToUnitless(context.axes, "x", local.x) : local.x),
+    pt(spelling.unitlessY ? axisCoordinateToUnitless(context.axes, "y", local.y) : local.y)
+  );
 }
 
 function writeContextPoint(site: ContextSite, world: WorldPoint, precision: PointPrecision): WriterResult<CoordinateText> {
@@ -208,7 +235,7 @@ function writeContextPoint(site: ContextSite, world: WorldPoint, precision: Poin
   const frame = spelledCoordinateFrame(site.context, spelling);
   const local = worldToLocal(world, frame);
   if (!local) return singular();
-  const values = writtenValues(localToSourceUnits(local), componentTolerances(frame, precision));
+  const values = writtenValues(localToSourceUnits(dataLocal(site.context, spelling, local)), logTolerances(site.context, spelling, local, componentTolerances(frame, precision)));
   return ok(formatCoordinate(site.replaces ?? "", values.x, values.y));
 }
 
@@ -257,6 +284,10 @@ function writeCoordinatePoint(source: string, site: CoordinateSite, world: World
   const units = localToSourceUnits(local);
   switch (handle.coordinateForm) {
     case "cartesian": {
+      if (context.axes.log) {
+        const values = writtenValues(localToSourceUnits(dataLocal(context, handle.spelling, local)), logTolerances(context, handle.spelling, local, componentTolerances(frame, precision)));
+        return ok(formatCoordinate(oldRaw, values.x, values.y, handle.sourceUnits));
+      }
       const values = writtenValues(units, componentTolerances(frame, precision));
       return ok(formatCoordinate(oldRaw, values.x, values.y, handle.sourceUnits));
     }
@@ -286,6 +317,7 @@ function writeTranslated(source: string, site: WriteSite, steps: readonly LoopSt
     context = site.context ?? handle.siteContext;
     oldRaw = source.slice(handle.sourceRef.sourceSpan.from, handle.sourceRef.sourceSpan.to);
   }
+  if (context.axes.log) return unsupported("a loop step cannot move a coordinate on a log axis by a constant amount");
   const layout = coordinateLayout(oldRaw);
   const x = layout && parseLengthWithInfo(layout.x, "cm");
   const y = layout && parseLengthWithInfo(layout.y, "cm");

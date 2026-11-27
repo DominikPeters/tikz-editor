@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "scaled-ticks",
   "sourceSha256": "3c0bf891ea38ea11ffec2a5cccf524548ff5762f9402d6ae7c7b09b9b1fd8e5c"
@@ -780,6 +780,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     },
     "descriptions": {
      "xlabel": {

@@ -296,6 +296,39 @@ describe("pgfplots editing: descriptions and legend", () => {
   });
 });
 
+describe("pgfplots editing: log and reversed axes", () => {
+  it("point handles on a log axis write data values through the inverse map", () => {
+    const source = picture(String.raw`\begin{axis}[ymode=log, xmin=0, xmax=4, ymin=1, ymax=10000]
+\addplot coordinates {(1,10) (2,100) (3,1000)};
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const result = evaluate(source);
+    const handles = result.editHandles.filter((h) => h.sourceRef.sourceId === `${id}:plot:0`);
+    expect(handles.map((h) => h.sourceText)).toEqual(["(1,10)", "(2,100)", "(3,1000)"]);
+    const i = info(source, id);
+    expect(i.linear).toBe(false);
+    const decade = i.box.y1 - i.box.y0; // four decades over the box height
+    const handle = handles[1];
+    if (!handle) throw new Error("no handle");
+    const moved = applyEditAction(source, result.editHandles, { kind: "moveHandle", handleId: handle.id, newWorld: { x: handle.world.x, y: handle.world.y + decade / 4 }, bypassSnapping: true } as unknown as EditAction);
+    expect(moved.kind === "success" && moved.newSource).toBe(source.replace("(2,100)", "(2,1000)"));
+  });
+
+  it("a reversed axis moves and resizes like any other", () => {
+    const source = picture(String.raw`\begin{axis}[x dir=reverse, width=8cm]
+\addplot coordinates {(0,0) (1,1)};
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const before = worldBox(info(source, id));
+    const moved = apply(source, { kind: "moveElements", elementIds: [id], delta: { x: 28.452756, y: 0 } });
+    expect(moved).toBe(source.replace("width=8cm]", "width=8cm, at={(1cm,0cm)}]"));
+    expect(worldBox(info(moved, id)).sw.x - before.sw.x).toBeCloseTo(28.452756, 2);
+    const i = info(source, id);
+    const resized = apply(source, { kind: "resizeElement", elementId: id, role: "right", newWorld: { x: i.bbox.maxX + 28.452756, y: 0 }, referenceBounds: i.bbox });
+    expect(resized).toBe(source.replace("[x dir=reverse, width=8cm]", "[x dir=reverse, width=9cm, height=6.9cm]"));
+  });
+});
+
 describe("pgfplots editing: data points", () => {
   it("coordinates plots have point handles that write data units", () => {
     const source = picture(String.raw`\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=4]

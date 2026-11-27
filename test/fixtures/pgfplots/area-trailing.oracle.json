@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "area-trailing",
   "sourceSha256": "4c985d461340fdd08c82c0bc430ee2684d1798f670ea92557d5ac1a7d0bad2be"
@@ -842,6 +842,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

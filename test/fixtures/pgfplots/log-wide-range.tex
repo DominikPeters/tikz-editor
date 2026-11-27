@@ -1,0 +1,6 @@
+% Many decades: every k-th decade from the first above the lower limit, no minor ticks.
+\begin{tikzpicture}
+\begin{semilogxaxis}[xmin=1e-9, xmax=1e12, ylabel={$y$}]
+  \addplot coordinates {(1e-8,1) (1e-3,3) (1e4,2) (1e11,5)};
+\end{semilogxaxis}
+\end{tikzpicture}

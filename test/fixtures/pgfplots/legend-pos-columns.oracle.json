@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "legend-pos-columns",
   "sourceSha256": "97d0fbbab43331caa4f0ba125d142595c1ac3d29af6bbabb886a7cffb91bf1fe"
@@ -718,6 +718,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     },
     "descriptions": {
      "legend": {

@@ -48,6 +48,12 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
     tier1: { description: LM_OPTICAL },
     tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }
   },
+  "log-basis-two": {
+    tier1: Object.fromEntries(["bbox", "limits", "map", "axis-anchor"].map((code) => [code, "TeX stores log2(64) as 6.00073 (fixed-point ln of the basis), 0.024pt at the box edge; not emulated (behaviour Q1)"]))
+  },
+  "log-small-range": {
+    tier1: { "axis-anchor": "the origin anchor (data 1) lies 97pt outside the box; TeX's stored xmin ln 2 = 0.69305 (exact 0.693147) moves its extrapolation by 0.021pt (behaviour Q5)" }
+  },
   "axis-font-thick": {
     tier1: { description: LM_OPTICAL },
     tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }

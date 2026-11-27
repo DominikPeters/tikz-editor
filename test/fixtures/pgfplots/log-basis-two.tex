@@ -1,0 +1,6 @@
+% log basis x=2: internal coordinate log2, labels 2^k, no minor ticks.
+\begin{tikzpicture}
+\begin{semilogxaxis}[log basis x=2, xmin=1, xmax=64, ymin=0, ymax=7]
+  \addplot coordinates {(1,0) (8,3) (64,6)};
+\end{semilogxaxis}
+\end{tikzpicture}

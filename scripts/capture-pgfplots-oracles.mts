@@ -108,7 +108,7 @@ function disturbance(options: Options): void {
     const cases = fixtures.flatMap((f) => variants.map((variant, index) => ({ id: `${f.name}-v${index}`, body: f.body, variant })));
     // Positive controls: edits that must register as different, proving the check is sensitive.
     for (const [index, control] of [...POSITIVE_CONTROLS, ...INFO_VARIANTS].entries()) {
-      for (const f of fixtures) cases.push({ id: `${f.name}-c${index}`, body: f.body.replace(/\\end\{axis\}/u, `${control.inject}\\end{axis}`), variant: BARE_VARIANT });
+      for (const f of fixtures) cases.push({ id: `${f.name}-c${index}`, body: f.body.replace(/\\end\{(axis|semilogxaxis|semilogyaxis|loglogaxis)\}/u, (end) => `${control.inject}${end}`), variant: BARE_VARIANT });
     }
     const report = runCases(cases, engine, { ...options, noCache: true }, "disturbance");
     // Fully uninstrumented control: same fixture through the plain preamble.

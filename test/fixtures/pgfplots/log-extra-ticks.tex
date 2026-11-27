@@ -1,0 +1,6 @@
+% Log axis with xtickten and extra ticks (labels identified as m·10^k by the default every extra x tick style).
+\begin{tikzpicture}
+\begin{loglogaxis}[xmin=1, xmax=1000, xtickten={0,1,2,3}, extra x ticks={30,300}, ymin=1, ymax=100]
+  \addplot coordinates {(1,1) (20,10) (1000,100)};
+\end{loglogaxis}
+\end{tikzpicture}

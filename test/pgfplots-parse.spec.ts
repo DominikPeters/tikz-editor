@@ -443,7 +443,7 @@ describe("pgfplots: evaluation entry", () => {
     expect(semantic.featureUsage.pgfplots_addplot_coordinates).toBe("used-supported");
   });
 
-  it("expands loops and macros around and inside an axis without choking; log axes are skipped with a warning", () => {
+  it("expands loops and macros around and inside an axis without choking; log axes are evaluated too", () => {
     const source = picture(String.raw`\def\n{3}
 \foreach \i in {1,2} {
   \begin{axis}[name=a\i] \addplot {\i*x}; \draw (0,0) -- (\i,0); \end{axis}
@@ -455,7 +455,8 @@ describe("pgfplots: evaluation entry", () => {
 \begin{loglogaxis}\addplot coordinates {(1,1) (10,10)};\end{loglogaxis}
 \draw (0,0) -- (\n,0);`);
     const semantic = evaluateTikzFigure(parseTikz(source).figure, source);
-    expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis")).toHaveLength(1);
+    expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis")).toHaveLength(0);
+    expect(getAxisEvaluations(semantic.scene).some((axis) => axis.model.x.mode === "log" && axis.model.y.mode === "log")).toBe(true);
     expect(semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
     const ids = semantic.scene.elements.map((element) => element.sourceRef.sourceId);
     // Elements of the loop's axes are attributed to the loop; the macro in the third axis' coordinates is expanded.

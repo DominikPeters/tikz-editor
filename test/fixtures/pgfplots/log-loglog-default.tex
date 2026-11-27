@@ -1,0 +1,7 @@
+% Log-log axis with automatic limits: decade ticks, minor log ticks, labels 10^k.
+\begin{tikzpicture}
+\begin{loglogaxis}[xlabel={Frequency}, ylabel={Gain}]
+  \addplot coordinates {(1,2) (10,15) (100,40) (1000,90)};
+  \addplot coordinates {(3,1.5) (30,8) (300,60)};
+\end{loglogaxis}
+\end{tikzpicture}

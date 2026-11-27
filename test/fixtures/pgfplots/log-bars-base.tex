@@ -1,0 +1,9 @@
+% Bars and \closedcycle on a log axis: the base is log origin=infty, the lower limit.
+\begin{tikzpicture}
+\begin{semilogyaxis}[name=a, ybar, width=170pt, height=150pt]
+  \addplot coordinates {(1,5) (2,50) (3,500)};
+\end{semilogyaxis}
+\begin{semilogyaxis}[at={(a.outer south east)}, anchor=outer south west, width=170pt, height=150pt]
+  \addplot[fill=blue!20] coordinates {(1,5) (2,50) (3,500)} \closedcycle;
+\end{semilogyaxis}
+\end{tikzpicture}

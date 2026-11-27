@@ -179,6 +179,33 @@ a b
     expect(moved.kind === "success" && moved.newSource).toContain("\\draw (1.5,1) -- (2,0);");
   });
 
+  it("Q1/Q5: bare coordinates and axis cs on a log axis map their logarithm; dragging writes data values", () => {
+    const source = String.raw`\begin{tikzpicture}
+\begin{loglogaxis}[xmin=1, xmax=1000, ymin=1, ymax=100]
+\draw (10,10) -- (axis cs:100,1);
+\end{loglogaxis}
+\end{tikzpicture}`;
+    const result = evaluateTikzFigure(parseTikz(source, { includeContextDefinitions: true }).figure, source);
+    const axis = getAxisEvaluations(result.scene)[0];
+    if (!axis) throw new Error("no axis");
+    const { x0, y0, x1, y1 } = axis.layout.box;
+    const path = result.scene.elements.find((e) => e.kind === "Path" && e.sourceRef.sourceId === "path:1");
+    if (path?.kind !== "Path") throw new Error("no path");
+    const pts = path.commands.flatMap((c) => (c.kind === "M" || c.kind === "L" ? [[c.to.x, c.to.y]] : []));
+    // 10 is one third of [1, 1000] in log space, half of [1, 100].
+    expect(pts[0]?.[0]).toBeCloseTo(x0 + (x1 - x0) / 3, 6);
+    expect(pts[0]?.[1]).toBeCloseTo(y0 + (y1 - y0) / 2, 6);
+    expect(pts[1]?.[0]).toBeCloseTo(x0 + (2 * (x1 - x0)) / 3, 6);
+    expect(pts[1]?.[1]).toBeCloseTo(y0, 6);
+    const handle = result.editHandles.find((h) => h.sourceRef.sourceId === "path:1");
+    if (!handle) throw new Error("no handle");
+    // One third of the box further right is one decade: 10 → 100; a sixth of the height up: 10 → 10^1.5.
+    const moved = applyEditAction(source, result.editHandles, { kind: "moveHandle", handleId: handle.id, newWorld: { x: handle.world.x + (x1 - x0) / 3, y: handle.world.y + (y1 - y0) / 4 }, bypassSnapping: true } as never);
+    expect(moved.kind === "success" && moved.newSource).toContain("\\draw (100,31.6");
+    const bad = evaluate(String.raw`\begin{tikzpicture}\begin{semilogyaxis}\addplot coordinates {(0,1) (1,10)};\draw (1,-2) -- (1,5);\end{semilogyaxis}\end{tikzpicture}`);
+    expect(bad.diagnostics.some((d) => (d.code ?? "").includes("invalid-log-axis-coordinate"))).toBe(true);
+  });
+
   it("move on the axis is refused cleanly (moving axes is not implemented)", () => {
     const source = PREAMBLE + String.raw`\begin{tikzpicture}\begin{axis}\addplot coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`;
     expect(() => applyEditAction(source, [], { kind: "moveElement", elementId: "axis:0", delta: { x: 1, y: 0 } } as never)).not.toThrow();

@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "soa-at-anchor",
   "sourceSha256": "70fa0334fbd455fe226518904a7b6c1d4ac78fc3e2dc4859a400ac3f8b14cb93"
@@ -656,6 +656,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

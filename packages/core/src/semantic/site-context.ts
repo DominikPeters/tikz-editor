@@ -47,7 +47,11 @@ export function captureSiteContext(frame: Pick<SemanticContextFrame, "transform"
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- This constructor establishes the capture brand without changing its runtime representation.
   const context = Object.freeze({
     ctm: Object.freeze(frameTransform(a, b, c, d, e, f)),
-    axes: Object.freeze({ x: Object.freeze({ ...frame.axisBasis.x }), y: Object.freeze({ ...frame.axisBasis.y }) })
+    axes: Object.freeze({
+      x: Object.freeze({ ...frame.axisBasis.x }),
+      y: Object.freeze({ ...frame.axisBasis.y }),
+      ...(frame.axisBasis.log ? { log: Object.freeze({ ...frame.axisBasis.log }) } : {})
+    })
   }) as unknown as SiteContext;
   byAxes.set(frame.axisBasis, context);
   return context;
@@ -98,7 +102,8 @@ export function sameSiteContext(left: SiteContext, right: SiteContext, tolerance
   const l = left.ctm, r = right.ctm;
   return close(l.a, r.a) && close(l.b, r.b) && close(l.c, r.c) && close(l.d, r.d) && close(l.e, r.e) && close(l.f, r.f) &&
     close(left.axes.x.x, right.axes.x.x) && close(left.axes.x.y, right.axes.x.y) &&
-    close(left.axes.y.x, right.axes.y.x) && close(left.axes.y.y, right.axes.y.y);
+    close(left.axes.y.x, right.axes.y.x) && close(left.axes.y.y, right.axes.y.y) &&
+    left.axes.log?.x === right.axes.log?.x && left.axes.log?.y === right.axes.log?.y;
 }
 
 /** Every entry context recorded for an authored statement: one per `\foreach` iteration. */

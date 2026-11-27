@@ -44,7 +44,22 @@ function axisOf(oracle: PgfplotsOracle): OracleAxis {
  */
 const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip", string>>> = {
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
-  xticklabels: { probes: "xticklabels/ytick=\\empty replace the tick probe (README: lost probes)", tickPlacement: "no tick probe" },
+  xticklabels: { probes: "ytick=\\empty: no y tick labels, so no y tick probe", tickPlacement: "no y tick probe" },
+  ...Object.fromEntries(["log-basis-two", "log-explicit-ticks", "log-loglog-default", "log-semilogy-grid", "log-small-range", "log-wide-range", "log-xmode-discard"]
+    .map((name) => [name, { tickPlacement: "log labels print b^k (or a fixed-point value), not \\tick (behaviour Q4)" }])),
+  ...Object.fromEntries(["axis-lines-left", "axis-lines-middle", "axis-lines-center-offset", "axis-lines-right"]
+    .map((name) => [name, { tickPlacement: "ticks and labels hang on the axis lines, centred (behaviour R3, R5)", clip: "no closed box path: separate axis lines (R2)" }])),
+  "axis-lines-mixed": { tickPlacement: "ticks on the axis lines (R3)", clip: "separate axis lines (R2)", singleAxis: "two axes" },
+  "axis-lines-styles": { tickPlacement: "ticks on the axis lines (R3); hide x axis has no x ticks", clip: "separate axis lines (R2)", singleAxis: "two axes" },
+  "axis-lines-hide": { probes: "hide axis: no ticks, so no tick probe", tickPlacement: "no ticks", clip: "no axis lines" },
+  "log-bars-base": { singleAxis: "two axes", tickPlacement: "log labels print b^k (behaviour Q4)" },
+  "tick-tiny-range": { tickPlacement: "labels are rounded to the default precision: \"1\" for 1.00005 (behaviour T5)" },
+  "dir-reverse": { map: "reversed directions: (xmin, ymin) is the upper right corner (behaviour S1)" },
+  "log-extra-ticks": { tickPlacement: "log labels print b^k (behaviour Q4)" },
+  "tick-majorticks": { probes: "xmajorticks=false: no x tick labels, so no x tick probe (T1)" },
+  "tick-none-lengths": { probes: "ticks=none: no tick probe (T1)", singleAxis: "two axes", tickPlacement: "ticks on the upper sides" },
+  "tick-rotated": { map: "axis cs probe over a range of 3300 carries ~1e-3 pt noise (behaviour N2)", tickPlacement: "rotated labels hang by their bounding box (T4)", probes: "glyphs of rotated labels fall outside the axis-aligned ink probe of their text boxes" },
+  "log-pgfplotsset-mode": { map: "axis cs probe over a range of 600 carries 1e-3 pt noise (behaviour N2)", tickPlacement: "same probe noise" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
   "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },

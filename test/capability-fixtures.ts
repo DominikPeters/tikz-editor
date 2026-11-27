@@ -444,6 +444,11 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
     \addplot coordinates {(1,10) (10,100)};
   \end{loglogaxis}
 \end{tikzpicture}`,
+  pgfplots_axis_lines: String.raw`\begin{tikzpicture}
+  \begin{axis}[axis lines=middle, xlabel={$x$}, ylabel={$y$}]
+    \addplot coordinates {(-1,-1) (2,3)};
+  \end{axis}
+\end{tikzpicture}`,
   pgfplots_addplot_coordinates: String.raw`\begin{tikzpicture}
   \begin{axis}
     \addplot+[only marks] coordinates {(0,1) +- (0.1,0.2) [1] (1,2)};

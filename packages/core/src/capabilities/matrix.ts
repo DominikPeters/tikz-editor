@@ -872,7 +872,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["pgfplots_axis"],
-    notes: "Linear `axis`: size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on 28 oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name; legends and `axis lines` are not drawn. Editing: selectable as one object; move writes `at=`, resize writes `width`/`height` (inverse size model), inspector sections (size, limits, labels, grid, axis lines, modes, tick distance, legend position), insert templates (test/pgfplots-editing.spec.ts)."
+    notes: "`axis` (linear; log axes: pgfplots_log_axes): size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on the oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name. Editing: move writes `at=`, resize writes `width`/`height` (inverse size model), inspector sections (size, limits, labels, grid, axis lines, modes, tick distance, legend position), insert templates (test/pgfplots-editing.spec.ts)."
   },
   pgfplots_ticks: {
     parser: "not-applicable",
@@ -880,7 +880,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_ticks"],
-    notes: "Automatic ticks (step, list, few-ticks fallback), explicit lists with `...`, `\\empty`, `data`, `xtick distance`, `xticklabels`, minor ticks, tick align/pos, tick label position, number formatting via `\\pgfmathprintnumber`, scaled ticks with the scale label (behaviour I, J, D)."
+    notes: "Automatic ticks (step, list, few-ticks fallback), explicit lists with `...`, `\\empty`, `data`, `xtick distance`, `xticklabels`, minor ticks, tick align/pos, tick label position, number formatting via `\\pgfmathprintnumber`, scaled ticks with the scale label, `extra x ticks` with labels, `xmajorticks`/`ticks=none`, `tickwidth`, rotated tick labels (behaviour I, J, D, T); `xminorticks=false` is diagnosed."
   },
   pgfplots_axis_descriptions: {
     parser: "not-applicable",
@@ -900,11 +900,19 @@ export const capabilityMatrix: CapabilityMatrix = {
   },
   pgfplots_log_axes: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
-    edit: "none",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
     fixtures: ["pgfplots_log_axes"],
-    notes: "semilogxaxis, semilogyaxis and loglogaxis parse as axes; log scaling is not implemented."
+    notes: "`semilogxaxis`, `semilogyaxis`, `loglogaxis`, `xmode=log` (from options or `every axis` styles; a bare `\\pgfplotsset{xmode=log}` has no effect, as in pgfplots): internal log coordinate, `log basis x`, enlargement in log space, non-positive points discarded, the measured automatic tick rule (decade and fractional steps), minor log ticks, `10^k`, `m·10^k` (extra ticks) and `log ticks with fixed point` labels, `xtickten`, explicit lists (behaviour Q). Bare coordinates and `axis cs` map their logarithm and dragging writes data values. Fractional-step tick positions ignore TeX's fixed-point drift (Q3b); `try min ticks log` other than 3 is diagnosed."
+  },
+  pgfplots_axis_lines: {
+    parser: "not-applicable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_axis_lines"],
+    notes: "`axis lines`, `axis x/y line` and starred variants (box, bottom/left, top/right, middle/center, none), `hide axis`, `hide x axis`, the every (non) boxed styles (centred ticks, no enlargement, stealth tips), ticks and labels on the drawn line, `hide obscured x ticks`, label placement per mode, `axis line style` and the outer/inner/x/y variants, `x dir=reverse` (behaviour R, S1). `separate axis lines=true` and `axis line shift` are diagnosed."
   },
   pgfplots_addplot_coordinates: {
     parser: "partial",

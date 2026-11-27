@@ -1,0 +1,6 @@
+% axis lines=middle: lines through 0, obscured ticks at the crossing hidden, labels at the line ends.
+\begin{tikzpicture}
+\begin{axis}[axis lines=middle, xlabel={$x$}, ylabel={$y$}]
+  \addplot+[mark=none, domain=-2:3, samples=11] {x^2/3 - 1};
+\end{axis}
+\end{tikzpicture}

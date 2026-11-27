@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "legend-style",
   "sourceSha256": "3868bb675177df8fd3435ffaa565c95d2f9401662396a472d1a42988893f6252"
@@ -966,6 +966,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     },
     "descriptions": {
      "xlabel": {

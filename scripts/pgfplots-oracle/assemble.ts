@@ -85,6 +85,11 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
   for (const { fields } of records) {
     const [kind] = fields;
     if (kind === "AXIS") current = axisOf(fields[1] ?? "?");
+    else if (kind === "MODE") {
+      const axis = axisOf(fields[1] ?? "?");
+      const mode = (v: string | undefined) => (v === "log" ? "log" : "linear");
+      axis.scale = { x: mode(fields[2]), y: mode(fields[3]) };
+    }
     else if (kind === "PAGE") page = { width: pt(fields[1]), height: pt(fields[2]), depth: pt(fields[3]) };
     else if (kind === "LIMITS") {
       const axis = axisOf(fields[1] ?? "?");
@@ -93,11 +98,13 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
       axis.limits = { xmin: Number(xmin), xmax: Number(xmax), ymin: Number(ymin), ymax: Number(ymax) };
     } else if (kind === "TICK") {
       const [, axisId = "?", letter = "?", index = "", value = ""] = fields;
+      // On a symbolic axis \tick is the name (`low`): no numeric tick record, as before harness version 4.
+      if (!Number.isFinite(Number(value)) || value.trim() === "") continue;
       const key = `${axisId}|${letter}`;
       let ticks = tickValues.get(key);
       if (!ticks) { ticks = new Map(); tickValues.set(key, ticks); }
       const previous = ticks.get(index);
-      if (previous && previous.valueRaw !== value) throw new Error(`Tick ${key}#${index} reported twice with different values (${previous.valueRaw}, ${value}).`);
+      if (previous && previous.valueRaw !== value) throw new Error(`${caseId}: tick ${key}#${index} reported twice with different values (${previous.valueRaw}, ${value}).`);
       ticks.set(index, { index: Number(index), value: Number(value), valueRaw: value });
     } else if (kind === "A") {
       const [, group = "", node = "", anchor = "", x, y] = fields;
@@ -115,7 +122,18 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
     const r00 = corner("r00"); const r10 = corner("r10"); const r01 = corner("r01"); const r11 = corner("r11");
     if (r00 && r10 && r01 && r11) axis.rect = { r00, r10, r01, r11 };
     const d00 = corner("d00"); const d10 = corner("d10"); const d01 = corner("d01");
-    if (d00 && d10 && d01) {
+    const logAxis = axis.scale !== undefined && (axis.scale.x === "log" || axis.scale.y === "log");
+    if (logAxis && axis.rect && axis.limits) {
+      // The axis cs probe takes data values, but the limits of a log direction
+      // are logarithms: the map (in internal coordinates) comes from the
+      // rectangle and the limits instead, and the limit corners are its images.
+      const { xmin, xmax, ymin, ymax } = axis.limits;
+      const { r00: o0, r10: ox, r01: oy } = axis.rect;
+      const xUnit = { x: (ox.x - o0.x) / (xmax - xmin), y: (ox.y - o0.y) / (xmax - xmin) };
+      const yUnit = { x: (oy.x - o0.x) / (ymax - ymin), y: (oy.y - o0.y) / (ymax - ymin) };
+      axis.map = { origin: { x: o0.x - xmin * xUnit.x - ymin * yUnit.x, y: o0.y - xmin * xUnit.y - ymin * yUnit.y }, xUnit, yUnit };
+      axis.limitCorners = { d00: { ...o0 }, d10: { ...ox }, d01: { ...oy } };
+    } else if (d00 && d10 && d01) {
       axis.limitCorners = { d00, d10, d01 };
       if (axis.limits) {
         const { xmin, xmax, ymin, ymax } = axis.limits;
@@ -124,14 +142,15 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
         axis.map = { origin: { x: d00.x - xmin * xUnit.x - ymin * yUnit.x, y: d00.y - xmin * xUnit.y - ymin * yUnit.y }, xUnit, yUnit };
       }
     }
-    for (const letter of ["x", "y"] as const) {
-      const ticks = tickValues.get(`${axis.id}|${letter}`);
+    for (const [letter, probeLetter] of [["x", "x"], ["y", "y"], ["xExtra", "xe"], ["yExtra", "ye"]] as const) {
+      const ticks = tickValues.get(`${axis.id}|${probeLetter}`);
       if (!ticks) continue;
       axis.ticks ??= { x: [], y: [] };
+      const list = (axis.ticks[letter] ??= []);
       for (const tick of [...ticks.values()].sort((a, b) => a.index - b.index)) {
-        const anchors = named(`${letter}${tick.index}`);
+        const anchors = named(`${probeLetter}${tick.index}`);
         if (anchors) tick.label = { anchors };
-        axis.ticks[letter].push(tick);
+        list.push(tick);
       }
     }
     for (const kind of ["title", "xlabel", "ylabel", "legend"] as const) {
@@ -257,6 +276,8 @@ export function assembleTier2(page: MutoolPage, tier1: Tier1, rawBoxes: RawTextB
       ...Object.values(axis.descriptions ?? {}),
       ...(axis.ticks?.x ?? []).flatMap((t) => (t.label ? [t.label] : [])),
       ...(axis.ticks?.y ?? []).flatMap((t) => (t.label ? [t.label] : [])),
+      ...(axis.ticks?.xExtra ?? []).flatMap((t) => (t.label ? [t.label] : [])),
+      ...(axis.ticks?.yExtra ?? []).flatMap((t) => (t.label ? [t.label] : [])),
     ];
     for (const node of nodes) {
       const quad = nodeQuad(node);

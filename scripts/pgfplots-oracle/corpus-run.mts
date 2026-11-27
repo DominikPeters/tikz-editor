@@ -15,7 +15,7 @@
  * checkout's absolute path). Output: `<corpus-root>/editor-run.json` (or
  * `--out`) and a summary on stdout.
  */
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 
 import type { DocumentGraphicsResolver } from "../../packages/core/src/graphics/types.js";
@@ -80,6 +80,7 @@ function corpusFiles(paper: string, snippet: string): DocumentGraphicsResolver {
 
 const textEngine = await createTexNodeTextEngine();
 const files = walk(corpus).sort();
+let logSnippets = 0; let logEvaluated = 0; let logClean = 0;
 let axes = 0; let clean = 0; let threw = 0; let parsed = 0; let noAxis = 0;
 const parseErrorFiles: string[] = [];
 const byFeature = new Map<string, Set<string>>();
@@ -95,6 +96,11 @@ for (const file of files) {
     const axisCount = (source.match(/\\begin\{(?:axis|semilogxaxis|semilogyaxis|loglogaxis)\}/gu) ?? []).length;
     axes += axisCount;
     if (evaluations.length === 0) noAxis += 1;
+    const isLog = /\\begin\{(?:semilogxaxis|semilogyaxis|loglogaxis)\}|\b[xy]mode\s*=\s*log\b/u.test(source);
+    if (isLog) logSnippets += 1;
+    // Older evaluators record no mode: an evaluation without one is not a log axis.
+    const evaluatedLog = evaluations.some((e) => (e.model.x as { mode?: string }).mode === "log" || (e.model.y as { mode?: string }).mode === "log");
+    if (isLog && evaluatedLog) logEvaluated += 1;
     const features = new Set<string>();
     for (const d of result.semantic.diagnostics) {
       const f = feature(d.code, d.message);
@@ -109,7 +115,7 @@ for (const file of files) {
       byFeature.get(f)?.add(paper);
       occurrences.set(f, (occurrences.get(f) ?? 0) + 1);
     }
-    if (features.size === 0 && evaluations.length === axisCount) clean += axisCount;
+    if (features.size === 0 && evaluations.length === axisCount) { clean += axisCount; if (isLog && evaluatedLog) logClean += 1; }
   } catch (error) {
     threw += 1;
     failures.push({ file, error: error instanceof Error ? `${error.message}\n${error.stack ?? ""}`.slice(0, 600) : String(error) });
@@ -118,8 +124,11 @@ for (const file of files) {
 const papers = new Set(files.map((f) => f.slice(corpus.length + 1).split("/")[0]));
 const ranked = [...byFeature].map(([name, set]) => ({ name, papers: set.size, snippets: occurrences.get(name) ?? 0 })).sort((a, b) => b.papers - a.papers || b.snippets - a.snippets);
 const parseErrorPapers = new Set(parseErrorFiles.map((f) => f.split("/")[0]));
-writeFileSync(outArgument ? resolve(outArgument) : join(corpusRoot, "editor-run.json"), JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, parseErrorFiles, ranked, failures }, null, 2));
+const outPath = outArgument ? resolve(outArgument) : join(corpusRoot, "editor-run.json");
+mkdirSync(dirname(outPath), { recursive: true });
+writeFileSync(outPath, JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, parseErrorFiles, logSnippets, logEvaluated, logClean, ranked, failures }, null, 2));
 console.log(`snippets ${files.length} (papers ${papers.size}), axes ${axes}, rendered without unsupported diagnostics: ${clean}, threw: ${threw}, snippets with no axis evaluated: ${noAxis}`);
 console.log(`snippets with parse errors: ${parseErrorFiles.length} (papers ${parseErrorPapers.size})`);
+console.log(`log-axis snippets ${logSnippets}: evaluated as log ${logEvaluated}, of which without unsupported diagnostics ${logClean}`);
 for (const row of ranked.slice(0, 40)) console.log(`${String(row.papers).padStart(4)} papers ${String(row.snippets).padStart(4)} snippets  ${row.name}`);
 for (const f of failures.slice(0, 5)) console.log("THREW", f.file, f.error);

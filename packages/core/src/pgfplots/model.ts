@@ -32,7 +32,9 @@ export type TickListSpec =
   | { kind: "auto" }
   | { kind: "empty" }
   | { kind: "data" }
-  | { kind: "list"; raw: string };
+  | { kind: "list"; raw: string }
+  /** `xtickten`: exponents. */
+  | { kind: "ten"; raw: string };
 
 export type AxisDirectionModel = {
   min?: number;
@@ -57,6 +59,33 @@ export type AxisDirectionModel = {
   tryMinTicks: number;
   /** `x=<length>`: the unit vector length (behaviour A3). */
   unit?: number;
+  /** `xmode` (behaviour Q1): `log` from the environment or the key. */
+  mode: "linear" | "log";
+  /** `log basis x`: undefined = natural log internally, base 10 for display (manual tickoptions.tex). */
+  logBasis?: number;
+  /** The `log basis x` text as written, for labels (`2^{3}`). */
+  logBasisText?: string;
+  /** `log ticks with fixed point` (manual numberformatting.tex). */
+  logTicksFixedPoint: boolean;
+  /**
+   * `axis x line` (manual axisdescription.tex): where the line of this
+   * direction is drawn — both box edges, the lower (bottom/left) or upper
+   * (top/right) edge, through the other direction's 0 (`middle`/`center`),
+   * or not at all (`none`, `hide x axis`). Behaviour R1.
+   */
+  axisLine: "box" | "lower" | "upper" | "middle" | "none";
+  /** The unstarred key moves the axis label (R6); `axis x line*` does not. */
+  axisLineMovesLabel: boolean;
+  /** `xmajorticks`, `xminorticks`, `ticks=` (manual tickoptions.tex, initially true): draw the tick marks. */
+  majorTickMarks: boolean;
+  minorTickMarks: boolean;
+  /** `x dir=reverse` (manual specifyrange.tex, S1). */
+  reverse: boolean;
+  /** `hide obscured x ticks` (initially true, R4). */
+  hideObscuredTicks: boolean;
+  /** `extra x ticks`, `extra x tick labels` (manual tickoptions.tex). */
+  extraTicks?: TickListSpec;
+  extraTickLabels?: string[];
   /** `symbolic x coords={a,b,c}`: the names, mapped to 0, 1, 2 (behaviour X1). */
   symbolic?: string[];
 };
@@ -238,7 +267,15 @@ function direction(): AxisDirectionModel {
     scaledTicks: true,
     labelShift: 0,
     maxSpaceBetweenTicks: 35,
-    tryMinTicks: 4
+    tryMinTicks: 4,
+    mode: "linear",
+    logTicksFixedPoint: false,
+    axisLine: "box",
+    reverse: false,
+    majorTickMarks: true,
+    minorTickMarks: true,
+    axisLineMovesLabel: false,
+    hideObscuredTicks: true
   };
 }
 
@@ -358,7 +395,7 @@ function readTickList(value: string | null): TickListSpec {
   return { kind: "list", raw: text };
 }
 
-type Ctx = { model: AxisModel };
+type Ctx = { model: AxisModel; expandStyle: (name: string) => void; use?: PgfplotsKeyUse };
 
 type KeyHandler = (ctx: Ctx, value: string | null, use: PgfplotsKeyUse) => boolean;
 
@@ -389,6 +426,8 @@ defineAxisKey("clip", (ctx, v) => { const b = readBoolean(v); if (b === null) re
 defineAxisKey("axis on top", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.axisOnTop = b; return true; });
 defineAxisKey("title", (ctx, v, use) => { ctx.model.title = { text: stripBraces(v ?? ""), span: use.origin.span }; return true; });
 defineAxisKey("every axis title shift", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.titleShift = n; return true; });
+defineAxisKey("tickwidth", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.majorTickLength = n; return true; });
+defineAxisKey("subtickwidth", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.minorTickLength = n; return true; });
 defineAxisKey("major tick length", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.majorTickLength = n; return true; });
 defineAxisKey("minor tick length", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.minorTickLength = n; return true; });
 defineAxisKey("compat", () => true);
@@ -487,7 +526,88 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`${letter}ticklabel pos`, forAxes(letter, (d, v) => setTickLabelPos(d, letter, v)));
   defineAxisKey(`scaled ${letter} ticks`, forAxes(letter, (d, v) => setScaledTicks(d, v)));
   defineAxisKey(letter, (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; dir(ctx).unit = n; return true; });
+  defineAxisKey(`${letter}mode`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text === "log") dir(ctx).mode = "log";
+    else if (text === "normal" || text === "linear") dir(ctx).mode = "linear";
+    else return false;
+    return true;
+  });
+  defineAxisKey(`log basis ${letter}`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text === "") { delete dir(ctx).logBasis; delete dir(ctx).logBasisText; return true; }
+    const n = readPgfNumber(text);
+    if (n === null || !(n > 0) || n === 1) return false;
+    dir(ctx).logBasis = n; dir(ctx).logBasisText = text;
+    return true;
+  });
+  // `xtickten={1,2}` = `xtick={1e1,1e2}` (in the log basis when one is set; manual tickoptions.tex).
+  defineAxisKey(`${letter}tickten`, (ctx, v) => { dir(ctx).ticks = { kind: "ten", raw: stripBraces(v ?? "") }; return true; });
+  defineAxisKey(`extra ${letter} ticks`, (ctx, v) => { dir(ctx).extraTicks = readTickList(v); return true; });
+  defineAxisKey(`extra ${letter} tick labels`, (ctx, v) => { dir(ctx).extraTickLabels = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces); return true; });
 }
+/** `axis x line(*)=…` (R1): `bottom`/`left` → lower, `top`/`right` → upper. */
+function readAxisLine(letter: "x" | "y", v: string | null): AxisDirectionModel["axisLine"] | null {
+  const text = stripBraces(v ?? "");
+  if (text === "box") return "box";
+  if (text === "middle" || text === "center") return "middle";
+  if (text === "none") return "none";
+  if (letter === "x" ? text === "bottom" : text === "left") return "lower";
+  if (letter === "x" ? text === "top" : text === "right") return "upper";
+  return null;
+}
+function setAxisLine(ctx: Ctx, letter: "x" | "y", line: AxisDirectionModel["axisLine"], starred: boolean): void {
+  const dir = ctx.model[letter];
+  dir.axisLine = line;
+  dir.axisLineMovesLabel = !starred && line !== "box";
+  // The unstarred key is a style: it also installs `every (non) boxed x axis` (manual).
+  if (!starred && line !== "none") ctx.expandStyle(line === "box" ? `every boxed ${letter} axis` : `every non boxed ${letter} axis`);
+}
+for (const letter of ["x", "y"] as const) {
+  for (const starred of [false, true]) {
+    defineAxisKey(`axis ${letter} line${starred ? "*" : ""}`, (ctx, v) => { const line = readAxisLine(letter, v); if (!line) return false; setAxisLine(ctx, letter, line, starred); return true; });
+  }
+  defineAxisKey(`hide ${letter} axis`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; if (b) setAxisLine(ctx, letter, "none", true); return true; });
+  defineAxisKey(`hide obscured ${letter} ticks`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model[letter].hideObscuredTicks = b; return true; });
+}
+for (const starred of [false, true]) {
+  defineAxisKey(`axis lines${starred ? "*" : ""}`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    const x = readAxisLine("x", text === "left" ? "bottom" : text === "right" ? "top" : text);
+    const y = readAxisLine("y", text);
+    if (!x || !y) return false;
+    setAxisLine(ctx, "x", x, starred);
+    setAxisLine(ctx, "y", y, starred);
+    return true;
+  });
+}
+for (const letter of ["x", "y"] as const) {
+  defineAxisKey(`${letter}majorticks`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model[letter].majorTickMarks = b; return true; });
+  // Measured (T1): `yminorticks=false` left the minor ticks of `minor tick num` drawn; not understood, so diagnosed.
+  defineAxisKey(`${letter}minorticks`, (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (!b) ctx.model.unsupported.push({ key: `${letter}minorticks`, span: use.origin.span }); return true; });
+}
+for (const letter of ["x", "y"] as const) {
+  defineAxisKey(`${letter} dir`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text !== "normal" && text !== "reverse") return false;
+    ctx.model[letter].reverse = text === "reverse";
+    return true;
+  });
+}
+defineAxisKey("ticks", (ctx, v) => {
+  const text = stripBraces(v ?? "");
+  const major = text === "major" || text === "both"; const minor = text === "minor" || text === "both";
+  if (!major && !minor && text !== "none") return false;
+  // Only the major part is measured (T1); `minor`/`none` leave minor ticks as they are.
+  for (const d of [ctx.model.x, ctx.model.y]) d.majorTickMarks = major;
+  return true;
+});
+defineAxisKey("hide axis", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; if (b) { setAxisLine(ctx, "x", "none", true); setAxisLine(ctx, "y", "none", true); } return true; });
+// `separate axis lines` (initially false): only the closed-box default is implemented.
+defineAxisKey("separate axis lines", (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (b) ctx.model.unsupported.push({ key: "separate axis lines", span: use.origin.span }); return true; });
+defineAxisKey("log ticks with fixed point", (ctx, v) => { if (v !== null) return false; ctx.model.x.logTicksFixedPoint = true; ctx.model.y.logTicksFixedPoint = true; return true; });
+// Only the documented initial value is implemented (behaviour Q3: its effect on the step rule is OPEN).
+defineAxisKey("try min ticks log", (_ctx, v) => v !== null && readPgfNumber(v) === 3);
 defineAxisKey("enlargelimits", forAxes("xy", (d, v) => { const e = readEnlarge(v); if (!e) return false; d.enlarge = e; return true; }));
 defineAxisKey("minor tick num", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n < 0) return false; d.minorTickNum = Math.round(n); return true; }));
 defineAxisKey("tick align", forAxes("xy", (d, v) => setTickAlign(d, v)));
@@ -651,7 +771,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     tableKeys: [],
     legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
-  const ctx: Ctx = { model };
+  const ctx: Ctx = { model, expandStyle: () => { /* replaced below, once the sink exists */ } };
   const sink = (use: PgfplotsKeyUse): void => {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
@@ -686,10 +806,18 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     model.tikzOptions.push(use);
   };
   const problems = (problem: { key: string; span: Span }) => model.unsupported.push({ key: problem.key, span: problem.span });
+  // Styles a key installs immediately (`axis x line` → `every non boxed x axis`), expanded in place.
+  ctx.expandStyle = (name) => { expandPgfplotsOptions(styles.get(name) ?? [], styles, sink, { onProblem: problems }); };
   expandPgfplotsOptions(input.settings, styles, (use) => {
     // Settings outside an axis only define defaults: axis keys there apply to every axis.
     sink(use);
   }, { onProblem: problems });
+  // Every axis environment sets both modes at its start (manual
+  // axis-addplot.tex: the log environments are `xmode=log`/`ymode=log`), after
+  // the `\pgfplotsset` defaults: a bare `\pgfplotsset{xmode=log}` before an
+  // `axis` changes nothing (behaviour Q1); `every axis` styles and options can.
+  model.x.mode = input.axis.environment === "semilogxaxis" || input.axis.environment === "loglogaxis" ? "log" : "linear";
+  model.y.mode = input.axis.environment === "semilogyaxis" || input.axis.environment === "loglogaxis" ? "log" : "linear";
   // `every axis` (and its variants) is applied at the start of each axis.
   const environmentStyle = input.axis.environment === "axis" ? "every linear axis"
     : input.axis.environment === "semilogxaxis" ? "every semilogx axis"

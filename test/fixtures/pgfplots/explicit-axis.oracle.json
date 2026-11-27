@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "explicit-axis",
   "sourceSha256": "54f87e96a712d4e0717c307be5c6b0eb3796d865dea3536d7eb2c6e7c6132c17"
@@ -966,6 +966,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     },
     "descriptions": {
      "title": {

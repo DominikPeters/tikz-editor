@@ -68,6 +68,19 @@ for (const a of ["x", "y", "z"]) {
   });
 }
 
+/**
+ * Short keys appending to several styles (manual axisdescription.tex, "Axis
+ * Lines"): `axis line style` to all four axis line styles, `x axis line
+ * style` to both x ones, `inner/outer axis line style` to both directions.
+ */
+const MULTI_STYLE_KEYS: Record<string, readonly string[]> = {
+  "axis line style": ["every outer x axis line", "every inner x axis line", "every outer y axis line", "every inner y axis line"],
+  "inner axis line style": ["every inner x axis line", "every inner y axis line"],
+  "outer axis line style": ["every outer x axis line", "every outer y axis line"],
+  "x axis line style": ["every outer x axis line", "every inner x axis line"],
+  "y axis line style": ["every outer y axis line", "every inner y axis line"]
+};
+
 /** The styles pgfplots defines, with their documented initial values (manual styleoptions.tex). */
 const INITIAL_STYLES: Record<string, string> = {
   "every axis": "",
@@ -108,6 +121,15 @@ const INITIAL_STYLES: Record<string, string> = {
   "every major x grid": "",
   "every major y grid": "",
   "every mark": "",
+  // Axis lines (manual axisdescription.tex): the documented defaults.
+  "every outer x axis line": "",
+  "every outer y axis line": "",
+  "every inner x axis line": "",
+  "every inner y axis line": "",
+  "every boxed x axis": "",
+  "every boxed y axis": "",
+  "every non boxed x axis": "xtick align=center,enlarge x limits=false,x axis line style={-stealth}",
+  "every non boxed y axis": "ytick align=center,enlarge y limits=false,y axis line style={-stealth}",
   "every node near coord": "",
   "axis background": ""
 };
@@ -173,11 +195,13 @@ export function expandPgfplotsOptions(
         }
         continue;
       }
-      const shortTarget = SHORT_STYLE_KEYS[key];
+      const shortTarget = SHORT_STYLE_KEYS[key] ?? MULTI_STYLE_KEYS[key];
       if (shortTarget !== undefined && value !== null) {
         const parsed = parseStyleValueAsOptionList(value, entry.kind === "kv" ? entry.valueSpan?.from ?? 0 : 0);
-        if (parsed) registry.set(shortTarget, [...(registry.get(shortTarget) ?? []), parsed]);
-        options.onStyleDefinition?.(shortTarget, { key, value, origin: outer });
+        for (const target of typeof shortTarget === "string" ? [shortTarget] : shortTarget) {
+          if (parsed) registry.set(target, [...(registry.get(target) ?? []), parsed]);
+          options.onStyleDefinition?.(target, { key, value, origin: outer });
+        }
         continue;
       }
       const style = registry.get(key);

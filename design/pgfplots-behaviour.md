@@ -612,6 +612,127 @@ editor's text engine has the font. Found on the way:
 
 ---
 
+## Q. Log axes
+
+Experiments E16–E20 (`e16-log-explore.mts`, `e17-log-ticks.mts <sweep> [seed]`
+with checker `check-log-ticks.py`, `e18-log-probe.mts`, `e19-log-bisect.mts`,
+`e20-log-minor-bisect.mts`), fixtures `log-*`. Harness version 3 records
+the scale per direction; on a log direction Tier 1 limits, `\tick` and the
+map are internal coordinates (below).
+
+**Q1 — Internal coordinate and modes.** A log direction works in the
+logarithm of the data value: natural log by default, log_b with
+`log basis x=b`. `\pgfkeysvalueof{/pgfplots/xmin}` and `\tick` are that
+logarithm (e.g. `xmin=1e-10` reads −23.02582; with `log basis x=2`,
+`xmax=64` reads 6.00073, i.e. TeX's fixed-point ln 2 — 0.024 pt on a 195 pt
+axis, not emulated). The data-to-canvas map is B1 applied to internal
+coordinates. `semilogxaxis`/`semilogyaxis`/`loglogaxis` are `xmode`/`ymode`
+`=log` (manual axis-addplot.tex); **every axis environment sets both modes
+at its start**, after `\pgfplotsset` defaults: a bare
+`\pgfplotsset{xmode=log}` before `\begin{axis}` changes nothing (fixture
+log-pgfplotsset-mode: the x axis stays linear on [−51.1, 550.1]), while
+`every axis/.append style={xmode=log}` and axis options do (log-xmode-discard).
+`\pgfkeysvalueof{/pgfplots/xmode}` has no stored value (reads `\pgfkeys@relax`).
+CONFIRMED (manual + 3 fixtures, exact).
+
+**Q2 — Limits.** Automatic limits and `enlargelimits` (H1) act on internal
+coordinates: data 1…1000 → ln range [0, 6.90775] → enlarged
+[−0.69081, 7.59856] (E16 `ll-1-1000`; fixtures log-loglog-default,
+log-semilogy-grid, log-xmode-discard to < 0.003 pt). A point whose
+coordinate on a log direction is ≤ 0 is discarded as a whole (also its other
+coordinate drops out of the other direction's range: E16 `sy-neg` x range
+from the kept points only), and the line joins its neighbours
+(`unbounded coords=discard`, initially; log-xmode-discard Tier 2).
+`enlarge x limits={abs=v}` adds log v (manual specifyrange.tex,
+"multiplicatively"; implemented, not measured). Degenerate ranges on log
+axes: not measured. CONFIRMED/OBSERVED.
+
+**Q3 — Automatic ticks** (display exponents d = internal/ln 10, or the
+internal value itself when `log basis` is set; lo, hi the limits in d; L the
+axis length; f = floor(L / `max space between ticks`)):
+```
+R     = hi − lo + δ                δ = 0.001 internal units (0.000434 decades)
+k     = max(1, floor(R / max(f, 2)))
+s     = floor(lo') + 1             lo' = lo nudged away from 0 (exact decades: 1e2 → 2, 1e-3 → below −3)
+c     = #{ s + j·k ≤ hi + δ, j ≥ 0 }
+if c ≥ (k = 1 ? 2 : 3):            decade mode
+   k ≥ 2: ticks s + j·k inside [lo − tol, hi + tol], \ticknum j (from 0).
+          The decade at an exact positive lower limit is skipped (lo = 0 → 1, 1+k, …).
+   k = 1: every integer d inside [lo − tol, hi + tol]
+else:                               fractional mode
+   step = nice(R / max(f − 1, 2))   nice: {1,2,5}·10^n with thresholds 1.5/3.5/7.5 (as I1)
+   while #{j : trunc(lo/step) ≤ j, j·step ≤ hi} < 2: step = next smaller nice value (as I1b)
+   ticks j·step inside [lo − tol, hi + tol]
+\ticknum (k = 1 and fractional) = j − floor(lo'/step)
+```
+tol = 0.05 pt in internal units (D3). Thresholds bisected (E19, 16
+transitions at L = 120, 195, 300): fractional steps switch at
+R·(f−1)^{-1} = 1.5/3.5/7.5·10^n, decade mode starts where c reaches 2
+(L = 195: R = 2), integer k at R = n·k (195 pt: 10, 15 …; 300 pt: 16); every
+transition sits 0.00043 decades = 0.001 internal units early (δ). The
+manual's prose ("if log plots contain just one (or two) positions 10^i …
+feasible step sizes as in the linear case", tickoptions.tex) is the
+fractional mode; the c ≥ 2 / c ≥ 3 acceptance and s = floor(lo')+1 are
+undocumented. `try min ticks` (linear) has no effect on log directions.
+Discovery: E17 `range`, `offset`, `length`, `smallL` (1162 axes), fresh
+validation: E17 `random` seed 1 (326 axes, L 25–625, exponents ±30, R 0.05–60)
+and `msbt` seed 2 (249 axes, msbt 20–100, try min ticks 2–8): **0 mismatches in
+decade mode; 19 of 575 axes in fractional mode differ** — all by the
+fixed-point drift of Q3b (an edge tick in or out, `\ticknum` shifted by
+it). VERIFIED for decade mode; step choice VERIFIED for fractional mode,
+tick values approximate (Q3b).
+- **Q3b — Fractional-step drift (OPEN).** TeX's fractional ticks are not exact
+  multiples: tick_j = d₀(1+ε) + j·step·ln10 with `step·ln10` rounded to 5
+  decimals (0.02 → 0.04605) and an offset growing with |d|: ε ≈ +2e-4
+  (step 0.02), +6e-5 (0.05, 0.1), −1.7e-5 (0.2), −5.6e-4 (0.01), ~0 (0.5);
+  e.g. 10^{8.14} sits at d = 8.14172 (`h.tex` probe: `\tick` 18.747 for
+  8.14·ln 10 = 18.7430). Not emulated: on fixtures with |d| ≲ 1 it stays
+  below 0.01 pt (log-small-range); at |d| ≈ 10 a narrow axis is off by up to
+  ~1 pt. The cause looks like pgfplots' fixed-point arithmetic; pgfmath
+  candidates (`10^…`, `exp`, `ln`) did not reproduce it.
+- **Q3c — `try min ticks log`** (manual, initially 3) changes the fractional
+  step in a way not yet captured (E17 `tmtlog` seed 3: with 5 the effective
+  divisor is 3 at f = 3; with 7 it is 5; with 2 it is 1 at f = 1). OPEN;
+  the evaluator implements only the initial value and diagnoses others.
+
+**Q4 — Minor ticks and labels.** In decade mode with k = 1 and display
+basis 10, minor ticks are at d = i + log10(m), m = 1…9 (m = 1 coincides
+with a major tick and is drawn as a minor mark too), for decades
+i = floor(lo') … floor(hi + δ + 0.5) − 1, inside [lo − tol, hi + tol]: the
+decade above the last major tick gets its minor ticks only when
+hi + δ ≥ last + 0.5 (E20, bisected at 6 configurations to 1e-5: always
+last + 0.49958). No minor ticks in fractional mode, for k ≥ 2, with
+`log basis x=2`, or for explicit tick lists. `minor tick num` does not apply
+(manual tickoptions.tex). Labels: `$10^{\pgfmathprintnumber{d}}$` (manual
+numberformatting.tex, `log number format basis`), `$b^{…}$` with
+`log basis x=b`; explicit values print their exponent (`xtick={5}` →
+10^{0.7}). `log ticks with fixed point` prints the value in fixed notation
+(1, 10, 1,000; 0.01) — log-explicit-ticks. Grids on log axes use the same
+major/minor positions (log-semilogy-grid). VERIFIED on E17 (minor counts in
+all sweeps, same pass rate as Q3) and the fixtures.
+
+**Q5 — Coordinates in a log axis.** `axis cs:` and bare coordinates take
+data values; their logarithm goes through the map (log-explicit-ticks: a
+`\draw` from (10,0.1) and a node at `axis cs:300,0.05`, Tier 2 exact). The
+`origin` anchor of a log direction is internal 0 (data 1) **not** clamped
+into the box (log-small-range: origin at (−97.48, −77.29), 97 pt outside;
+its four projections lie on the box edges as in A7a). CONFIRMED on 2
+fixtures.
+
+**Q6 — Expression plots** on a log y direction sample x linearly over
+`domain` (log-semilogy-grid, Tier 2 path exact). On a log x direction the
+samples are also taken linearly in x and then mapped (implemented, not
+separately measured).
+
+**Q7 — Bars and `\closedcycle` on a log direction** start at internal 0
+(data 1), **not** clamped into the limits: fixture log-bars-base (ybar and
+an area on `semilogyaxis`, limits 10^0.5…10^2.9) puts the base 21.83 pt below
+the box, where data 1 lies, clipped by the axis clip. This is `log origin=0`,
+the default since compat 1.5 (manual preliminaries.tex; the reference entry
+still says `infty`). On linear directions the base stays 0 clamped (U1/W1).
+Stacked plots on log axes (sums of logarithms) are not handled. CONFIRMED on
+the fixture (Tier 2 exact).
+
 ## M. Function plots (2026-11-27)
 
 Experiment `e16-functions.mts` (sets `a` discovery, `b` fresh): one
@@ -858,6 +979,139 @@ widening `originProjectionPt`.
 
 **Not done.** `cycle multi list`, `mark list*` (half marks), `mark=text`
 (`mark list` entries 9–10), `every axis plot` interactions with `\addplot3`.
+
+---
+
+## R. Axis lines
+
+Experiment E21 (`e21-axis-lines.mts`, 30 variants: `e21-base`, `e21-labels`),
+fixtures `axis-lines-*` (7, all Tier 1 and Tier 2 exact at the design
+tolerances). Manual: axisdescription.tex "Axis Lines".
+
+**R1 — Keys.** `axis lines=v` = `axis x line=vx, axis y line=vy` with
+left → (bottom, left), right → (top, right), middle/center → (middle,
+middle), box, none. `axis x line=none` = `hide x axis`; `hide axis` hides
+both. A hidden direction draws no line, no ticks, no tick labels and no axis
+label (E21 c12/c13, axis-lines-hide: the picture is only the plot marks).
+The unstarred keys also install `every non boxed x axis` (documented
+initial value `xtick align=center, enlarge x limits=false, x axis line
+style={-stealth}`) or `every boxed x axis` (empty), in place, so later
+options override them; the starred keys do not (E21 c7/c8: starred lines
+keep enlargement and inside ticks). CONFIRMED.
+
+**R2 — Lines.** `bottom`/`left` lie on the lower limit, `top`/`right` on
+the upper limit, `middle` on the other direction's 0, or its lower limit when
+0 is outside the limits (manual; axis-lines-center-offset). Each line spans
+the whole box side. Painted where the box is (C1: after the ticks): with
+both directions boxed, the one closed box path (C2); with one direction
+boxed and the other hidden, one path of the box with the hidden sides
+skipped by moves, `M(x0,y0) L(x0,y1) M(x1,y1) L(x1,y0) M(x0,y0) Z` for
+`hide x axis`; otherwise one path per line, x lines first (a boxed
+direction gives two lines, lower then upper). Styles: `every outer x axis
+line` for edge lines, `every inner x axis line` for `middle`; `axis line
+style` appends to all four, `x axis line style` to both x ones.
+`-stealth` is PGF's legacy `stealth` arrow (pgfcorearrows.code.tex): with
+d = 0.28pt + 0.3 × line width, the line is shortened by 5d and the tip is
+the filled, unclosed path (T), (T−8d, 4d), (T−5d, 0), (T−8d, −4d) — at 0.4 pt
+exactly the measured (195.0,0) (191.8,1.6) (193.0,0) (191.8,−1.6). The
+editor drew arrows.meta `Stealth` for it; fixed in the TikZ arrow code.
+Arrow tips count for the bounding box with their extent. CONFIRMED (E21,
+fixtures; Tier 2 exact).
+
+**R3 — Ticks.** With a single line (lower/upper/middle), the ticks of that
+direction are drawn once, on the line, centred by the non-boxed style
+(±2.134 pt); with `inside` (starred) they point into the box (upward and
+rightward for middle). Tick labels hang on the line with the D1 rule
+(anchor north/east below/left for lower and middle lines, south/west for
+upper ones, shifted by the centred half length). OBSERVED (E21 all
+variants, fixtures).
+
+**R4 — Obscured ticks.** `hide obscured x ticks` (initially true): the
+ticks (marks and labels) of a `middle` line at the position where the other
+line crosses it are removed — 0 on both axes for `axis lines=middle`, the
+lower limits when 0 is outside, x = xmax for x middle with y right. Ticks of
+edge lines are never removed (E21 c1, c7). `=false` keeps them.
+OBSERVED (E21 c2, c3, c6, c7, c11, labels/c11).
+
+**R5 — Labels.** Edge lines: `xlabel` near the tick labels on the line's
+side — E1 below for bottom, mirrored above the top tick labels (anchor south
+at their top edge) for top; `ylabel` E2 left, mirrored for right (rotate 90,
+anchor north at the right edge of the tick labels). Unstarred middle:
+`xlabel` at `right of origin`, anchor south east (at `left of origin`,
+south west, when the y line is on the right — manual); `ylabel` at `above
+origin`, anchor north west, **not rotated** (measured; the manual shows only
+the x case). Starred middle: labels stay E1/E2 relative to the tick labels at
+the line. The title stays at E3. The label of a box axis with `xtick
+pos=upper` also moves above its tick labels (tick-none-lengths).
+Harness: the middle styles redefine `every axis x label` with `.style`,
+which dropped the probe's `name=` (now appended in `every axis post`).
+OBSERVED (E21 labels, fixtures).
+
+Not done: `separate axis lines=true` (diagnosed), `axis line shift`,
+`every boxed`/`non boxed` for z, the y label for `middle` with an x line on
+top.
+
+## S. Axis scaling and direction
+
+**S1 — `x dir=reverse`** (manual specifyrange.tex): the map runs from the
+upper limit at the lower box edge (x canvas = x1 − W·(x − xmin)/(xmax − xmin));
+limits, ticks, tick labels follow the map, descriptions stay where they
+are. CONFIRMED (fixture dir-reverse, both directions reversed, with an
+`axis cs` node; exact).
+
+Not done: `axis equal`, `axis equal image`, `unit vector ratio(*)`, `scale
+mode`, `unit rescale keep size`, H4 (`enlargelimits={abs=<dimen>}`)
+exactness.
+
+## T. Tick variants
+
+Fixtures `tick-extra`, `tick-majorticks`, `tick-none-lengths`,
+`tick-rotated`, `log-extra-ticks` (all exact).
+
+**T1 — Major tick switches.** `xmajorticks=false` removes the major tick
+lines **and their labels** (tick-majorticks: no x labels, the bounding box
+shrinks to the box edge); `ticks=none` likewise for both directions, and an
+xlabel then hangs on the box edge (y0 − s). `yminorticks=false` left the
+minor ticks of `minor tick num=1` drawn in the same fixture — not
+understood; the evaluator diagnoses `xminorticks=false` instead of guessing.
+`tickwidth`/`subtickwidth` are `major/minor tick length`. CONFIRMED/OPEN.
+
+**T2 — Extra ticks.** `extra x ticks` are major-length marks on the same
+edges as the major ticks, labelled like major ticks (or by `extra x tick
+labels` in list order), numbered from 0 in list order, and painted **after
+all major tick labels**: extra x marks, extra x labels, extra y marks,
+extra y labels (tick-extra Tier 2 order). On log axes the initial `every
+extra x tick` style (`log identify minor tick positions=true`) labels
+m·10^k as `$m\cdot 10^{k}$` (log-extra-ticks: 3·10^1, 3·10^2). A uniform
+`xtickten` list (one decade apart) keeps the minor log ticks. Harness:
+extra tick labels also carry the major tick label style, so the probe now
+silences the major probe once `every extra x tick` is installed.
+CONFIRMED (manual + fixtures).
+
+**T3 — Tick label positions** follow `xtick pos` (labels on the upper
+edge when the ticks are only there) and `xticklabel pos`; the xlabel follows
+them (R5). OBSERVED (tick-none-lengths).
+
+**T4 — Rotated tick labels.** The document's `xticklabel style` comes after
+the default placement (`anchor=near ticklabel`), so its `anchor` wins
+(tick-rotated: `rotate=90, anchor=east` puts the east anchor on the tick at
+the box edge). A rotated label without an anchor hangs by the edge of the
+canvas bounding box of its rotated node (outer sep included) facing the
+axis, centred on the tick (`rotate=45` y labels: the box's right edge at the
+tick, centre at the tick height; not the 315° border anchor, which is
+0.51 pt off). The xlabel distance (E1) uses the bounding box of the rotated
+label nodes. CONFIRMED on the fixture (exact).
+
+**T5 — Tiny ranges far from 0** keep the default precision: limits
+[1, 1.0003] give seven ticks 1, 1.00005, …, 1.0003 that TeX itself labels
+"1" every time (fixture tick-tiny-range; J1 does not scale, e = 0, and
+`std` precision 2 rounds). The editor matches; the repeated labels are
+pgfplots' behaviour, not a bug. CONFIRMED (fixture, exact).
+
+Not done: `xticklabel={…}` custom code, `xticklabel shift`, `scaled x
+ticks=base 10:e|real|manual`, `xtick scale label code`, `minor xtick` with
+`xtick distance`, `xticklabels` with fewer entries than ticks beyond I4.
+
 ## V. Tables (and how the axis body is read)
 
 Experiments E16 (`e16-syntax.mts`, axis-body syntax) and E17
