@@ -335,6 +335,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     ticks[letter] = { ...ticks[letter], major: ticks[letter].major.filter((tick) => Math.abs(tick.value - at) > 1e-9 * Math.abs(range)) };
   }
   markFeature("pgfplots_ticks", "supported");
+  if (model.x.axisLine !== "box" || model.y.axisLine !== "box" || model.x.reverse || model.y.reverse) markFeature("pgfplots_axis_lines", "supported");
   if (model.x.label || model.y.label || model.title) markFeature("pgfplots_axis_descriptions", "supported");
   if (axis.body.some((item) => item.kind !== "AddPlot" && item.kind !== "AddLegendEntry" && item.kind !== "AddLegendImage" && item.kind !== "Legend" && item.kind !== "PgfplotsExtra" && item.kind !== "PgfplotsSet")) markFeature("pgfplots_axis_coordinates", "supported");
 

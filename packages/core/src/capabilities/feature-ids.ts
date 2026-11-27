@@ -128,6 +128,7 @@ export const FEATURE_IDS = [
   "pgfplots_axis_descriptions",
   "pgfplots_axis_coordinates",
   "pgfplots_log_axes",
+  "pgfplots_axis_lines",
   "pgfplots_addplot_coordinates",
   "pgfplots_addplot_expression",
   "pgfplots_addplot_table",
