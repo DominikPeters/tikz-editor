@@ -16,6 +16,18 @@ import {
 import { collectTestGarbage } from "./setup/gc.js";
 
 describe("shared TeX syntax index", () => {
+
+  it.each(["alltt", "lstlisting"])("keeps %s opaque after inserting an unclosed bracket", name => {
+    const before = `Before.\n\\begin{${name}}\necho hello%\n\\end{${name}}\nAfter.`;
+    const previous = buildTexSyntaxIndex(before, beamerDocumentParser);
+    const source = before.replace("Before.", "Before.[");
+    for (const index of [buildTexSyntaxIndex(source, beamerDocumentParser), buildTexSyntaxIndex(source, beamerDocumentParser, { previous })]) {
+      expect(index.opaqueEnvironments).toHaveLength(1);
+      expect(index.opaqueEnvironments[0]).toMatchObject({ name, recovered: false });
+      expect(index.comments).toEqual([]);
+      expect(matchTexSyntaxEnvironments(index).size).toBe(1);
+    }
+  });
   it("indexes controls, stars, trivia, and nested arguments", () => {
     const source = String.raw`\command*% comment
 [outer={nested},escaped=\{]{required {child} and \}}`;

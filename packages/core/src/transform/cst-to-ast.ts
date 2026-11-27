@@ -358,7 +358,7 @@ function scanFigureInventories(
   return figures;
 }
 
-function scanFigureOptionsSpan(source: string, cursor: number, figureEnd: number): { from: number; to: number } | undefined {
+export function scanFigureOptionsSpan(source: string, cursor: number, figureEnd: number): { from: number; to: number } | undefined {
   const index = skipWhitespaceAndComments(source, cursor, figureEnd);
   return readTexBalancedDelimited(source, index, "[", "]", figureEnd) ?? undefined;
 }

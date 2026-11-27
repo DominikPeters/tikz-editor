@@ -661,7 +661,8 @@ function buildRootPictureOptionLayers(
           sourceId: figureSourceRef.sourceId,
           sourceSpan: figure.span,
           sourceKind: "figure-options",
-          label: "every picture"
+          label: "every picture",
+          identityRef: { sourceId: "every-picture-invocation", sourceSpan: everyPictureOptions.span, sourceKind: "generated-options" }
         },
         rawOptions: [everyPictureOptions]
       });
@@ -673,7 +674,12 @@ function buildRootPictureOptionLayers(
   if (implied) {
     layers.push({
       kind: "scope",
-      sourceRef: { sourceId: figureSourceRef.sourceId, sourceSpan: figure.span, sourceKind: "figure-options", label: "environment" },
+      sourceRef: {
+        sourceId: figureSourceRef.sourceId, sourceSpan: figure.span, sourceKind: "figure-options", label: "environment",
+        // These options belong to the environment's generated string, not
+        // to document coordinates. Only their picture attribution moves.
+        identityRef: { sourceId: "environment-options", sourceSpan: implied.span, sourceKind: "generated-options" }
+      },
       rawOptions: [implied]
     });
   }

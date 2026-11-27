@@ -101,7 +101,7 @@ describe("keystroke fuzzing catches broken operations", () => {
     ["range deletion ignores structure", "balance|content"],
     ["item merge eats a word", "content|balance"],
     ["lost undo step", "undo"],
-  ])("%s → %s", (mutant, invariants) => {
+  ])("%s → %s", async (mutant, invariants) => {
     sabotage.mutant = mutant;
     try {
       // Keep the list-merge mutation exercised as the general fixture corpus grows.
@@ -109,14 +109,14 @@ describe("keystroke fuzzing catches broken operations", () => {
       const mutationStarts = mutant === "item merge eats a word"
         ? starts.filter(start => /\\item\b/u.test(start.text))
         : starts;
-      const result = runCampaign({ starts: mutationStarts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false });
+      const result = await runCampaign({ starts: mutationStarts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false });
       expect(invariants.split("|")).toContain(result.invariants[0]);
     } finally {
       sabotage.mutant = null;
     }
   }, 300_000);
 
-  it("finds nothing without sabotage", () => {
-    expect(runCampaign({ starts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false }).failures).toEqual([]);
+  it("finds nothing without sabotage", async () => {
+    expect((await runCampaign({ starts, seed: 7, cases: 400, length: 24, maxFailures: 1, shrink: false })).failures).toEqual([]);
   }, 300_000);
 });

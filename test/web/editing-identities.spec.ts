@@ -7,6 +7,7 @@ import { makeEmptySnapshot, type SessionSnapshot } from "../../packages/app/src/
 import { reconcileEditingIdentities } from "../../packages/app/src/editing-identities.js";
 import { resolveHandleIdForDrag } from "../../packages/app/src/ui/canvas-panel/interaction-helpers.js";
 import { wp } from "../coords-helpers.js";
+import { fragment } from "../fragment-helpers.js";
 import { createEditGeometrySession } from "../../packages/core/src/edit/geometry-session.js";
 import { executeDocumentEdit } from "../../packages/app/src/edit-execution.js";
 import type { EditorState } from "../../packages/app/src/store/types.js";
@@ -46,6 +47,26 @@ describe("document editing identities", () => {
     expect(state.source).toBe(source);
     expect(entries(state).map(entry => entry.id)).toEqual(original);
     expect([...state.selectedElementIds]).toEqual(["path:0"]);
+  });
+
+  it("rejects stale targets when undo restores a state from before the first render", () => {
+    const original = wrap(a) + "\n" + wrap(b);
+    let state = editorReducer(makeInitialState(), { type: "NEW_DOCUMENT", source: original, title: "history target" });
+    // Temporarily hide the first picture before this document has identities.
+    const at = original.indexOf("tikzpicture");
+    state = editorReducer(state, { type: "APPLY_SOURCE_PATCHES", baseRevision: state.sourceRevision,
+      patches: [{ oldSpan: { from: at, to: at + "tikzpicture".length }, newSpan: { from: at, to: at + "hidden".length }, replacement: fragment("hidden") }], changedSourceIds: [] });
+    state = ready(state);
+    state = editorReducer(state, { type: "UNDO" });
+    expect(getActiveDocument(state).editingIdentities).toBeUndefined();
+    expect(getActiveDocument(state).editingTargetsStale).toBe(true);
+    const action = { kind: "setProperty", elementId: "path:0", level: "command", key: "fill", value: "red" } as const;
+    const rejected = editorReducer(state, { type: "APPLY_EDIT_ACTION", action });
+    expect(rejected.source).toBe(original);
+    const current = ready(rejected);
+    const edited = editorReducer(current, { type: "APPLY_EDIT_ACTION", action });
+    expect(edited.source).not.toBe(original);
+    expect(edited.source).toContain("red");
   });
 
   it("preserves identity through commands, reordering, undo, and redo", () => {

@@ -10,6 +10,7 @@ import {
   type TexSyntaxMatchedEnvironment,
 } from "../../text/tex/syntax-index.js";
 import { scanTexRecovery, texVirtualCloserAt } from "../../text/tex/recovery.js";
+import { readListingsOptions } from "../../parser/tex-lexical.js";
 import { parseTexTabularPreamble } from "../../text/tex/tabular/parser.js";
 import {
   createCommandTable,
@@ -458,7 +459,7 @@ class Binder {
         this.leaf(run, "char", cursor, cursor + 1); cursor++; continue;
       }
       if (char === "%") {
-        const end = this.commentEnd(cursor);
+        const end = Math.min(this.commentEnd(cursor), run.end);
         this.attachComment(run, cursor, end);
         run.skipSpace = true;
         cursor = end;
@@ -792,7 +793,7 @@ class Binder {
     stops.add("right");
     const stopped = this.scanSlot(slot, "math", openEnd, run.end, stops);
     let end = stopped;
-    if (this.isControl(stopped, "right")) {
+    if (stopped < run.end && this.isControl(stopped, "right")) {
       end = this.delimiterTokenEnd(stopped + "\\right".length, run.end);
       this.delimiter(node, stopped, end);
     } else {
@@ -992,9 +993,19 @@ class Binder {
     this.delimiter(node, at, matched.beginEnd);
     let cursor = matched.beginEnd;
     const bodyEnd = matched.endFrom;
-    const bodyRun: Run = { ...run, end: bodyEnd };
-    for (const arg of schema.args) {
-      cursor = this.bindArgument(bodyRun, node, arg, cursor);
+    if (name === "lstlisting") {
+      const options = readListingsOptions(this.text, cursor, bodyEnd);
+      if (options) {
+        editNodeAt(this.nodes, node).values.push({
+          role: "options", span: options, contentSpan: { from: options.from + 1, to: options.to - 1 },
+        });
+        this.delimiter(node, cursor, options.from);
+        this.delimiter(node, options.from, options.to);
+        cursor = options.to;
+      }
+    } else {
+      const bodyRun: Run = { ...run, end: bodyEnd };
+      for (const arg of schema.args) cursor = this.bindArgument(bodyRun, node, arg, cursor);
     }
     switch (schema.body) {
       case "literal": {
@@ -1112,7 +1123,8 @@ class Binder {
   private alignment(node: NodeId, from: number, to: number, mode: EditMode): void {
     const columns = mode === "text" ? this.columnModes(node) : [];
     // Text typed between rows starts a row: in the first column's mode.
-    const slot = this.slot(node, "content", { from, to }, { mode: columns[0] ?? mode, flow: false });
+    const betweenRowsMode = columns[0] ?? mode;
+    const slot = this.slot(node, "content", { from, to }, { mode: betweenRowsMode, flow: false });
     const text = this.text;
     let cursor = from;
     while (cursor < to) {
@@ -1122,8 +1134,8 @@ class Binder {
         continue;
       }
       if (text[cursor] === "%") {
-        const end = this.commentEnd(cursor);
-        this.attach(slot, this.node("invisible", mode, { from: cursor, to: end }));
+        const end = Math.min(this.commentEnd(cursor), to);
+        this.attach(slot, this.node("invisible", betweenRowsMode, { from: cursor, to: end }));
         cursor = end;
         continue;
       }
@@ -1144,7 +1156,7 @@ class Binder {
             if (!match.complete) break;
             ruleEnd = match.end;
           }
-          this.attach(slot, this.node("invisible", mode, { from: cursor, to: ruleEnd }, name));
+          this.attach(slot, this.node("invisible", betweenRowsMode, { from: cursor, to: ruleEnd }, name));
           cursor = ruleEnd;
           continue;
         }

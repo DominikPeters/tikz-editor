@@ -217,16 +217,20 @@ function insertBeforeToken(source: string, tokenFrom: number, lineText: string):
 }
 
 /**
- * Maps a pre-edit offset outside every edit span into post-edit
- * coordinates. An insertion exactly at the offset keeps the caret before
- * the inserted text.
+ * Maps a pre-edit offset into post-edit coordinates, clamping deleted
+ * positions to the beginning of their replacement. An insertion exactly at
+ * the offset keeps the caret before the inserted text.
  */
 export function mapAfterEdits(edits: readonly SourceEdit[], offset: number): number {
   let delta = 0;
   for (const edit of edits) {
-    if (edit.span.to <= offset && edit.span.from < offset) {
-      delta += edit.insert.length - (edit.span.to - edit.span.from);
+    if (edit.span.from >= offset) {
+      break;
     }
+    if (edit.span.to > offset) {
+      return edit.span.from + delta;
+    }
+    delta += edit.insert.length - (edit.span.to - edit.span.from);
   }
   return offset + delta;
 }
@@ -247,7 +251,10 @@ export function splitItemPatch(source: string, context: ListContext, caret: numb
   const collapse = closes === "";
   const from = collapse ? skipHorizontalBack(source, caret, item.contentSpan.from) : caret;
   const to = collapse ? skipHorizontalForward(source, caret, item.contentSpan.to) : caret;
-  const insert = `${closes}\n${lineIndentAt(source, item.commandSpan.from)}\\item ${reopens}`;
+  // A fresh item would read the moved text's leading [ or < as its
+  // label or overlay specification. Preserve it as visible content.
+  const guard = reopens === "" && /^\s*[[<]/u.test(source.slice(to)) ? "{}" : "";
+  const insert = `${closes}\n${lineIndentAt(source, item.commandSpan.from)}\\item ${reopens}${guard}`;
   return { edits: [{ span: { from, to }, insert }], caret: from + insert.length };
 }
 

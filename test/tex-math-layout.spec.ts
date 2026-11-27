@@ -48,6 +48,66 @@ function flattenMathItems(items: readonly TexMathHListItem[]): readonly TexMathH
 }
 
 describe("TeX math hlist layout", () => {
+  it("keeps punctuation spacing before a right delimiter and under a radical", () => {
+    const fenced = layout(String.raw`\left|,\right|`);
+    expect(fenced.hlist?.width).toBeCloseTo(10, 4);
+    expect(flattenMathItems(fenced.hlist?.items ?? []).find(item => item.kind === "glue"))
+      .toMatchObject({ width: expect.closeTo(1.66667, 4), source: "inter-atom" });
+    const radical = layout(String.raw`\sqrt{\left|,\right|}`);
+    expect(flattenMathItems(radical.hlist?.items ?? []).find(item => item.kind === "rule" && item.role === "radical-rule"))
+      .toMatchObject({ width: expect.closeTo(10, 4) });
+  });
+
+  it.each([String.raw`\tilde{\lvert}`, String.raw`{\tilde{\lvert}}`, String.raw`\tilde\lvert`])(
+    "keeps the depth of an accented boxed delimiter in %s when attaching a subscript", base => {
+      const result = layout(`${base}_{]}`);
+      expect(result.supported).toBe(true);
+      expect(result.hlist?.items.find((item) => item.kind === "hlist" && item.role === "subscript"))
+        .toMatchObject({ y: expect.closeTo(2.999985, 4) });
+      expect(result.hlist?.depth).toBeCloseTo(4.749985, 4);
+    }
+  );
+
+  it("distinguishes a bare accent character from a braced nonordinary noad", () => {
+    const bare = layout(String.raw`\hat;_{?}`);
+    const boxed = layout(String.raw`\hat{;}_{?}`);
+    expect(bare.hlist?.depth).toBeCloseTo(1.94445, 4);
+    expect(boxed.hlist?.depth).toBeCloseTo(2.444427, 4);
+  });
+
+  it("keeps grouped alphabet punctuation boxed when placing its subscript", () => {
+    const result = layout(String.raw`{\mathfrak{;}}_{?}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.items.find((item) => item.kind === "hlist" && item.role === "subscript"))
+      .toMatchObject({ y: expect.closeTo(2.444427, 4) });
+    expect(result.hlist?.depth).toBeCloseTo(2.444427, 4);
+  });
+
+  it.each(["mathtt", "mathrm", "mathbf", "mathsf", "mathcal"])("centers an operator character through %s", alphabet => {
+    const expected = layout(String.raw`\stackrel{x}{\alpha}`);
+    const actual = layout(`\\stackrel{x}{\\${alphabet}{\\alpha}}`);
+    expect(actual.supported).toBe(true);
+    expect(actual.hlist?.width).toBe(expected.hlist?.width);
+    expect(actual.hlist?.height).toBe(expected.hlist?.height);
+    expect(actual.hlist?.depth).toBe(expected.hlist?.depth);
+  });
+
+  it("includes a stackrel character's italic correction in its operator width", () => {
+    const result = layout(String.raw`\stackrel{;}{\beta}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(6.184021, 4);
+    expect(result.hlist?.items.find((item) => item.kind === "hlist" && item.role === "limit-superscript"))
+      .toMatchObject({ x: expect.closeTo(2.223946, 4) });
+  });
+
+  it("uses the full stackrel width for an enclosing overline", () => {
+    const result = layout(String.raw`\overline{\stackrel{\parallel}{\partial}}`);
+    expect(result.supported).toBe(true);
+    expect(result.hlist?.width).toBeCloseTo(5.864578, 4);
+    expect(flattenMathItems(result.hlist?.items ?? []).find((item) => item.kind === "rule"))
+      .toMatchObject({ width: expect.closeTo(5.864578, 4) });
+  });
+
   it.each(["matrix", "cases", "array"])("supports both LaTeX array-axis contexts for %s", environment => {
     const parsed = parseTexMath(`\\begin{${environment}}${environment === "array" ? "{c}" : ""}x\\end{${environment}}`);
     const ambient = layoutTexMathList(parsed.list, { style: "script", fontProfile: luaLatexAmsMathFontProfile });
@@ -1626,6 +1686,17 @@ describe("TeX math hlist layout", () => {
     });
   });
 
+  it("uses bold math font parameters inside boldsymbol fractions", () => {
+    const result = layout(String.raw`\boldsymbol{\dfrac{+}{\ell}}`);
+    expect(result.supported).toBe(true);
+    // Independent LuaLaTeX box measurements from the hourly-soak witness.
+    expect(result.hlist?.height).toBeCloseTo(13.80043, 4);
+    expect(result.hlist?.depth).toBeCloseTo(7.561539, 4);
+    const fraction = result.hlist?.items[0] as TexMathChildHListLayoutItem;
+    expect(fraction.items[0]).toMatchObject({ kind: "hlist", y: expect.closeTo(-7.467117, 4) });
+    expect(fraction.items[2]).toMatchObject({ kind: "hlist", y: expect.closeTo(7.561523, 4) });
+  });
+
   it("honors amsmath dfrac and tfrac style-forced fraction metrics", () => {
     const displayFraction = layout(String.raw`\dfrac{1}{2}`);
 
@@ -2552,6 +2623,47 @@ describe("TeX math hlist layout", () => {
       x: expect.closeTo(0.693055, 5),
       y: expect.closeTo(-4.142878, 5),
     });
+  });
+
+  it.each(["mathtt", "mathsf", "mathit"])("uses the %s family for variable-family accents", alphabet => {
+    for (const command of ["hat", "bar", "dot", "ddot", "tilde", "mathring"]) {
+      const result = layout(`\\${alphabet}{\\${command}{X}}`);
+      expect(result.supported).toBe(true);
+      const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
+      expect(glyphs).toHaveLength(2);
+      expect(glyphs[0].fontId).toBe(glyphs[1].fontId);
+    }
+  });
+
+  it("omits an accent absent from its selected math family", () => {
+    const result = layout(String.raw`\mathfrak{\bar{X}}`);
+    expect(result.supported).toBe(true);
+    expect(flattenGlyphItems(result.hlist?.items ?? []).map(glyph => [glyph.fontId, glyph.code]))
+      .toEqual([["eufm10", 88]]);
+  });
+
+  it("uses calligraphic skew and the selected accent glyph's depth", () => {
+    const hat = flattenGlyphItems(layout(String.raw`\mathcal{\hat{X}}`).hlist?.items ?? [])[0];
+    const bar = flattenGlyphItems(layout(String.raw`\mathcal{\bar{X}}`).hlist?.items ?? [])[0];
+    expect(hat.x).toBeCloseTo(2.354218, 4);
+    expect(bar.y).toBeCloseTo(-3.887482, 4);
+  });
+
+  it("keeps character superscript placement when a family lacks the accent", () => {
+    const actual = layout(String.raw`\mathfrak{\bar{X}}^2`);
+    const expected = layout(String.raw`\mathfrak{X}^2`);
+    expect(actual.hlist?.height).toBe(expected.hlist?.height);
+    expect(actual.hlist?.depth).toBe(expected.hlist?.depth);
+  });
+
+  it("distinguishes amsfonts wide accents from amsmath's ordinary extension chain", () => {
+    const formula = String.raw`\widehat{\begin{matrix}A&B\\C&D\end{matrix}}`;
+    const onlyMath = layout(formula);
+    const withFonts = layout(formula + String.raw`+\mathbb{R}`);
+    const accent = (result: ReturnType<typeof layout>) => flattenGlyphItems(result.hlist?.items ?? [])
+      .find(glyph => glyph.text === String.raw`\widehat`);
+    expect(accent(onlyMath)?.fontId).toBe("cmex10");
+    expect(accent(withFonts)?.fontId).toBe("msbm10");
   });
 
   it("lays out wide accents from TeX extension-font size chains", () => {
@@ -3860,7 +3972,7 @@ describe("TeX math hlist layout", () => {
     );
 
     expect(result.supported).toBe(true);
-    expect(result.hlist?.width).toBeCloseTo(14.952627, 6);
+    expect(result.hlist?.width).toBeCloseTo(14.951841, 6);
     expect(result.hlist?.height).toBeCloseTo(8.611115, 6);
     expect(result.hlist?.depth).toBeCloseTo(3.611115, 6);
     expect(result.hlist?.items).toMatchObject([
@@ -3877,17 +3989,17 @@ describe("TeX math hlist layout", () => {
         x: expect.closeTo(1.666672, 6),
         y: expect.closeTo(2.25, 6),
       },
-      { kind: "glue", x: expect.closeTo(13.285955, 6), width: expect.closeTo(1.666672, 6), mu: 3 },
+      { kind: "glue", x: expect.closeTo(13.285169, 6), width: expect.closeTo(1.666672, 6), mu: 3 },
     ]);
     const firstRow = result.hlist?.items[1] as TexMathChildHListLayoutItem | undefined;
     const secondRow = result.hlist?.items[2] as TexMathChildHListLayoutItem | undefined;
     expect(firstRow?.items).toMatchObject([
       { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(0.098546, 6) },
-      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.707568, 6) },
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.706782, 6) },
     ]);
     expect(secondRow?.items).toMatchObject([
       { kind: "hlist", role: "smallmatrix-cell", x: 0 },
-      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.312526, 6) },
+      { kind: "hlist", role: "smallmatrix-cell", x: expect.closeTo(7.311740, 6) },
     ]);
     const glyphs = flattenGlyphItems(result.hlist?.items ?? []);
     expect(glyphs.map((glyph) => `${glyph.fontId}/${glyph.atPt}/${glyph.code}`)).toEqual([
@@ -3896,6 +4008,19 @@ describe("TeX math hlist layout", () => {
       "cmmi7/7/120",
       "cmmi7/7/121",
     ]);
+  });
+
+  it("keeps smallmatrix column spacing independent of the surrounding math style", () => {
+    const list = parseTexMath(String.raw`\begin{smallmatrix}a&a\end{smallmatrix}`).list;
+    const advances = (["text", "script", "scriptscript"] as const).map(style => {
+      const result = layoutTexMathList(list, { style });
+      expect(result.supported).toBe(true);
+      const glyphs = flattenGlyphItems(result.hlist!.items);
+      expect(glyphs).toHaveLength(2);
+      return glyphs[1].x - glyphs[0].x;
+    });
+    expect(advances[1]).toBeCloseTo(advances[0], 6);
+    expect(advances[2]).toBeCloseTo(advances[0], 6);
   });
 
   it("lays out Mathtools fenced smallmatrix variants with alignment options", () => {
@@ -4388,6 +4513,41 @@ describe("TeX math hlist layout", () => {
     expect(glyphs.filter((glyph) => glyph.text === String.raw`\ddots`)).toHaveLength(3);
     expect(glyphs.filter((glyph) => glyph.code === 1)).toHaveLength(9);
     expect(glyphs.filter((glyph) => glyph.code === 58).length).toBeGreaterThanOrEqual(9);
+  });
+
+  it.each(["xrightarrow", "xleftarrow"])("uses the bold math version for bm's %s assembly", command => {
+    const actual = layout(`\\bm{\\${command}{b}}`);
+    const expected = layout(`\\boldsymbol{\\${command}{b}}`);
+    expect(actual.supported).toBe(true);
+    const paint = (items: readonly TexMathHListItem[]) => flattenGlyphItems(items).map(glyph =>
+      [glyph.fontId, glyph.code, glyph.x, glyph.y, glyph.width]);
+    expect(paint(actual.hlist!.items)).toEqual(paint(expected.hlist!.items));
+    expect(actual.hlist!.width).toBe(expected.hlist!.width);
+    expect(actual.hlist!.height).toBe(expected.hlist!.height);
+  });
+
+  it.each(["mathtt", "mathbf", "mathrm"])("measures an arrow label independently of inherited %s", (alphabet) => {
+    const expected = layout(String.raw`\xrightarrow{b}`);
+    const actual = layout(`\\${alphabet}{\\xrightarrow{b}}`);
+    expect(actual.supported).toBe(true);
+    expect(actual.hlist!.width).toBe(expected.hlist!.width);
+    const glyphs = flattenGlyphItems(actual.hlist!.items);
+    const families = { mathtt: "cmtt", mathbf: "cmbx", mathrm: "cmr" };
+    const family = families[alphabet as keyof typeof families];
+    expect(glyphs.some(glyph => glyph.code === 98 && glyph.fontId.startsWith(family))).toBe(true);
+  });
+
+  it.each(["mathbb", "mathbf", "mathrm", "mathsf", "mathcal", "mathfrak"])("resets inherited %s inside brace alignment math", (alphabet) => {
+    for (const command of ["underbrace", "overbrace"]) {
+      const expected = layout(`\\${command}{a1}`);
+      const actual = layout(`\\${alphabet}{\\${command}{a1}}`);
+      expect(actual.supported).toBe(true);
+      const paint = (items: readonly TexMathHListItem[]) => flattenGlyphItems(items).map(glyph =>
+        [glyph.fontId, glyph.code, glyph.x, glyph.y, glyph.width]);
+      expect(paint(actual.hlist!.items)).toEqual(paint(expected.hlist!.items));
+      expect(actual.hlist!.width).toBe(expected.hlist!.width);
+      expect(actual.hlist!.height).toBe(expected.hlist!.height);
+    }
   });
 
   it("lays out dcases cells in display style and braces with CMEX fills and limits", () => {

@@ -59,6 +59,17 @@ describe("Dirac notation", () => {
 });
 
 describe("preformatted source boundaries", () => {
+
+  it.each(["", "[columns=fullflexible,\nbasicstyle=\\ttfamily]"])("keeps a leading code bracket after a listings header %s", header => {
+    for (const newline of ["\n", "\r\n"]) {
+      const source = String.raw`\lstset{columns=fullflexible,basicstyle=\ttfamily}` + `\\begin{lstlisting}${header}${newline}[]code${newline}\\end{lstlisting}`;
+      const from = source.indexOf(String.raw`\begin`);
+      const diagnostics: Diagnostic[] = [];
+      const listing = projectBeamerPreformatted(createIdentityMappedText(source.slice(from), from), source, diagnostics);
+      expect(listing.text).toContain("[]code");
+      expect(diagnostics).toEqual([]);
+    }
+  });
   it("treats listing TeX-like source as literal code and retains alltt controls", () => {
     const source = String.raw`\lstset{columns=fullflexible,basicstyle=\ttfamily}\begin{lstlisting}
 \note{private} # $ x_y {z}

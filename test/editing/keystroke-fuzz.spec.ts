@@ -13,8 +13,8 @@ const SEED = Number(process.env.KEYSTROKE_FUZZ_SEED ?? 20261009);
 const fuzzStarts = corpusStarts(beamerCorpusScopes());
 
 describe("keystroke fuzzing", () => {
-  it(`keeps the editing contracts over ${CASES} random key sequences`, () => {
-    const result = runCampaign({ starts: fuzzStarts, seed: SEED, cases: CASES, length: 24 });
+  it(`keeps the editing contracts over ${CASES} random key sequences`, async () => {
+    const result = await runCampaign({ starts: fuzzStarts, seed: SEED, cases: CASES, length: 24 });
     expect(result.failures.join("\n\n")).toBe("");
     // The generator must keep reaching edits, or the run proves little.
     expect(result.edits).toBeGreaterThan(CASES * 4);

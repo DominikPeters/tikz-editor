@@ -1,3 +1,4 @@
+import { editSyntaxAt } from "../ownership/regions.js";
 import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { editSlotAt, editNodeAt } from "../tree/lookup.js";
@@ -7,7 +8,7 @@ import type { EditView } from "../position/view.js";
 import { childIndex, presentSlots } from "../tree/navigate.js";
 import type { EditMode, NodeId, SlotId, Span } from "../tree/types.js";
 import type { BufferPatch } from "../transaction/transaction.js";
-import { mapThrough, PatchSet, slotOuterSpan, withBracketGuard, withTerminator } from "./source.js";
+import { mapThrough, PatchSet, slotOuterSpan, protectPatchEnds } from "./source.js";
 import { joinRows } from "./structure.js";
 
 /**
@@ -198,8 +199,14 @@ function slotEdge(view: EditView, slot: SlotId, edge: "start" | "end"): EdgeDeci
   }
   if (isEmptySlot(view, slot) && REMOVABLE_ROLES.has(record.role)) {
     const span = slotOuterSpan(tree, slot);
-    const patches = new PatchSet().delete(span).patches();
-    return outcome({ kind: "patch", patches, caret: mapThrough(patches, span.from), run: null });
+    const result = finishDeletion(view, new PatchSet().delete(span), span.from, record.mode, null);
+    // Removing a root's empty index moves into its radicand, past its
+    // opening brace. A caret before that brace would let the next command
+    // become the radicand's single token and split a delimiter pair.
+    const next = record.role === "index" ? slots[slots.findIndex(candidate => candidate.id === slot) + 1] : null;
+    return outcome(next && result.kind === "patch"
+      ? { ...result, caret: mapThrough(result.patches, view.offset({ slot: next.id, index: 0 })) }
+      : result);
   }
   const at = slots.findIndex((candidate) => candidate.id === slot);
   const neighbour = slots[edge === "start" ? at - 1 : at + 1];
@@ -314,6 +321,16 @@ export function isDollarFormula(view: EditView, node: NodeId): boolean {
   return record.kind === "formula" && view.tree.text[record.span.from] === "$";
 }
 
+/** Keep a remaining script from being captured by an earlier atom. */
+function scriptBaseNeedsPlaceholder(view: EditView, slot: SlotId): boolean {
+  const { tree } = view;
+  const base = editSlotAt(tree.slots, slot);
+  const scripted = editNodeAt(tree.nodes, base.node);
+  if (base.role !== "base" || scripted.kind !== "scripted" || scripted.parent == null) return false;
+  const parent = editSlotAt(tree.slots, scripted.parent);
+  return parent.children.slice(0, childIndex(tree, scripted.id)).some(child => view.role(child) !== "invisible");
+}
+
 /**
  * What to remove when a slot loses its last item: the wrapper around it
  * (recursively, for nested wrappers), the script with its marker, or the
@@ -345,7 +362,8 @@ function emptiedSlotCleanup(
       presentSlots(tree, owner).every((candidate) => candidate.id === slot || isEmptySlot(view, candidate.id));
     return alone ? { span: editSlotAt(tree.slots, parent).contentSpan, insert: "{}" } : { span: slotOuterSpan(tree, slot) };
   }
-  if ((!record.braced && ARGUMENT_ROLES.has(record.role)) || isDollarFormula(view, owner)) {
+  if ((!record.braced && ARGUMENT_ROLES.has(record.role)) ||
+    scriptBaseNeedsPlaceholder(view, slot) || isDollarFormula(view, owner)) {
     return { span: record.contentSpan, insert: "{}" };
   }
   return null;
@@ -371,7 +389,8 @@ function gapEnd(view: EditView, slot: SlotId, from: number): number {
 function finishDeletion(view: EditView, set: PatchSet, seam: number, mode: EditMode, run: string | null): EditOutcome {
   const raw = set.patches();
   const caret = mapThrough(raw, seam);
-  const patches = withBracketGuard(view.tree.text, withTerminator(view.tree.text, raw, caret, mode), caret);
+  const patches = editSyntaxAt(view.tree, mode, seam) === "literal"
+    ? raw : protectPatchEnds(view.tree.text, raw, mode, true);
   const single = raw.length === 1 && requireArrayValue(raw, 0).insert === "" && requireArrayValue(raw, 0).to - requireArrayValue(raw, 0).from === 1;
   return { kind: "patch", patches, caret, run: single ? run : null };
 }
@@ -430,7 +449,8 @@ export function deleteRange(view: EditView, start: Position, end: Position, inse
         if (empty) {
           removals.push({ span: node.span });
         }
-      } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) || isDollarFormula(view, node.id)) && !insert) {
+      } else if (((!slot.braced && ARGUMENT_ROLES.has(slot.role)) ||
+        scriptBaseNeedsPlaceholder(view, slot.id) || isDollarFormula(view, node.id)) && !insert) {
         // Typed text refills the slot; otherwise it holds placeholder braces.
         removals.push({ span: slot.contentSpan, insert: "{}" });
       }

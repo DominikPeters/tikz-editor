@@ -87,6 +87,22 @@ describe("semantic source bindings", () => {
     expect(JSON.stringify(initial.semantic)).toBe(before);
   });
 
+  it("keeps implied picture-option coordinates local when source before the picture changes", () => {
+    const baseline = "% " + "x".repeat(100) + "\n" + String.raw`\begin{tikzpicture}\draw (0,0) -- (1,0);\end{tikzpicture}`;
+    let source = baseline;
+    const pictureOptions = "remember picture, overlay, shift={(current page.south west)}";
+    const session = createIncrementalSemanticSession({ pictureOptions });
+    const first = session.evaluate({ source, figure: parseTikz(source).figure });
+    const before = JSON.stringify(first.semantic);
+    for (const prefix of ["W", "Longer prefix", ""]) {
+      source = baseline.slice(0, 38) + prefix + baseline.slice(38);
+      const next = session.evaluate({ source, figure: parseTikz(source).figure, hints: { changedSourceIds: [] } });
+      expect(next.stats.strategy, JSON.stringify(next.stats)).toBe("incremental");
+      expect(next.semantic).toEqual(evaluateTikzFigure(parseTikz(source).figure, source, { pictureOptions }));
+    }
+    expect(JSON.stringify(first.semantic)).toBe(before);
+  });
+
   it("maps disjoint edits and enclosing spans with explicit boundary ownership", () => {
     const resolve = createSourceSpanResolver([
       { oldSpan: { from: 5, to: 5 }, newSpan: { from: 5, to: 8 }, replacement: fragment("abc") },

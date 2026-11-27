@@ -303,6 +303,12 @@ function partitionFormatSelection(
         (wrapper.from < offset && offset < wrapper.contentFrom) ||
         (wrapper.contentTo < offset && offset < wrapper.to)
       )) return null;
+      // A wholly selected empty invocation still carries grouping: dropping
+      // the last one inside inline math would turn `$\\textbf{}$` into `$$`.
+      if (wrapper.contentFrom === wrapper.contentTo && wrapper.from >= start && wrapper.to <= end) {
+        result.selected += wrapper.name === name ? "{}" : text.slice(wrapper.from, wrapper.to);
+        continue;
+      }
       const inner = visit(wrapper.contentFrom, wrapper.contentTo, active || wrapper.name === name);
       if (!inner) return null;
       const prefix = text.slice(wrapper.from, wrapper.contentFrom);

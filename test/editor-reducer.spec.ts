@@ -1354,8 +1354,7 @@ describe("editorReducer – branch edge cases", () => {
     expect(staleDrag.activeHandleId).toBeNull();
   });
 
-  it("records history labels for precomputed edit-action families and no-ops cleanup warnings", () => {
-    let state = makeInitialState();
+  it("records history labels for precomputed edit-action families", () => {
     const cases: Array<[string, HistoryEntry["kind"]]> = [
       ["splitPath", "path-edit"],
       ["groupElements", "add-element"],
@@ -1368,9 +1367,10 @@ describe("editorReducer – branch edge cases", () => {
     ];
 
     for (const [kind, expectedHistoryKind] of cases) {
+      const state = makeInitialState();
       const previousSource = state.source;
       const nextSource = `${previousSource}\n% ${kind}`;
-      state = editorReducer(state, {
+      const edited = editorReducer(state, {
         type: "APPLY_EDIT_ACTION",
         action: { kind } as never,
         precomputedSource: previousSource,
@@ -1379,14 +1379,13 @@ describe("editorReducer – branch edge cases", () => {
           newSource: editedSource(nextSource),
           patches: [{
             oldSpan: { from: previousSource.length, to: previousSource.length },
-            newSpan: { from: nextSource.length, to: nextSource.length },
+            newSpan: { from: previousSource.length, to: nextSource.length },
             replacement: fragment(`\n% ${kind}`)
           }]
         }
       });
-      expect(state.history[state.historyIndex]?.kind).toBe(expectedHistoryKind);
+      expect(edited.history[edited.historyIndex]?.kind).toBe(expectedHistoryKind);
     }
-
   });
 
   it("covers selection and UI no-op branches", () => {

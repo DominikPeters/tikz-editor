@@ -104,6 +104,8 @@ export interface TexMathLayoutParameters {
 }
 
 export interface TexMathFontProfile {
+  /** amsfonts replaces wide accents above a text-font width threshold. */
+  readonly amsWideAccents?: boolean;
   /** LaTeX 2026-06-01 centers arrays on the text axis; earlier kernels use the ambient math style. */
   readonly arrayAxisStyle?: "ambient" | "text";
   /** Locally inherited LaTeX arraystretch; cases resets it to 1.2. */
@@ -231,12 +233,14 @@ function createComputerModernMathFontProfile(options: {
   readonly manifest: readonly TexMathFontManifestEntry[];
   readonly resolveMathFontId: (family: TexMathFontFamily, style: TexMathStyle) => DefaultComputerModernMathFont;
   readonly amsFontSelection?: boolean;
+  readonly amsWideAccents?: boolean;
 }): TexMathFontProfile {
   return {
     id: options.id,
     label: options.label,
     engine: "lualatex",
     preamble: options.preamble,
+    amsWideAccents: options.amsWideAccents ?? false,
     textFontProfile: luaLatexDefaultTextFontProfile,
     metricProvider: computerModernTexMetricProvider,
     manifest: options.manifest,
@@ -285,6 +289,7 @@ export const luaLatexAmsMathFontProfile: TexMathFontProfile = createComputerMode
   manifest: amsMathManifest,
   resolveMathFontId: luaLatexAmsMathFontId,
   amsFontSelection: true,
+  amsWideAccents: true,
 });
 
 export const defaultTexMathFontProfile = luaLatexDefaultMathFontProfile;

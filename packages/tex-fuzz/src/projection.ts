@@ -34,7 +34,7 @@ function visibleWords(node: TexFuzzNode): string[] {
   }
 }
 
-/** A semantics-light prose projection used by the cheap batched paragraph oracle. */
+/** Select one of three fixed prose calibration controls; this does not fuzz paragraph geometry. */
 export function projectTexFuzzCaseToParagraph(caseData: TexFuzzCase): TexFuzzCase {
   const words = caseData.ast.flatMap(visibleWords)
     .flatMap((word) => word.split(/\s+/u))

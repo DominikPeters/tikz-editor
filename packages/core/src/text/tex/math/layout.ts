@@ -1,3 +1,4 @@
+import { isObjectRecord } from "../../../utils/records.js";
 import { requireArrayValue } from "../../../utils/collections.js";
 import { roundTexPt, tfmToPt } from "../fonts/units.js";
 import {
@@ -461,9 +462,12 @@ interface TexMathAtomLayout {
   readonly depth: TexLength;
   readonly italicCorrection: TexLength;
   readonly isCharacterNucleus: boolean;
-  readonly scriptShiftsAsCharacter?: boolean;
-  readonly scriptBaseWidth?: TexLength;
-  readonly scriptSuperscriptOffset?: TexLength;
+  /** Script attachment can differ from the painted dimensions of a box. */
+  readonly scriptAttachment?: {
+    readonly shiftBasis: "character" | "box";
+    readonly advance?: TexLength;
+    readonly superscriptOffset?: TexLength;
+  };
   readonly sourceSpan: TexMathSourceSpan;
 }
 
@@ -480,15 +484,17 @@ type NumericMathAtomLayout = Omit<
   | "height"
   | "depth"
   | "italicCorrection"
-  | "scriptBaseWidth"
-  | "scriptSuperscriptOffset"
+  | "scriptAttachment"
 > & {
   readonly width: number;
   readonly height: number;
   readonly depth: number;
   readonly italicCorrection: number;
-  readonly scriptBaseWidth?: number;
-  readonly scriptSuperscriptOffset?: number;
+  readonly scriptAttachment?: {
+    readonly shiftBasis: "character" | "box";
+    readonly advance?: number;
+    readonly superscriptOffset?: number;
+  };
 };
 
 function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
@@ -497,8 +503,7 @@ function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
     height,
     depth,
     italicCorrection,
-    scriptBaseWidth,
-    scriptSuperscriptOffset,
+    scriptAttachment,
     ...rest
   } = layout;
   return {
@@ -507,12 +512,11 @@ function mathAtomLayout(layout: NumericMathAtomLayout): TexMathAtomLayout {
     height: texLength(height),
     depth: texLength(depth),
     italicCorrection: texLength(italicCorrection),
-    ...(scriptBaseWidth !== undefined
-      ? { scriptBaseWidth: texLength(scriptBaseWidth) }
-      : {}),
-    ...(scriptSuperscriptOffset !== undefined
-      ? { scriptSuperscriptOffset: texLength(scriptSuperscriptOffset) }
-      : {}),
+    ...(scriptAttachment && { scriptAttachment: {
+      shiftBasis: scriptAttachment.shiftBasis,
+      ...(scriptAttachment.advance !== undefined && { advance: texLength(scriptAttachment.advance) }),
+      ...(scriptAttachment.superscriptOffset !== undefined && { superscriptOffset: texLength(scriptAttachment.superscriptOffset) }),
+    } }),
   };
 }
 
@@ -778,8 +782,36 @@ export function setTexMathHListWidth(
   });
 }
 
+const amsMathWithoutAmsFonts: TexMathFontProfile = {
+  ...luaLatexAmsMathFontProfile,
+  preamble: [String.raw`\usepackage{amsmath}`],
+  amsWideAccents: false,
+};
+
 export function resolveDefaultTexMathFontProfileForList(list: TexMathList): TexMathFontProfile {
-  return texMathListNeedsAmsMath(list) ? luaLatexAmsMathFontProfile : defaultTexMathFontProfile;
+  if (texMathListNeedsAmsFonts(list)) return luaLatexAmsMathFontProfile;
+  return texMathListNeedsAmsMath(list) ? amsMathWithoutAmsFonts : defaultTexMathFontProfile;
+}
+
+/** Package context belongs to the complete formula, including nested math. */
+function texMathListNeedsAmsFonts(list: TexMathList): boolean {
+  const pending: unknown[] = [list];
+  const corners = new Set(["ulcorner", "urcorner", "llcorner", "lrcorner"]);
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (Array.isArray(value)) {
+      for (const field of value as unknown[]) pending.push(field);
+    } else if (isObjectRecord(value)) {
+      if (value.kind === "alphabet" && ["mathbb", "mathfrak", "boldmathfrak"].includes(String(value.alphabet))) return true;
+      if (value.kind === "glyph" && typeof value.text === "string" &&
+        texMathSymbolDeclaration(value.text.replace(/^\\/u, ""))?.requiredLatexPackage === "amssymb") return true;
+      if ((value.kind === "left-right" && [value.leftDelimiter, value.rightDelimiter].some(delimiter => corners.has(String(delimiter)))) ||
+        (value.kind === "sized-delimiter" && corners.has(String(value.delimiter)))) return true;
+      if (value.kind === "math" && typeof value.content === "string") pending.push(parseTexMath(value.content).list);
+      for (const field of Object.values(value)) if (field && typeof field === "object") pending.push(field);
+    }
+  }
+  return false;
 }
 
 function texMathListNeedsAmsMath(list: TexMathList): boolean {
@@ -1009,6 +1041,10 @@ function layoutAtom(
   }
 
   if (shouldUseOperatorLimits(atom, style)) {
+    if (nucleus.isCharacterNucleus && atom.nucleus.kind === "list" && atom.nucleus.operator) {
+      // TeX's make_op keeps the character's italic correction in its box width.
+      nucleus = mathAtomLayout({ ...nucleus, width: roundTexPt(nucleus.width + nucleus.italicCorrection) });
+    }
     return layoutOperatorLimitsAtom(atom, nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
 
@@ -1020,14 +1056,15 @@ function layoutAtom(
 
   const items: TexMathHListItem[] = [...nucleus.items];
   const hasSubscript = Boolean(atom.subscript);
-  let scriptStartX: number = hasSubscript && nucleus.scriptBaseWidth !== undefined
-    ? nucleus.scriptBaseWidth
+  const { advance, superscriptOffset } = nucleus.scriptAttachment ?? {};
+  let scriptStartX: number = hasSubscript && advance !== undefined
+    ? advance
     : nucleus.width;
   let atomWidth: number = scriptStartX;
   let height: number = nucleus.height;
   let depth: number = nucleus.depth;
   const delta: number = atom.subscript
-    ? nucleus.scriptSuperscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
+    ? superscriptOffset ?? (nucleus.isCharacterNucleus ? nucleus.italicCorrection : 0)
     : 0;
   if (!atom.subscript && nucleus.isCharacterNucleus && nucleus.italicCorrection !== 0) {
     items.push(mathLayoutItem({
@@ -1042,13 +1079,13 @@ function layoutAtom(
   } else if (
     !atom.subscript &&
     atom.superscript &&
-    nucleus.scriptSuperscriptOffset !== undefined &&
-    nucleus.scriptSuperscriptOffset !== 0
+    superscriptOffset !== undefined &&
+    superscriptOffset !== 0
   ) {
     items.push(mathLayoutItem({
       kind: "kern",
-      x: nucleus.scriptBaseWidth ?? nucleus.width,
-      width: nucleus.scriptSuperscriptOffset,
+      x: advance ?? nucleus.width,
+      width: superscriptOffset,
       reason: "italic-correction",
       sourceSpan: nucleus.sourceSpan,
     }));
@@ -1311,6 +1348,12 @@ function layoutOperatorLimitsAtom(
   });
 }
 
+/** Fresh math formulas reset family switches but retain the math version. */
+function freshFormulaAlphabet(alphabet: TexMathAlphabetCommand | undefined): TexMathAlphabetCommand | undefined {
+  return alphabet === "bm" || alphabet === "boldsymbol" ? alphabet
+    : alphabet?.startsWith("bold") ? "boldsymbol" : undefined;
+}
+
 function layoutNucleus(
   nucleus: TexMathNucleus,
   fontProfile: TexMathFontProfile,
@@ -1328,7 +1371,7 @@ function layoutNucleus(
   }
   if (nucleus.kind === "list") {
     if (nucleus.leadingKern === undefined) {
-      const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet);
+      const unwrapped = layoutSingleAtomGroupNucleus(nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet, nucleus.operator === true);
       if (unwrapped) {
         return mathAtomLayout({
           ...unwrapped,
@@ -1381,13 +1424,13 @@ function layoutNucleus(
     return layoutRadicalNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
   if (nucleus.kind === "boxed") {
-    return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, alphabet);
+    return layoutBoxedNucleus(nucleus, fontProfile, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "smash") {
-    return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return layoutSmashNucleus(nucleus, fontProfile, style, cramped, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "phantom") {
-    return layoutPhantomNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
+    return layoutPhantomNucleus(nucleus, fontProfile, style, cramped, baseAtPt, freshFormulaAlphabet(alphabet));
   }
   if (nucleus.kind === "shift-box") {
     return layoutShiftBoxNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
@@ -1439,29 +1482,32 @@ function layoutNucleus(
   if (nucleus.kind === "left-right") {
     return layoutLeftRightNucleus(nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
   }
+  // Alignment templates open fresh math formulas for their cells. Family
+  // switches reset there, while an enclosing bold math version survives.
+  const alignmentAlphabet = freshFormulaAlphabet(alphabet);
   if (nucleus.kind === "aligned") {
-    return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutAlignedNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "substack") {
-    return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSubstackNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "subarray") {
-    return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSubarrayNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "sideset") {
     return layoutSidesetNucleus(nucleus, fontProfile, baseAtPt, alphabet);
   }
   if (nucleus.kind === "array") {
-    return layoutArrayNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutArrayNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "cases") {
-    return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutCasesNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "smallmatrix") {
-    return layoutSmallMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutSmallMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   if (nucleus.kind === "matrix") {
-    return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alphabet);
+    return layoutMatrixNucleus(nucleus, fontProfile, style, baseAtPt, alignmentAlphabet);
   }
   return null;
 }
@@ -1472,7 +1518,8 @@ function layoutSingleAtomGroupNucleus(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: TexLength,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  operator = false
 ): TexMathAtomLayout | null {
   if (list.items.length !== 1) {
     return null;
@@ -1487,6 +1534,16 @@ function layoutSingleAtomGroupNucleus(
   ) {
     return null;
   }
+  // A math family switch keeps an ordinary character available to make_op;
+  // boxed boldsymbol formulas and nonordinary/multiple atoms stay boxed.
+  if (operator && item.nucleus.kind === "alphabet" &&
+    item.nucleus.alphabet !== "boldsymbol" && item.nucleus.alphabet !== "bm") {
+    return layoutSingleAtomGroupNucleus(item.nucleus.list, fontProfile, style, cramped,
+      baseAtPt, nestedMathAlphabet(item.nucleus.alphabet, alphabet), true);
+  }
+  if (operator && item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined) {
+    return layoutSingleAtomGroupNucleus(item.nucleus.list, fontProfile, style, cramped, baseAtPt, alphabet, true);
+  }
   return layoutNucleus(item.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
 }
 
@@ -1497,14 +1554,12 @@ function layoutSizedDelimiterNucleus(
   baseAtPt: TexLength
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
-  const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
   const delimiter = layoutMathDelimiter(
     nucleus.delimiter,
     fontProfile,
     delimiterStyle,
     baseAtPt,
     sizedDelimiterTargetHeight(nucleus.command),
-    axis,
     nucleus.delimiterSourceSpan
   );
   if (!delimiter) {
@@ -1847,8 +1902,11 @@ function layoutAlphabetNucleus(
     const result = layoutNucleus(singleAtom.nucleus, fontProfile, style, cramped, baseAtPt, alphabet);
     return result ? mathAtomLayout({ ...result, sourceSpan: nucleus.sourceSpan }) : null;
   }
+  // amsbsy opens a formula in the bold math version, including its fontdimens.
+  // bm substitutes noads in the ambient version and keeps its layout parameters.
+  const innerFontProfile = nucleus.alphabet === "boldsymbol" ? boldMathVersion(fontProfile, baseAtPt) : fontProfile;
   const result = layoutTexMathList(nucleus.list, {
-    fontProfile,
+    fontProfile: innerFontProfile,
     style,
     cramped,
     baseAtPt,
@@ -1859,6 +1917,13 @@ function layoutAlphabetNucleus(
   }
   const hlist = result.hlist;
   const child = childHList("nucleus", 0, 0, hlist, nucleus.sourceSpan);
+  const first = hlist.items[0];
+  const character = first?.kind === "glyph" && hlist.items.slice(1).every(item => item.kind === "kern" && item.reason === "italic-correction")
+    ? first : null;
+  // Ordinary alphabet switches preserve character script shifts. amsbsy
+  // boxes its formula, so its scripts are placed relative to the box.
+  const characterShifts = nucleus.alphabet !== "boldsymbol" && singleAtom?.atomClass === "ord" &&
+    (character !== null || isSingleCharacterCleanBoxList(nucleus.list));
   return mathAtomLayout({
     items: [child],
     width: child.width,
@@ -1866,11 +1931,10 @@ function layoutAlphabetNucleus(
     depth: child.depth,
     italicCorrection: 0,
     isCharacterNucleus: false,
-    // TeX's math-alphabet switch changes the math family of a single
-    // character; it does not turn that character into an inner subformula.
-    // Scripts therefore start from the character shift (zero) rather than
-    // applying \supdrop to the alphabet wrapper's height.
-    scriptShiftsAsCharacter: isSingleCharacterCleanBoxList(nucleus.list),
+    ...(characterShifts && { scriptAttachment: {
+      shiftBasis: "character",
+      ...(character && { advance: character.width, superscriptOffset: roundTexPt(hlist.width - character.width) }),
+    } }),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -3299,7 +3363,12 @@ function layoutSmallMatrixBody(
   const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) =>
     Math.max(0, ...concreteRows.map((row) => row.cells[columnIndex]?.hlist.width ?? 0))
   ).map(roundTexPt);
-  const columnGap = muToPt(fontProfile, style, baseAtPt, 5);
+  // amsmath inserts \thickspace between the cell math boxes, in text
+  // mode: .2777em of the ambient text font, independent of math style.
+  const textFont = fontProfile.textFontProfile.resolveTextFont(
+    fontProfile.textFontProfile.defaultFontState, baseAtPt, fontProfile.metricProvider
+  );
+  const columnGap = roundTexPt(0.2777 * tfmToPt(textFont, textFont.data.fontdimen.quad));
   const bodyWidth = roundTexPt(
     columnWidths.reduce((sum, columnWidth) => sum + columnWidth, 0) +
     Math.max(0, columnCount - 1) * columnGap
@@ -3617,7 +3686,6 @@ function wrapMatrixWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.beginSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -3626,7 +3694,6 @@ function wrapMatrixWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.endSourceSpan ?? nucleus.sourceSpan
   );
   if (!left || !right) {
@@ -3705,7 +3772,6 @@ function wrapCasesWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.beginSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -3714,7 +3780,6 @@ function wrapCasesWithDelimiters(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.endSourceSpan ?? nucleus.sourceSpan
   );
   if (!left || !right) {
@@ -3972,6 +4037,7 @@ function layoutFractionNucleus(
       leftDelimiter,
       rightDelimiter,
       fontProfile,
+      delimiterStyle: nucleus.delimiterStyle ?? delimiterSizeStyle(fractionStyle),
       style: fractionStyle,
       baseAtPt,
       sourceSpan: nucleus.sourceSpan,
@@ -4004,6 +4070,7 @@ function wrapFractionWithDelimiters(params: {
   readonly width: TexLength;
   readonly height: TexLength;
   readonly depth: TexLength;
+  readonly delimiterStyle: TexMathStyle;
   readonly leftDelimiter: TexMathDelimiter;
   readonly rightDelimiter: TexMathDelimiter;
   readonly fontProfile: TexMathFontProfile;
@@ -4011,21 +4078,19 @@ function wrapFractionWithDelimiters(params: {
   readonly baseAtPt: TexLength;
   readonly sourceSpan: TexMathSourceSpan;
 }): TexMathAtomLayout | null {
-  const delimiterStyle = delimiterSizeStyle(params.style);
+  const delimiterStyle = params.delimiterStyle;
   const targetHeight = mathParameterToPt(
     params.fontProfile,
     params.style === "display" ? "delim1" : "delim2",
     params.style,
     params.baseAtPt
   );
-  const axis = mathParameterToPt(params.fontProfile, "axisHeight", params.style, params.baseAtPt);
   const left = layoutMathDelimiter(
     params.leftDelimiter,
     params.fontProfile,
     delimiterStyle,
     params.baseAtPt,
     targetHeight,
-    axis,
     params.sourceSpan
   );
   const right = layoutMathDelimiter(
@@ -4034,7 +4099,6 @@ function wrapFractionWithDelimiters(params: {
     delimiterStyle,
     params.baseAtPt,
     targetHeight,
-    axis,
     params.sourceSpan
   );
   if (!left || !right) {
@@ -4126,7 +4190,13 @@ function layoutRadicalNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, alphabet);
+  if (alphabet === "bm") {
+    return layoutRadicalNucleus(nucleus, boldMathVersion(fontProfile, baseAtPt), style, _cramped, baseAtPt, "boldsymbol");
+  }
+  // Indexed roots build both degree and radicand in fresh math boxes;
+  // the primitive unindexed square root keeps the ambient family.
+  const innerAlphabet = nucleus.degree ? freshFormulaAlphabet(alphabet) : alphabet;
+  const radicand = layoutRadicandList(nucleus.radicand, fontProfile, style, true, baseAtPt, innerAlphabet);
   if (!radicand) {
     return null;
   }
@@ -4195,7 +4265,7 @@ function layoutRadicalNucleus(
     style: "scriptscript",
     cramped: false,
     baseAtPt,
-    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
+    ...(innerAlphabet !== undefined ? { alphabet: innerAlphabet } : {}),
   });
   if (!degree.supported) {
     return null;
@@ -4653,12 +4723,13 @@ function layoutBraceNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  // LaTeX's definitions explicitly typeset the braced body in display style.
+  // LaTeX opens a fresh $...$ formula in the brace's alignment box,
+  // resetting an inherited math alphabet. Bold math versions still apply.
   const bodyResult = layoutTexMathList(nucleus.body, {
     fontProfile,
     style: "display",
     baseAtPt,
-    ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
+    ...((alphabet === "boldsymbol" || alphabet === "bm") ? { alphabet } : {}),
   });
   if (!bodyResult.supported) {
     return null;
@@ -5007,7 +5078,7 @@ function layoutAccentNucleus(
   if (!base) {
     return null;
   }
-  const accent = resolveMathAccent(
+  let accent = resolveMathAccent(
     nucleus.command,
     fontProfile,
     style,
@@ -5019,6 +5090,28 @@ function layoutAccentNucleus(
     return null;
   }
 
+  if (fontProfile.amsWideAccents && (nucleus.command === "widehat" || nucleus.command === "widetilde")) {
+    // amsfonts measures a fresh textstyle formula against two ambient ems,
+    // then chooses an AMSb accent before TeX follows its size chain.
+    const measureAlphabet = alphabet === "boldsymbol" || alphabet === "bm" ? alphabet : undefined;
+    const measured = layoutAccentBase(nucleus.base, fontProfile, "text", false, baseAtPt, measureAlphabet, true);
+    if (!measured) return null;
+    const textFont = fontProfile.textFontProfile.resolveTextFont(
+      fontProfile.textFontProfile.defaultFontState, baseAtPt, fontProfile.metricProvider);
+    if (measured.width > 2 * tfmToPt(textFont, textFont.data.fontdimen.quad)) {
+      accent = resolvedMathGlyph({ ...accent, family: "amsSymbolsB",
+        font: fontProfile.resolveMathFont({ family: "amsSymbolsB", style, baseAtPt }),
+        code: nucleus.command === "widehat" ? 91 : 93 });
+    }
+  }
+  if (!accent.font.data.chars[String(accent.code)]) {
+    // TeX omits an absent accent and leaves the underlying noad intact.
+    const unwrapped = layoutSingleAtomGroupNucleus(nucleus.base, fontProfile, style, true, baseAtPt, alphabet);
+    if (unwrapped) return mathAtomLayout({ ...unwrapped, sourceSpan: nucleus.sourceSpan });
+    return mathAtomLayout({ items: [childHList("nucleus", 0, 0, base, nucleus.base.sourceSpan)],
+      width: base.width, height: base.height, depth: base.depth, italicCorrection: 0,
+      isCharacterNucleus: false, sourceSpan: nucleus.sourceSpan });
+  }
   const metric = selectAccentMetric(accent.font, accent.code, base.width);
   const accentWidth = roundTexPt(tfmToPt(accent.font, metric.width));
   const accentCenterWidth = roundTexPt(accentWidth + tfmToPt(accent.font, metric.italicCorrection));
@@ -5033,7 +5126,7 @@ function layoutAccentNucleus(
     accentBaseSingleGlyphMetrics(nucleus.base, fontProfile, style, baseAtPt, alphabet);
   const delta = Math.min(base.height, accentXHeight(accent.font));
   const accentX = roundTexPt(skew + amsNestedAdjustment.overlayXShift + (base.width - accentCenterWidth) / 2);
-  const accentY = roundTexPt(delta - base.height);
+  const accentY = roundTexPt(delta - base.height - accentDepth);
   const accentItem = mathGlyphLayoutItem({
     kind: "glyph",
     fontId: accent.font.id,
@@ -5057,13 +5150,15 @@ function layoutAccentNucleus(
     width: adjustedBase.width,
     height: roundTexPt(Math.max(base.height, -accentY + accentHeight)),
     depth: base.depth,
-    italicCorrection: scriptGlyphBase?.italicCorrection ?? 0,
+    // Accent boxes have no operator italic correction; scripts retain the
+    // underlying character correction through their attachment metrics.
+    italicCorrection: 0,
     isCharacterNucleus: false,
-    scriptShiftsAsCharacter: scriptGlyphBase !== null,
-    ...(scriptGlyphBase ? {
-      scriptBaseWidth: scriptGlyphBase.width,
-      scriptSuperscriptOffset: scriptGlyphBase.italicCorrection,
-    } : {}),
+    ...(scriptGlyphBase && { scriptAttachment: {
+      shiftBasis: "character",
+      advance: scriptGlyphBase.width,
+      superscriptOffset: scriptGlyphBase.italicCorrection,
+    } }),
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -5148,7 +5243,7 @@ function trailingSkewKern(
     const kern = glyph.font.data.ligKerns.find((rule) =>
       rule[0] === "kern" &&
       rule[1] === glyph.code &&
-      rule[2] === TEX_DEFAULT_SKEW_CHAR
+      rule[2] === mathFontSkewChar(glyph.font)
     );
     return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
   }
@@ -5203,6 +5298,7 @@ function amsNestedAccentScriptGlyphMetrics(
   const item = deepestBase.items.length === 1 ? deepestBase.items[0] : null;
   if (
     item?.kind !== "atom" ||
+    item.atomClass !== "ord" ||
     item.subscript ||
     item.superscript ||
     item.nucleus.kind !== "glyph"
@@ -5576,15 +5672,21 @@ function layoutExtensibleArrowNucleus(
   baseAtPt: TexLength,
   alphabet?: TexMathAlphabetCommand
 ): TexMathAtomLayout | null {
-  // amsmath measures labels in scriptstyle, but typesets limits in the enclosing
-  // operator's script style. Empty arguments do not create a limit at all.
-  const measuredAbove = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, alphabet);
+  if (alphabet === "bm") {
+    // bm's grouped mathop construction uses its boldmath box fallback, so
+    // the arrow assembly and its fontdimens belong to the bold math version.
+    return layoutExtensibleArrowNucleus(nucleus, boldMathVersion(fontProfile, baseAtPt), style, cramped, baseAtPt, "boldsymbol");
+  }
+  // Measurement happens in fresh scriptstyle formulas, which reset an
+  // inherited math alphabet. The actual limits retain the outer alphabet.
+  const measureAlphabet = alphabet === "boldsymbol" ? alphabet : undefined;
+  const measuredAbove = layoutLimitList(nucleus.above, fontProfile, "script", false, baseAtPt, measureAlphabet);
   const measuredBelow = nucleus.below
-    ? layoutLimitList(nucleus.below, fontProfile, "script", false, baseAtPt, alphabet)
+    ? layoutLimitList(nucleus.below, fontProfile, "script", false, baseAtPt, measureAlphabet)
     : null;
   const aboveStyle = supStyle(style);
   const above = nucleus.above.items.length > 0
-    ? aboveStyle === "script" && !cramped
+    ? aboveStyle === "script" && !cramped && measureAlphabet === alphabet
       ? measuredAbove
       : layoutLimitList(nucleus.above, fontProfile, aboveStyle, cramped, baseAtPt, alphabet)
     : null;
@@ -5743,8 +5845,7 @@ function layoutLargeOperatorNucleus(
     depth: roundTexPt(depth),
     italicCorrection,
     isCharacterNucleus: false,
-    scriptBaseWidth: roundTexPt(cursor),
-    scriptSuperscriptOffset: italicCorrection,
+    scriptAttachment: { shiftBasis: "box", advance: roundTexPt(cursor), superscriptOffset: italicCorrection },
     sourceSpan: nucleus.sourceSpan,
   });
 }
@@ -5759,7 +5860,8 @@ function layoutLeftRightNucleus(
 ): TexMathAtomLayout | null {
   const delimiterStyle = delimiterSizeStyle(style);
   const axis = mathParameterToPt(fontProfile, "axisHeight", delimiterStyle, baseAtPt);
-  const rawBody = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet);
+  const rawBody = layoutLeftRightBody(nucleus.body, fontProfile, style, cramped, baseAtPt, alphabet,
+    nucleus.open ? undefined : nucleus.rightDelimiterSourceSpan);
   if (!rawBody) {
     return null;
   }
@@ -5771,8 +5873,7 @@ function layoutLeftRightNucleus(
     fontProfile,
     delimiterStyle,
     baseAtPt,
-    targetHeight,
-    axis
+    targetHeight
   );
   if (!body) {
     return null;
@@ -5783,7 +5884,6 @@ function layoutLeftRightNucleus(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.leftDelimiterSourceSpan
   );
   const right = layoutMathDelimiter(
@@ -5792,7 +5892,6 @@ function layoutLeftRightNucleus(
     delimiterStyle,
     baseAtPt,
     targetHeight,
-    axis,
     nucleus.rightDelimiterSourceSpan
   );
   if (!left || !right) {
@@ -5835,7 +5934,8 @@ function layoutLeftRightBody(
   style: TexMathStyle,
   cramped: boolean,
   baseAtPt: TexLength,
-  alphabet?: TexMathAlphabetCommand
+  alphabet?: TexMathAlphabetCommand,
+  closingSpan?: TexMathSourceSpan
 ): TexMathHList | null {
   const result = layoutTexMathList(list, {
     fontProfile,
@@ -5845,7 +5945,32 @@ function layoutLeftRightBody(
     ...(alphabet !== undefined ? { alphabet: alphabet } : {}),
     allowMiddleDelimiters: true,
   });
-  return result.supported ? result.hlist : null;
+  if (!result.supported) return null;
+  if (!closingSpan) return result.hlist;
+  // The right delimiter is a Close noad. Punctuation before it still gets
+  // TeX's thin inter-atom glue, including after explicit kerns and skips.
+  let last: TexMathAtom | null = null;
+  let finalStyle = style;
+  for (const item of list.items) {
+    if (item.kind === "atom") last = item;
+    else if (item.kind === "style-change") finalStyle = item.style;
+    else if (item.kind === "middle-delimiter" || item.kind === "unsupported") last = null;
+  }
+  if (last?.atomClass !== "punct") return result.hlist;
+  const glue = texMathSpacingBetween(last, { ...last, atomClass: "close", sourceSpan: closingSpan }, finalStyle);
+  if (!glue) return result.hlist;
+  const width = muToPt(fontProfile, finalStyle, baseAtPt, glue.mu);
+  return mathHList({
+    ...result.hlist,
+    width: roundTexPt(result.hlist.width + width),
+    items: [...result.hlist.items, mathGlueLayoutItem({
+      kind: "glue", x: result.hlist.width, width,
+      mu: glue.mu,
+      stretch: muToPt(fontProfile, finalStyle, baseAtPt, glue.stretchMu),
+      shrink: muToPt(fontProfile, finalStyle, baseAtPt, glue.shrinkMu),
+      source: glue.source, sourceSpan: glue.sourceSpan,
+    })],
+  });
 }
 
 function expandMiddleDelimitersInHList(
@@ -5853,8 +5978,7 @@ function expandMiddleDelimitersInHList(
   fontProfile: TexMathFontProfile,
   style: TexMathStyle,
   baseAtPt: TexLength,
-  targetHeight: number,
-  axis: number
+  targetHeight: number
 ): TexMathHList | null {
   if (!hlist.items.some((item) => item.kind === "middle-delimiter")) {
     return hlist;
@@ -5874,7 +5998,6 @@ function expandMiddleDelimitersInHList(
       style,
       baseAtPt,
       targetHeight,
-      axis,
       item.delimiterSourceSpan
     );
     if (!delimiter) {
@@ -5913,9 +6036,8 @@ function selectRadicalDelimiter(
     return smallCandidate.delimiter;
   }
 
-  const largeCandidate = selectDelimiterFromStyleLadder(
-    fontProfile, "extension", 112, delimiterProbeStyles(style), baseAtPt, targetHeight, sourceSpan
-  );
+  const extension = fontProfile.resolveMathFont({ family: "extension", style, baseAtPt });
+  const largeCandidate = selectDelimiterFromChain(extension, "extension", 112, targetHeight, sourceSpan);
   return largeCandidate?.delimiter ?? smallCandidate?.delimiter ?? null;
 }
 
@@ -5925,7 +6047,6 @@ function layoutMathDelimiter(
   style: TexMathStyle,
   baseAtPt: TexLength,
   targetHeight: number,
-  _axis: number,
   sourceSpan: TexMathSourceSpan
 ): TexMathDelimiterLayout | null {
   if (delimiter === ".") {
@@ -5940,36 +6061,18 @@ function layoutMathDelimiter(
   if (!spec) {
     return null;
   }
-  const probeStyles = delimiterProbeStyles(style);
-  const smallCandidate = selectDelimiterFromStyleLadder(
-    fontProfile,
-    spec.smallFamily,
-    spec.smallCode,
-    probeStyles,
-    baseAtPt,
-    targetHeight,
-    sourceSpan
-  );
-  const selected = smallCandidate?.largeEnough
-    ? smallCandidate
-    : largestDelimiterCandidate(
-      smallCandidate,
-      spec.largeCode === null
-        ? null
-        : selectDelimiterFromStyleLadder(
-          fontProfile,
-          "extension",
-          spec.largeCode,
-          probeStyles,
-          baseAtPt,
-          targetHeight,
-          sourceSpan
-        )
-    ) ?? smallCandidate;
+  // LuaTeX tries both delimiter chains in the current math size.
+  const candidate = (family: TexMathFontFamily, code: number) =>
+    selectDelimiterFromChain(fontProfile.resolveMathFont({ family, style, baseAtPt }),
+      family, code, targetHeight, sourceSpan);
+  const small = candidate(spec.smallFamily, spec.smallCode);
+  const large = small?.largeEnough || spec.largeCode === null ? null : candidate("extension", spec.largeCode);
+  const selected = large && (!small || delimiterTotalHeight(large.delimiter) > delimiterTotalHeight(small.delimiter))
+    ? large : small;
   if (!selected) {
     return null;
   }
-  const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", selected.style, baseAtPt);
+  const shiftAxis = mathParameterToPt(fontProfile, "axisHeight", style, baseAtPt);
   const shift = roundTexPt((selected.delimiter.height - selected.delimiter.depth) / 2 - shiftAxis);
   return mathDelimiterLayout({
     ...selected.delimiter,
@@ -5977,81 +6080,8 @@ function layoutMathDelimiter(
   });
 }
 
-function selectDelimiterFromStyleLadder(
-  fontProfile: TexMathFontProfile,
-  family: TexMathFontFamily,
-  code: number,
-  styles: readonly TexMathStyle[],
-  baseAtPt: TexLength,
-  targetHeight: number,
-  sourceSpan: TexMathSourceSpan
-): {
-  readonly delimiter: TexMathDelimiterLayout;
-  readonly largeEnough: boolean;
-  readonly style: TexMathStyle;
-} | null {
-  let best: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null = null;
-  for (const style of styles) {
-    const candidate = selectDelimiterFromChain(
-      fontProfile.resolveMathFont({ family, style, baseAtPt }),
-      family,
-      code,
-      targetHeight,
-      sourceSpan
-    );
-    if (!candidate) {
-      continue;
-    }
-    const styledCandidate = { ...candidate, style };
-    if (candidate.largeEnough) {
-      return styledCandidate;
-    }
-    best = largestDelimiterCandidate(best, styledCandidate);
-  }
-  return best;
-}
-
-function largestDelimiterCandidate(
-  left: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null | undefined,
-  right: {
-    readonly delimiter: TexMathDelimiterLayout;
-    readonly largeEnough: boolean;
-    readonly style: TexMathStyle;
-  } | null | undefined
-): {
-  readonly delimiter: TexMathDelimiterLayout;
-  readonly largeEnough: boolean;
-  readonly style: TexMathStyle;
-} | null {
-  if (!left) {
-    return right ?? null;
-  }
-  if (!right) {
-    return left;
-  }
-  return delimiterTotalHeight(right.delimiter) > delimiterTotalHeight(left.delimiter) ? right : left;
-}
-
 function delimiterTotalHeight(delimiter: TexMathDelimiterLayout): number {
   return delimiter.height + delimiter.depth;
-}
-
-function delimiterProbeStyles(style: TexMathStyle): readonly TexMathStyle[] {
-  if (style === "scriptscript") {
-    return ["scriptscript", "script", "text"];
-  }
-  if (style === "script") {
-    return ["script", "text"];
-  }
-  return ["text"];
 }
 
 function delimiterSpec(
@@ -6752,6 +6782,15 @@ function resolveMathSymbolParts(
   });
 }
 
+/** A new math version supplies both glyphs and the font parameters used by the box. */
+function boldMathVersion(profile: TexMathFontProfile, baseAtPt: TexLength): TexMathFontProfile {
+  return {
+    ...profile,
+    resolveMathFont: request => resolveBoldMathFont(profile, request.family, request.style,
+      texLength(request.baseAtPt ?? baseAtPt), "boldsymbol"),
+  };
+}
+
 function resolveBoldMathFont(
   fontProfile: TexMathFontProfile,
   family: TexMathFontFamily,
@@ -6793,11 +6832,20 @@ function resolveMathAccent(
   if (!resolved) {
     return null;
   }
+  let font = alphabet === "boldsymbol" || alphabet === "bm"
+    ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt, alphabet)
+    : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt });
+  if (resolved.family === "operators" && alphabet && alphabet !== "boldsymbol" && alphabet !== "bm") {
+    const atPt = fontProfile.resolveMathStyleAtPt(style, baseAtPt);
+    const fontId = alphabet === "mathcal"
+      ? resolveComputerModernMathOpticalFont("symbols", atPt, false)
+      : defaultLuaLatexMathAlphabetFontId(alphabet, style, "A");
+    font = fontProfile.resolveMathAlphabetFont?.({ alphabet, style, baseAtPt, text: "A" }) ??
+      fontProfile.metricProvider.resolveFont({ fontId, atPt });
+  }
   return resolvedMathGlyph({
     kind: "glyph",
-    font: alphabet === "boldsymbol" || alphabet === "bm"
-      ? resolveBoldMathFont(fontProfile, resolved.family, style, baseAtPt, alphabet)
-      : fontProfile.resolveMathFont({ family: resolved.family, style, baseAtPt }),
+    font,
     family: resolved.family,
     code: resolved.code,
     text: `\\${command}`,
@@ -6958,6 +7006,11 @@ function accentXHeight(font: ResolvedTexFont): number {
   return tfmToPt(font, font.data.fontdimen.xheight);
 }
 
+function mathFontSkewChar(font: ResolvedTexFont): number {
+  // LaTeX assigns skewchar 48 to CM symbol families and 127 to math italic.
+  return /^(?:cm|cmb)sy\d/u.test(font.id) ? 48 : TEX_DEFAULT_SKEW_CHAR;
+}
+
 function accentBaseSkew(
   base: TexMathList,
   fontProfile: TexMathFontProfile,
@@ -6979,6 +7032,13 @@ function accentBaseSkew(
   if (item.nucleus.kind === "accent") {
     return accentBaseSkew(item.nucleus.base, fontProfile, style, baseAtPt, alphabet);
   }
+  if (item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined && !item.nucleus.operator) {
+    return accentBaseSkew(item.nucleus.list, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (item.nucleus.kind === "alphabet" && item.nucleus.alphabet !== "boldsymbol") {
+    return accentBaseSkew(item.nucleus.list, fontProfile, style, baseAtPt,
+      nestedMathAlphabet(item.nucleus.alphabet, alphabet));
+  }
   if (item.nucleus.kind !== "glyph") {
     return 0;
   }
@@ -6989,7 +7049,7 @@ function accentBaseSkew(
   const kern = glyph.font.data.ligKerns.find((rule) =>
     rule[0] === "kern" &&
     rule[1] === glyph.code &&
-    rule[2] === TEX_DEFAULT_SKEW_CHAR
+    rule[2] === mathFontSkewChar(glyph.font)
   );
   return kern ? roundTexPt(tfmToPt(glyph.font, kern[3])) : 0;
 }
@@ -7007,10 +7067,18 @@ function accentBaseSingleGlyphMetrics(
   const item = base.items[0];
   if (
     item?.kind !== "atom" ||
+    item.atomClass !== "ord" ||
     item.subscript ||
     item.superscript
   ) {
     return null;
+  }
+  if (item.nucleus.kind === "list" && item.nucleus.leadingKern === undefined && !item.nucleus.operator) {
+    return accentBaseSingleGlyphMetrics(item.nucleus.list, fontProfile, style, baseAtPt, alphabet);
+  }
+  if (item.nucleus.kind === "alphabet" && item.nucleus.alphabet !== "boldsymbol") {
+    return accentBaseSingleGlyphMetrics(item.nucleus.list, fontProfile, style, baseAtPt,
+      nestedMathAlphabet(item.nucleus.alphabet, alphabet));
   }
   if (item.nucleus.kind !== "glyph") {
     return null;
@@ -7781,7 +7849,7 @@ function initialScriptShifts(
   fontProfile: TexMathFontProfile,
   baseAtPt: TexLength
 ): { readonly shiftUp: TexLength; readonly shiftDown: TexLength } {
-  if (nucleus.isCharacterNucleus || nucleus.scriptShiftsAsCharacter) {
+  if (nucleus.isCharacterNucleus || nucleus.scriptAttachment?.shiftBasis === "character") {
     return { shiftUp: texLength(0), shiftDown: texLength(0) };
   }
   return {

@@ -1,6 +1,6 @@
 {
   "name": "tikz-editor",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "WYSIWYG editor foundations for TikZ",
   "private": true,
   "type": "module",
@@ -57,6 +57,7 @@
     "check:mathjax-tex-corpus": "node scripts/check-mathjax-tex-corpus-coverage.mjs",
     "check:mathjax-tex-corpus:slices": "node scripts/check-mathjax-tex-corpus-slices.mjs",
     "fuzz:tex-math:parser": "node scripts/fuzz-tex-math.mjs --parser-only --cases 10000 --seed 20260615 --random-source-offset",
+    "fuzz:soak": "node scripts/run-fuzz-soak.mjs",
     "fuzz:tex-adversarial": "npm run build:tex-fuzz && node scripts/run-tex-fuzz.mjs",
     "fuzz:tex-adversarial:pr": "npm run build:tex-fuzz && node scripts/run-tex-fuzz.mjs --cases 1000 --seed 20260711 --profile aggressive --no-oracle --malformed-cases 100 --prefix-base-cases 2 --prefix-limit-per-case 64 --metamorphic-cases 25 --projection-control-cases 100 --supported-cases 32 --supported-max-attempts 4096 --out artifacts/tex-fuzz/pr-bundle.json --coverage-out artifacts/tex-fuzz/pr-coverage.json",
     "fuzz:tex-adversarial:replay": "npm run build:tex-fuzz && node scripts/replay-tex-fuzz.mjs",

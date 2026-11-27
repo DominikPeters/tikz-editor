@@ -1,3 +1,6 @@
+import type { Span } from "@tikz-editor/core/ast/types";
+import { documentDiffPatch } from "@tikz-editor/core/edit/patch";
+
 /**
  * Named policies over a document's root inventory (tikz figures today,
  * beamer frames in deck mode). Call sites must use these instead of raw
@@ -73,4 +76,21 @@ export function reconcileActiveRootSelection(params: {
     hasInitializedRootSelection = true;
   }
   return { activeRootId, hasInitializedRootSelection };
+}
+
+/** Prove that a positional root still names the same pair of source delimiters. */
+export function rootDelimitersSurvive(
+  previous: string,
+  current: string,
+  oldRoot: { beginSpan: Span; endSpan: Span },
+  newRoot: { beginSpan: Span; endSpan: Span }
+): boolean {
+  const { oldSpan, newSpan } = documentDiffPatch(previous, current);
+  const shift = newSpan.to - oldSpan.to;
+  const survives = (before: Span, after: Span): boolean => {
+    if (before.to <= oldSpan.from) return before.from === after.from && before.to === after.to;
+    if (before.from >= oldSpan.to) return before.from + shift === after.from && before.to + shift === after.to;
+    return false;
+  };
+  return survives(oldRoot.beginSpan, newRoot.beginSpan) && survives(oldRoot.endSpan, newRoot.endSpan);
 }
