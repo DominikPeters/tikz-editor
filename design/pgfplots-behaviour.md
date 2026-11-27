@@ -780,3 +780,81 @@ legend-marks fixture).
 initial `text depth=0.15em` clips multi-line entries unless reset; how the
 editor's `text width` nodes report height/depth with a depth override needs
 its own experiment.
+
+---
+
+## P. Plot styling (2026-11-27)
+
+Experiment E18: `e18-cases.ts` (discovery set `a`, 29 cases; fresh set `b`,
+10 cases with new values and combinations), checked with
+`check-cases.mts ./e18-cases.js` at the design tolerances. Discovery: 28 / 29
+pass; fresh: 9 / 10 pass. Max error over passing cases: layout 0.0080 pt,
+paths 0.0074 pt, glyphs 0.0039 pt. The two failures are both `exotic`
+(below, P2).
+
+**P1 — Plot handlers are PGF's** (pgflibraryplothandlers.code.tex, LPPL),
+applied to the canvas points, restarted after each jump: `sharp plot`
+(initial), `smooth`, `const plot` = `const plot mark left`, `const plot mark
+right`, `const plot mark mid`, `jump mark left/right/mid`, `ycomb`, `xcomb`
+(lines from the canvas image of y = 0, resp. x = 0, to each point; checked
+with `ymin=-1`/`xmin=-1` so the base is not the box edge). Surprise:
+**`smooth` in an axis uses tension 0.5** (PGF's initial
+`\pgfsetplottension{0.5}`), not TikZ's 0.55: with 0.55 the control points
+were 1.09 pt off (smooth), with 0.5 they match to 0.003 pt; an explicit
+`tension=` is honoured. Marks stay at the data points. The legend image
+(`\draw[<plot style>] plot coordinates {…}`) is drawn with the plot's
+handler too (b-const: a `jump mark mid` legend line has a gap). VERIFIED
+(smooth, smooth-t1, smooth-2pt, const*, jump*, ycomb, xcomb, sharp,
+smooth-jump; fresh b-smooth, b-const, b-comb).
+
+**P2 — Predefined cycle lists** are the definitions the manual prints
+(markers-meta.tex "The definitions of all predefined cycle lists follow"):
+`color`, `black white`, `exotic`, `mark list`, `mark list*` (not added),
+`color list`, `linestyles`, `linestyles*`; `mark list fill` initially
+`.!80!black`. VERIFIED by Tier 2 colours, dashes and marks: black white,
+color list (12 entries), linestyles*, mark list (8 entries); fresh b-bw,
+b-linestyles. `exotic` fails only on paint *space*: xcolor's `cyan` is CMYK,
+so `cyan!60!black` is painted as DeviceCMYK (0.6,0,0,0.4); the editor stores
+RGB (0, 0.6, 0.6) = xcolor's own conversion (r = 1 − min(1, c + k)), while
+the comparison converts CMYK multiplicatively ((1−c)(1−k) = 0.24 for red).
+A colour-model question, not a pgfplots rule; recorded, not changed.
+`dashdotted`/`dash dot dot` were missing from the editor's TikZ dash
+presets (`linestyles*` exposed it); added from tikz.code.tex
+(on 3pt off 2pt on \pgflinewidth off 2pt …).
+
+**P3 — `cycle list={…}`**: top-level comma list (`{red,blue}`: one key per
+entry), braced entries (`{{red,mark=*},{blue,mark=square}}`), or entries
+terminated by `\\`. `cycle list shift=n` takes entry i + n. The index i
+counts every `\addplot` except `forget plot` ones (manual; L4).
+`every axis plot no i` is applied before the cycle list entry and the
+options. `no markers` given to the axis is appended to `every axis plot
+post`, so it removes cycle-list marks (manual `no markers`). VERIFIED
+(cl-simple, cl-braced, cl-backslash, cl-shift, plotno, nomarkers; fresh
+b-custom, b-exotic's shift, b-plotno).
+
+**P4 — Mark selection.** Points are counted along the plot's (filtered)
+coordinate stream from 1; `mark phase=p` (initially 1) and `mark repeat=r`
+draw marks at p, p + r, p + 2r, …; `mark indices={…}` (a `\foreach` list)
+draws exactly those. Only selected marks inside the box are drawn and count
+for the bounding box. `mark options={scale=s}` scales the mark geometry
+(line width unchanged). VERIFIED (mark-repeat, mark-indices; fresh b-marks,
+b-markopts in E17).
+
+**P5 — Plot styles.** `fill`, `fill opacity`, `draw=none`, `line width`,
+`thick`…, `every axis plot post` reach the plot path as TikZ keys; a filled
+line plot is filled as an implicitly closed path. VERIFIED (fill, widths,
+post; fresh b-styles).
+
+**Note on tick steps at exact multiples of 35 pt.** With `height=140pt`
+(L = 140 = 4 × 35) TeX chose 3 intervals where I1 gives 4: at an exact
+transition the side is decided by N1 noise (I1 lists 245.0011 but
+174.99993). The E18 cases use 150 pt. Not a rule; do not test at exact
+multiples.
+
+**Note on A7a.** The fixture function-trig-rad shows `right of origin`
+0.054 pt off the box edge in the oracle (A7a gave ≤ 0.042 pt on the first 28
+fixtures); listed as a known oracle deviation for that fixture rather than
+widening `originProjectionPt`.
+
+**Not done.** `cycle multi list`, `mark list*` (half marks), `mark=text`
+(`mark list` entries 9–10), `every axis plot` interactions with `\addplot3`.

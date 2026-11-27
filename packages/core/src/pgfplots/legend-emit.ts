@@ -18,6 +18,7 @@ import type { OptionListAst } from "../options/types.js";
 import type { NodeGeometryProbe, SemanticContextFrame } from "../semantic/context.js";
 import type { PlotMarkPrimitive } from "../semantic/path/plot-marks.js";
 import type { ResolvedStyle, SceneElement } from "../semantic/types.js";
+import { plotHandlerCommands } from "./plot-handlers.js";
 import { cloneStyleRegistry, expandPgfplotsOptions, type PgfplotsKeyUse, type PgfplotsStyleRegistry } from "./keys.js";
 import type { Box, LabelGeometry, LabelRequest, Point } from "./layout.js";
 import { collectLegendEntries, layoutMatrix, legendGrid, legendImageBox, legendPairs, LEGEND_IMAGE_BUILDERS, type LegendImageGeometry, type MatrixCell } from "./legend.js";
@@ -285,7 +286,8 @@ function imageElements(host: LegendHost, source: LegendImageSource, geometry: Le
   let n = 0;
   for (const piece of geometry.pieces) {
     if (piece.kind === "line") {
-      const commands: LocalCommand[] = piece.points.map((p, i): LocalCommand => ({ kind: i === 0 ? "M" : "L", to: at(p) }));
+      // The image is `\draw[<plot style>] plot coordinates {...}`: the plot's handler applies (b-const: jump mark mid).
+      const commands: LocalCommand[] = plotHandlerCommands(piece.points.map((p) => ({ p: at(p), jump: false })), source.plot.handler, { tension: source.plot.tension, combBase: (q) => ({ x: q.x, y: o.y }) });
       out.push(host.path(source.sourceId, `legend-image:${cellId}:${String(n++)}`, pathStyle, source.span, commands));
     } else if (piece.kind === "rectangle") {
       const a = at(piece.from); const b = at(piece.to);

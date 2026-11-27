@@ -482,6 +482,12 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
     \legend{a,b}
   \end{axis}
 \end{tikzpicture}`,
+  pgfplots_plot_styles: String.raw`\begin{tikzpicture}
+  \begin{axis}[cycle list name=black white]
+    \addplot+[smooth, mark repeat=2] coordinates {(0,0) (1,1) (2,0) (3,1)};
+    \addplot+[const plot] coordinates {(0,1) (1,2) (2,1)};
+  \end{axis}
+\end{tikzpicture}`,
   pgfplots_pgfplotsset: String.raw`\begin{tikzpicture}
   \pgfplotsset{every axis/.append style={thick}}
   \begin{axis}

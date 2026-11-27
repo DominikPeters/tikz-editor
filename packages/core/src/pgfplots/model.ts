@@ -8,6 +8,7 @@ import type { AddPlotStatement, AxisStatement, Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import type { OptionListAst } from "../options/types.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
+import { expandForeachList } from "../foreach/list.js";
 import { evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
 import {
@@ -79,6 +80,8 @@ export type AxisModel = {
   /** Keys that fall through to TikZ for the axis' scope (`thick`, `font=…`). */
   tikzOptions: PgfplotsKeyUse[];
   cycleList: string[];
+  /** `cycle list shift` (initially empty: 0). */
+  cycleListShift: number;
   /** Keys this evaluator does not implement, by name, with where they were written. */
   unsupported: Array<{ key: string; span: Span }>;
   /** Keys whose value could not be read. */
@@ -120,9 +123,55 @@ export const COLOR_CYCLE_LIST: readonly string[] = [
   "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=diamond*"
 ];
 
-/** Named cycle lists whose entries have been measured (the manual shows them only as pictures). */
+/**
+ * The predefined cycle lists: the manual prints their definitions
+ * (markers-meta.tex, "The definitions of all predefined cycle lists
+ * follow"); `color` was also measured (G1), the others are checked by
+ * Tier 2 (behaviour P2). `\pgfplotsmarklistfill` is `mark list fill`,
+ * initially `.!80!black`.
+ */
+const MARK_LIST_FILL = ".!80!black";
 const NAMED_CYCLE_LISTS: Record<string, readonly string[]> = {
-  color: COLOR_CYCLE_LIST
+  color: COLOR_CYCLE_LIST,
+  "black white": [
+    "every mark/.append style={fill=gray},mark=*",
+    "every mark/.append style={fill=gray},mark=square*",
+    "every mark/.append style={fill=gray},mark=otimes*",
+    "mark=star",
+    "every mark/.append style={fill=gray},mark=diamond*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=square*",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=otimes*",
+    "densely dashed,every mark/.append style={solid},mark=star",
+    "densely dashed,every mark/.append style={solid,fill=gray},mark=diamond*"
+  ],
+  exotic: [
+    "teal,every mark/.append style={fill=teal!80!black},mark=*",
+    "orange,every mark/.append style={fill=orange!80!black},mark=square*",
+    "cyan!60!black,every mark/.append style={fill=cyan!80!black},mark=otimes*",
+    "red!70!white,mark=star",
+    "lime!80!black,every mark/.append style={fill=lime},mark=diamond*",
+    "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=*",
+    "yellow!60!black,densely dashed,every mark/.append style={solid,fill=yellow!80!black},mark=square*",
+    "black,every mark/.append style={solid,fill=gray},mark=otimes*",
+    "blue,densely dashed,mark=star,every mark/.append style=solid",
+    "red,densely dashed,every mark/.append style={solid,fill=red!80!black},mark=diamond*"
+  ],
+  "mark list": [
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=square*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=triangle*`,
+    "every mark/.append style={solid},mark=star",
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=diamond*`,
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}!40},mark=otimes*`,
+    "every mark/.append style={solid},mark=|",
+    `every mark/.append style={solid,fill=${MARK_LIST_FILL}},mark=pentagon*`,
+    "every mark/.append style={solid},mark=text,text mark=p",
+    "every mark/.append style={solid},mark=text,text mark=a"
+  ],
+  "color list": ["red", "blue", "black", "yellow", "brown", "teal", "orange", "violet", "cyan", "green!70!black", "magenta", "gray"],
+  linestyles: ["solid", "dashed", "dotted"],
+  "linestyles*": ["solid", "dashed", "dotted", "dashdotted", "dashdotdotted"]
 };
 
 function direction(): AxisDirectionModel {
@@ -296,6 +345,7 @@ defineAxisKey("cycle list name", (ctx, v) => {
   ctx.model.cycleList = [...list];
   return true;
 });
+defineAxisKey("cycle list shift", (ctx, v) => { const text = stripBraces(v ?? ""); const n = text === "" ? 0 : readPgfNumber(text); if (n === null || !Number.isInteger(n)) return false; ctx.model.cycleListShift = n; return true; });
 defineAxisKey("cycle list", (ctx, v) => {
   const text = stripBraces(v ?? "");
   // `{red,mark=*\\blue\\}`: entries end with `\\`; otherwise each top-level entry is one.
@@ -433,6 +483,8 @@ function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
  */
 export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
+  "smooth", "tension", "const plot", "const plot mark left", "const plot mark right", "const plot mark mid",
+  "jump mark left", "jump mark right", "jump mark mid", "ycomb", "xcomb", "mark repeat", "mark phase", "mark indices",
   "every mark", "domain", "samples", "forget plot", "samples at", "variable", "trig format plots",
   "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
   "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
@@ -441,9 +493,7 @@ export const PLOT_LEVEL_KEYS = new Set([
 ]);
 
 /** Keys of a plot that this evaluator understands, beyond the TikZ path keys. */
-const PLOT_KEYS = new Set([
-  ...PLOT_LEVEL_KEYS, "mark repeat", "mark phase"
-]);
+const PLOT_KEYS = new Set(PLOT_LEVEL_KEYS);
 
 export type AxisModelInput = {
   axis: AxisStatement;
@@ -470,6 +520,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     styles,
     tikzOptions: [],
     cycleList: [...COLOR_CYCLE_LIST],
+    cycleListShift: 0,
     unsupported: [],
     invalid: [],
     plotDefaults: [],
@@ -484,6 +535,11 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     }
     if (use.key.startsWith("/pgf/number format/") || use.key.startsWith("/pgf/")) {
       model.tikzOptions.push(use);
+      return;
+    }
+    // Manual markers-meta.tex `no markers`: given to an axis it is appended to `every axis plot post`, so it wins over the cycle list.
+    if (use.key === "no markers" || use.key === "no marks") {
+      model.styles.set("every axis plot post", [...(model.styles.get("every axis plot post") ?? []), parseOptionListRaw("[mark=none]")]);
       return;
     }
     if (PLOT_LEVEL_KEYS.has(use.key) || use.key.startsWith("every mark")) {
@@ -528,6 +584,13 @@ export type PlotModel = {
   /** `every mark` / `mark options` lists after the path style, in order. */
   markKeys: PgfplotsKeyUse[];
   onlyMarks: boolean;
+  /** The plot handler (behaviour P1): `sharp plot` initially. */
+  handler: PlotHandlerName;
+  tension: number;
+  /** `mark repeat`, `mark phase` (TikZ, initially 1) and `mark indices` (1-based). */
+  markRepeat: number;
+  markPhase: number;
+  markIndices?: number[];
   domain?: { from: number; to: number };
   samples?: number;
   /** `samples at={…}` (a `\foreach` list); overrides domain and samples. Empty clears it. */
@@ -563,6 +626,10 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     mark: null,
     markKeys: [],
     onlyMarks: false,
+    handler: "sharp",
+    tension: 0.5,
+    markRepeat: 1,
+    markPhase: 1,
     variable: "x",
     unboundedCoords: "discard",
     restrict: [],
@@ -576,8 +643,11 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   const lists: OptionListAst[] = [];
   lists.push(...(styles.get("every axis plot") ?? []));
   if (axis.plotDefaults.length > 0) lists.push(parseOptionListRaw(`[${axis.plotDefaults.map((u) => u.value === null ? u.key : `${u.key}=${u.value}`).join(",")}]`));
+  // `every axis plot no <i>` comes before the cycle list entry and the options (manual styleoptions.tex).
+  lists.push(...(styles.get(`every axis plot no ${String(cycleIndex)}`) ?? []));
   if (useCycle && axis.cycleList.length > 0) {
-    const entry = axis.cycleList[cycleIndex % axis.cycleList.length] ?? "";
+    const n = axis.cycleList.length;
+    const entry = axis.cycleList[(((cycleIndex + axis.cycleListShift) % n) + n) % n] ?? "";
     lists.push(parseOptionListRaw(`[${entry}]`));
   }
   if (statement.options) lists.push(statement.options);
@@ -595,7 +665,31 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     }
     if (key === "no marks" || key === "no markers") { plot.mark = null; return; }
     if (key === "only marks") { plot.onlyMarks = readBoolean(value) ?? true; return; }
-    if (key === "sharp plot") return;
+    const handler = PLOT_HANDLER_KEYS[key];
+    if (handler) { plot.handler = handler; return; }
+    if (key === "tension") {
+      const n = value === null ? null : readPgfNumber(value);
+      if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.tension = n;
+      return;
+    }
+    if (key === "mark repeat" || key === "mark phase") {
+      const text = stripBraces(value ?? "");
+      const n = text === "" ? 1 : readPgfNumber(text);
+      if (n === null || !Number.isInteger(n) || n < 1) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else if (key === "mark repeat") plot.markRepeat = n; else plot.markPhase = n;
+      return;
+    }
+    if (key === "mark indices") {
+      const text = stripBraces(value ?? "");
+      if (text === "") { delete plot.markIndices; return; }
+      let entries: string[];
+      try { entries = expandForeachList(text, { parseExpressions: true }); } catch { entries = []; }
+      const values = entries.map((entry) => readPgfNumber(entry));
+      if (values.length === 0 || values.includes(null)) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.markIndices = values.map((n) => Math.round(n ?? 0));
+      return;
+    }
     if (key === "mark size") {
       const n = value === null ? null : readLength(value);
       if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
@@ -678,6 +772,15 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   })));
   return plot;
 }
+
+export type PlotHandlerName = "sharp" | "smooth" | "const-left" | "const-right" | "const-mid" | "jump-left" | "jump-right" | "jump-mid" | "ycomb" | "xcomb";
+
+/** Plot handler keys (manual 2dplots.tex "Linear", "Smooth", "Constant", "Comb Plots"). */
+export const PLOT_HANDLER_KEYS: Record<string, PlotHandlerName> = {
+  "sharp plot": "sharp", smooth: "smooth", "const plot": "const-left", "const plot mark left": "const-left",
+  "const plot mark right": "const-right", "const plot mark mid": "const-mid", "jump mark left": "jump-left",
+  "jump mark right": "jump-right", "jump mark mid": "jump-mid", ycomb: "ycomb", xcomb: "xcomb"
+};
 
 /** Styles that set `legend image code` (manual "Legend Appearance"). */
 export const LEGEND_IMAGE_KEYS = new Set([

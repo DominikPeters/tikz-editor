@@ -48,10 +48,11 @@ import type { FeatureUsage, ResolvedStyle, SceneClipPath, SceneElement, ScenePat
 import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
 import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
 import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
+import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
-import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { COLOR_CYCLE_LIST, readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
@@ -265,6 +266,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: "Path operations after an `\\addplot` input (`\\closedcycle`, `node[pos=…]`) are not drawn yet.", span: statement.trailingPath.span });
     }
     plots.push({ model: plot, points: filterPlotPoints(data.points, plot) });
+    if (plot.handler !== "sharp" || plot.markRepeat !== 1 || plot.markPhase !== 1 || plot.markIndices || model.cycleListShift !== 0 || model.cycleList.join("\n") !== COLOR_CYCLE_LIST.join("\n")) markFeature("pgfplots_plot_styles", "supported");
   });
   for (const item of axis.body) {
     if (item.kind === "PgfplotsExtra") {
@@ -420,8 +422,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (!marks || !plot.points) return;
         const extent = segmentsBounds(marks.primitives.flatMap((primitive) => primitive.segments));
         if (!extent) return;
+        let streamIndex = 0;
         for (const point of plot.points) {
           if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+          streamIndex += 1;
+          if (!markSelected(plot.model, streamIndex)) continue;
           const q = map(point.x, point.y);
           if (!insideBox(q, area)) continue;
           box = unionBox(box, { minX: q.x + extent.minX, minY: q.y + extent.minY, maxX: q.x + extent.maxX, maxY: q.y + extent.maxY });
@@ -505,15 +510,13 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
         if (!plot.model.onlyMarks) {
-          const commands: ScenePathCommand[] = [];
-          let pen = false;
-          for (const point of plot.points) {
-            if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-            const w = toWorld(mapPoint(point.x, point.y));
-            commands.push({ kind: pen && !point.jump ? "L" : "M", to: w });
-            pen = true;
-          }
-          if (commands.some((command) => command.kind === "L")) {
+          // P1: the plot handler (sharp, smooth, const, jump, comb) on the canvas points.
+          const canvas = plot.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)).map((point) => ({ p: mapPoint(point.x, point.y), jump: point.jump }));
+          const commands: ScenePathCommand[] = plotHandlerCommands(canvas, plot.model.handler, {
+            tension: plot.model.tension,
+            combBase: (q) => (plot.model.handler === "xcomb" ? { x: mapPoint(0, 0).x, y: q.y } : { x: q.x, y: mapPoint(0, 0).y })
+          }).map((c): ScenePathCommand => (c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) }));
+          if (commands.some((command) => command.kind !== "M")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
             path.commands = commands;
             path.clipChain = [...contentClip];
@@ -523,8 +526,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         }
         if (marks) {
           let n = 0;
+          let streamIndex = 0;
           for (const point of plot.points) {
             if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+            streamIndex += 1;
+            if (!markSelected(plot.model, streamIndex)) continue;
             const q = mapPoint(point.x, point.y);
             if (!insideBox(q, layout.box)) continue;
             marks.primitives.forEach((primitive, primitiveIndex) => {
@@ -686,6 +692,12 @@ function resolveLegendPoint(raw: string, layout: AxisLayout, context: SemanticCo
   }
   const world = evaluateTransformCoordinateInFrame(text, context, frame);
   return world ? toLocal(world) : null;
+}
+
+/** P3: `mark indices` (1-based), else `mark repeat`/`mark phase` (TikZ: the phase-th point, then every repeat-th). */
+function markSelected(plot: PlotModel, index: number): boolean {
+  if (plot.markIndices) return plot.markIndices.includes(index);
+  return index >= plot.markPhase && (index - plot.markPhase) % plot.markRepeat === 0;
 }
 
 function scaleMarkSegment(segment: PlotMarkSegment, f: number): PlotMarkSegment {

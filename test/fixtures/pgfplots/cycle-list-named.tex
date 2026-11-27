@@ -1,0 +1,18 @@
+% pgfplots oracle fixture (hand-written): predefined cycle lists from the
+% manual: black white and linestyles*, with cycle list shift.
+\begin{tikzpicture}
+\begin{axis}[cycle list name=black white, cycle list shift=1, width=7cm, height=6cm]
+\addplot coordinates {(0,0) (1,0.4) (2,0)};
+\addplot coordinates {(0,1) (1,1.4) (2,1)};
+\addplot coordinates {(0,2) (1,2.4) (2,2)};
+\addplot coordinates {(0,3) (1,3.4) (2,3)};
+\end{axis}
+\begin{axis}[at={(7.5cm,0)}, cycle list name=linestyles*, width=5cm, height=6cm, legend pos=south east]
+\addplot coordinates {(0,0) (1,1)};
+\addplot coordinates {(0,1) (1,2)};
+\addplot coordinates {(0,2) (1,3)};
+\addplot coordinates {(0,3) (1,4)};
+\addplot coordinates {(0,4) (1,5)};
+\legend{solid,dashed,dotted,dash dot,dash dot dot}
+\end{axis}
+\end{tikzpicture}

@@ -29,7 +29,7 @@ for (const r of results) {
   const codes = [...new Set([...tier1.findings, ...tier2.findings].map((f) => f.code))];
   if (codes.length > 0) failing += 1;
   console.log(`${r.id.padEnd(16)} T1 ${tier1.pass ? "pass" : "FAIL"} T2 ${tier2.pass ? "pass" : "FAIL"} layout ${l.toFixed(4)} path ${pth.toFixed(4)} glyph ${g.toFixed(4)} ${codes.join(",")}`);
-  if (process.env.VERBOSE) for (const f of [...tier1.findings, ...tier2.findings].slice(0, 8)) console.log(`    ${f.code} ${f.where} ${f.message}`);
+  if (process.env.VERBOSE) for (const f of [...tier1.findings, ...tier2.findings].slice(0, Number(process.env.VERBOSE) > 1 ? Number(process.env.VERBOSE) : 8)) console.log(`    ${f.code} ${f.where} ${f.message}`);
   const diag = picture.diagnostics.filter((d) => d.severity !== "info").map((d) => d.code);
   if (diag.length > 0) console.log(`    diagnostics: ${diag.join(", ")}`);
 }

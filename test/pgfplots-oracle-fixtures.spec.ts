@@ -51,6 +51,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },
   "scope-shift": { singleAxis: "a path outside the axis grows the picture" },
   "two-axes": { singleAxis: "two axes" },
+  "cycle-list-named": { singleAxis: "two axes" },
   "soa-at-anchor": { singleAxis: "a mark outside the axis grows the picture" },
   "axis-on-top": { clip: "clip=false", singleAxis: "unclipped content" },
   "embedded-tikz": { singleAxis: "unclipped node" }

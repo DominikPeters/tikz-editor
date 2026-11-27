@@ -13,7 +13,8 @@ import { expandPgfplotsOptions, createInitialStyleRegistry } from "../packages/c
 import { computeLimits } from "../packages/core/src/pgfplots/limits.js";
 import { layoutMatrix, legendGrid, legendPairs } from "../packages/core/src/pgfplots/legend.js";
 import { boxSize } from "../packages/core/src/pgfplots/layout.js";
-import { resolveAxisModel } from "../packages/core/src/pgfplots/model.js";
+import { resolveAxisModel, resolvePlotModel } from "../packages/core/src/pgfplots/model.js";
+import { plotHandlerCommands } from "../packages/core/src/pgfplots/plot-handlers.js";
 import { automaticTickStep, computeTicks } from "../packages/core/src/pgfplots/ticks.js";
 import type { AxisStatement } from "../packages/core/src/ast/types.js";
 
@@ -241,6 +242,28 @@ describe("TikZ fixes the pgfplots oracle exposed", () => {
     const grow = (deep.nodeVisualHeight ?? 0) - (plain.nodeVisualHeight ?? 0);
     expect(grow).toBeGreaterThan(0);
     expect(deep.position.y - 0).toBeCloseTo(grow / 2, 6);
+  });
+});
+
+describe("pgfplots plot styling (behaviour P)", () => {
+  it("P1: PGF plot handlers; smooth uses PGF's initial tension 0.5 (0.2775 x tension support factor)", () => {
+    const pts = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }].map((p) => ({ p, jump: false }));
+    const smooth = plotHandlerCommands(pts, "smooth", { tension: 0.5, combBase: (q) => q });
+    expect(smooth.map((c) => c.kind).join("")).toBe("MCC");
+    const second = smooth[2];
+    expect(second?.kind === "C" ? second.c1 : null).toEqual({ x: 10 + 0.13875 * 20, y: 10 });
+    expect(plotHandlerCommands(pts, "const-left", { tension: 0.5, combBase: (q) => q }).map((c) => c.to)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 10 }, { x: 20, y: 0 }]);
+    expect(plotHandlerCommands(pts, "jump-mid", { tension: 0.5, combBase: (q) => q }).map((c) => c.kind).join("")).toBe("MLMLLML");
+    expect(plotHandlerCommands([...pts.slice(0, 2), { p: { x: 30, y: 5 }, jump: true }], "sharp", { tension: 0.5, combBase: (q) => q }).map((c) => c.kind).join("")).toBe("MLM");
+  });
+
+  it("P2/P4: named cycle lists, cycle list shift, every axis plot no N, axis-level no markers", () => {
+    const axis = axisOf(String.raw`\begin{tikzpicture}\begin{axis}[cycle list name=linestyles*, cycle list shift=1, no markers, every axis plot no 0/.style={red}]\addplot coordinates {(0,0) (1,1)};\addplot+[mark=*] coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`);
+    const m = resolveAxisModel({ axis, settings: [], bodySettings: [] });
+    const plots = axis.body.filter((item) => item.kind === "AddPlot").map((statement, i) => resolvePlotModel(m, statement, i));
+    expect(plots[0]?.pathKeys.map((u) => u.key)).toEqual(["red", "dashed"]);
+    expect(plots[1]?.pathKeys.map((u) => u.key)).toEqual(["dotted"]);
+    expect(plots.map((p) => p.mark)).toEqual([null, null]);
   });
 });
 
