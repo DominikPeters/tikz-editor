@@ -1,0 +1,8 @@
+% A sample that lands on an explicit limit up to float noise (x = -3.8 + 12*5.2/24
+% = -1.2) counts for the other direction's automatic range (behaviour Z16,
+% shrunk from a generator-fuzz case).
+\begin{tikzpicture}
+\begin{axis}[xmin=-1.2, xmax=1.3]
+\addplot[domain=-3.8:1.4] {x^2};
+\end{axis}
+\end{tikzpicture}

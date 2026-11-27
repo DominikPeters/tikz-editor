@@ -21,14 +21,18 @@ function dataRange(points: readonly PlotPoint[], own: "x" | "y", model: AxisMode
   const otherDir = own === "x" ? model.y : model.x;
   let min = Infinity;
   let max = -Infinity;
+  // A sample computed onto a given limit (domain -3.8:1.4 in steps of 13/60 hits -1.2 up to float
+  // noise) counts as on it (behaviour Z16, generator fuzz): tolerance 1e-9 of the limits' scale.
+  const tol = (dir: AxisDirectionModel) => 1e-9 * Math.max(1e-300, Math.abs(dir.min ?? 0), Math.abs(dir.max ?? 0), dir.min !== undefined && dir.max !== undefined ? dir.max - dir.min : 0);
+  const otherTol = tol(otherDir); const ownTol = tol(ownDir);
   for (const point of points) {
     const v = own === "x" ? point.x : point.y;
     const o = own === "x" ? point.y : point.x;
     if (!Number.isFinite(v) || !Number.isFinite(o)) continue;
-    if (otherDir.min !== undefined && o < otherDir.min) continue;
-    if (otherDir.max !== undefined && o > otherDir.max) continue;
-    if (ownDir.min !== undefined && v < ownDir.min) continue;
-    if (ownDir.max !== undefined && v > ownDir.max) continue;
+    if (otherDir.min !== undefined && o < otherDir.min - otherTol) continue;
+    if (otherDir.max !== undefined && o > otherDir.max + otherTol) continue;
+    if (ownDir.min !== undefined && v < ownDir.min - ownTol) continue;
+    if (ownDir.max !== undefined && v > ownDir.max + ownTol) continue;
     min = Math.min(min, v);
     max = Math.max(max, v);
   }

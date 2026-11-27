@@ -1671,3 +1671,22 @@ beats `+[…, mark=square*]`), pgfplots draws filled circles (`*`, mark size
 2pt) in the plot colour; the legend image shows the same mark. G2's "no marks
 unless `mark=` is given" does not hold under `only marks`. Found by the
 generator fuzz (5 of 300 cases); fixture only-marks-default. OBSERVED.
+
+**Z16 — A sample on an explicit limit counts.** H1's "points inside the
+other direction's given limits" includes points that land on a limit up to
+float noise: `xmin=-1.2` with `domain=-3.8:1.4` (sample 12 is −1.2 in TeX,
+−1.2000000000000002 in doubles) puts y = 1.44 into the y range (TeX ymax
+1.583; the editor had 1.539, 4pt off at the top). The editor now compares with
+a tolerance of 1e-9 of the limits' scale. Shrunk from a generator-fuzz case;
+fixture limits-boundary-sample. OBSERVED.
+
+**Generator fuzz, summary (2026-11-27).** `scripts/pgfplots-oracle/fuzz.mts`,
+300 random axes per seed from the supported feature set, Tier 1 + Tier 2 at
+the oracle spec's tolerances. Seed 1 (discovery) found Z11–Z15; after them,
+the visible failures left on seed 1 and on a fresh seed 2 are: overlapping
+tick labels of `xtick distance=0.5` (the harness gives each label box its
+neighbours' glyphs; painting matches), log fractional-step drift (Q3b, OPEN),
+`exotic`'s CMYK colours (P2), and `\ticknum` numbering differences (D4) that
+paint nothing. Near-tolerance failures (no missing or extra item, all
+positions within 0.5pt; median 0.06pt) are the A7a origin-projection noise and
+N2 limit noise of TeX's fixed-point arithmetic (log axes, large magnitudes).
