@@ -380,6 +380,12 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   };
   const ticks = { x: symbolicTickLabels(tickFor("x"), model.x.symbolic), y: symbolicTickLabels(tickFor("y"), model.y.symbolic) };
   markFeature("pgfplots_ticks", "supported");
+  if (plots.some((plot) => plot.points && plot.model.bar)) markFeature("pgfplots_bars", "supported");
+  if (axis.body.some((item) => item.kind === "AddPlot" && item.trailingPath)) markFeature("pgfplots_area", "supported");
+  if (plots.some((plot) => plot.points && plot.model.errorBars)) markFeature("pgfplots_error_bars", "supported");
+  if (model.x.symbolic || model.y.symbolic) markFeature("pgfplots_symbolic_coords", "supported");
+  if (plots.some((plot) => plot.points && plot.model.nodesNearCoords !== null)) markFeature("pgfplots_nodes_near_coords", "supported");
+  if (usedLengths.size > 0) markFeature("pgfplots_document_lengths", "supported");
   if (model.x.label || model.y.label || model.title) markFeature("pgfplots_axis_descriptions", "supported");
   if (axis.body.some((item) => item.kind !== "AddPlot" && item.kind !== "AddLegendEntry" && item.kind !== "AddLegendImage" && item.kind !== "Legend" && item.kind !== "PgfplotsExtra" && item.kind !== "PgfplotsSet")) markFeature("pgfplots_axis_coordinates", "supported");
 
