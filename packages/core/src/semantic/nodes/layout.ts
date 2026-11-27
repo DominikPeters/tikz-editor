@@ -239,17 +239,22 @@ export function resolveNodeLayout(
   }
 
   // Empty node text (or only spaces, which TeX skips at the start of the
-  // box) has no line box: height and depth 0. `text height`/`text depth`
-  // then replace those zeros (pgfplots' empty legend entries, behaviour Z8).
-  if (normalizedText.trim().length === 0) {
-    textLines = [""];
+  // box) has no line box: height and depth 0; a `text depth` then replaces
+  // the zero depth (pgfplots' empty legend entries, behaviour Z8). With
+  // `text height` the natural metrics are kept (as before this rule).
+  if (normalizedText.trim().length === 0 && textHeightOverride == null) {
+    if (normalizedText.length === 0) textLines = [""];
     textNaturalWidth = 0;
     textNaturalHeight = 0;
     baseLineY = 0;
+    // `mid` of a box whose \dp is set is the baseline raised by .5ex of the ambient font
+    // (pgfmoduleshapes.code.tex), not the node font's plain metrics.
+    midLineY = textDepthOverride == null ? 0 : 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
+  } else if (normalizedText.length === 0) {
     // An empty text box whose \ht/\dp are set (`text height`/`text depth`,
     // e.g. the pgfplots legend matrix): `mid` is the baseline raised by .5ex
-    // of the ambient font (pgfmoduleshapes.code.tex), not the node font's plain metrics.
-    midLineY = textHeightOverride == null && textDepthOverride == null ? 0 : 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
+    // of the ambient font, as above, not the node font's plain metrics.
+    midLineY = baseLineY + 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
   }
 
   const resolvedMinWidth = Math.max(minWidth, minSize ?? minWidth);
