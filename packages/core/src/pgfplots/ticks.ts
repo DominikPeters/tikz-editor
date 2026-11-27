@@ -167,7 +167,7 @@ export function computeTicks(input: TickInput): TickResult {
       // Above the last major tick the minor ticks continue only when the upper limit is at
       // least half a step beyond it (behaviour Z13, found by the generator fuzz; as Q4 for log).
       const lastMajor = majorValues[majorValues.length - 1] ?? firstMajor;
-      if (step !== null && step !== undefined && hi < lastMajor + interval / 2 - 1e-9 * interval) endJ = Math.round((lastMajor - firstMajor) / interval) - 1;
+      if (step !== null && hi < lastMajor + interval / 2 - 1e-9 * interval) endJ = Math.round((lastMajor - firstMajor) / interval) - 1;
       for (let j = startJ; j <= endJ; j += 1) {
         for (let k = 1; k <= dir.minorTickNum; k += 1) {
           const v = firstMajor + j * interval + k * sub;

@@ -263,14 +263,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   }
   context.pictureBounds = savedBounds;
   if (tracker) tracker.pictureBounds = savedTrackerBounds ?? null;
-  const outerClips = new Set((outer.clipChain ?? []).map((clip) => clip.id));
+  const outerClips = new Set(outer.clipChain.map((clip) => clip.id));
   const mappedClips = new Map<string, SceneClipPath>();
   const mapCommand = (command: ScenePathCommand): ScenePathCommand => {
     switch (command.kind) {
       case "Z": return command;
       case "C": return { ...command, c1: applyMatrix(canvas, command.c1), c2: applyMatrix(canvas, command.c2), to: applyMatrix(canvas, command.to) };
       case "A": return command;
-      default: return { ...command, to: applyMatrix(canvas, command.to) };
+      case "M": case "L": return { ...command, to: applyMatrix(canvas, command.to) };
     }
   };
   const mapClip = (clip: SceneClipPath): SceneClipPath => {
@@ -283,7 +283,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     ...element,
     transform: element.transform ? multiplyMatrix(canvas, element.transform) : canvas,
     ...(element.clipChain ? { clipChain: element.clipChain.map(mapClip) } : {})
-  }) as SceneElement);
+  }));
   const list = axisEvaluations.get(context) ?? [];
   for (let index = before; index < list.length; index += 1) {
     const evaluation = list[index];
