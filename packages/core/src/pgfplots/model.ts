@@ -485,6 +485,8 @@ export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
   "smooth", "tension", "const plot", "const plot mark left", "const plot mark right", "const plot mark mid",
   "jump mark left", "jump mark right", "jump mark mid", "ycomb", "xcomb", "mark repeat", "mark phase", "mark indices",
+  // Numbers read the same either way; it only matters for symbolic coordinates, which are diagnosed.
+  "plot coordinates/math parser",
   "every mark", "domain", "samples", "forget plot", "samples at", "variable", "trig format plots",
   "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
   "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
