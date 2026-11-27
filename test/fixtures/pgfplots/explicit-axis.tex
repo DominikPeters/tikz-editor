@@ -1,0 +1,16 @@
+% pgfplots oracle fixture (hand-written): explicit limits, explicit ticks,
+% width/height, labels, title and a major grid.
+\begin{tikzpicture}
+\begin{axis}[
+  width=8cm, height=6cm,
+  xmin=-1, xmax=5, ymin=0, ymax=10,
+  xtick={-1,0,1,2,3,4,5},
+  ytick={0,2.5,5,7.5,10},
+  xlabel={Time $t$},
+  ylabel={Signal},
+  title={Explicit limits},
+  grid=major,
+]
+\addplot coordinates {(-0.5,1) (0.5,4) (1.5,3.5) (2.5,8) (3.5,6) (4.5,9.5)};
+\end{axis}
+\end{tikzpicture}

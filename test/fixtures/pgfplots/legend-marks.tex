@@ -1,0 +1,16 @@
+% pgfplots oracle fixture (hand-written): two marked plots with a legend,
+% scale only axis, and embedded TikZ using axis coordinates.
+\begin{tikzpicture}
+\begin{axis}[
+  scale only axis,
+  width=6cm, height=4cm,
+  legend pos=north west,
+]
+\addplot+[mark=*] coordinates {(1,2) (2,3) (3,2.5) (4,4)};
+\addlegendentry{first}
+\addplot+[mark=square*, dashed] coordinates {(1,1) (2,1.5) (3,3) (4,3.2)};
+\addlegendentry{second}
+\draw[red, thick] (axis cs:1.5,1) -- (axis cs:3.5,3.5);
+\node[draw, fill=yellow, anchor=south] at (axis cs:2.5,3.6) {peak};
+\end{axis}
+\end{tikzpicture}
