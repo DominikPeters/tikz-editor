@@ -634,7 +634,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           const undoneEntry = history.at(doc.historyIndex + 1);
           if (undoneEntry?.sourceBefore === doc.source) history[doc.historyIndex + 1] = { ...undoneEntry, identitiesBefore: identities, ...(roots !== undefined ? { identityRootsBefore: roots } : {}) };
         }
-        const recoveredSelection = identities?.selection?.flatMap(id => byIdentity.get(id) ?? []);
+        // Parts of a pgfplots axis (plots, labels, legend) keep their ids across edits of the axis; keep them selected.
+        const keptAxisParts = [...doc.selectedElementIds].filter(id => /^axis:\d+:/u.test(id) &&
+          action.snapshot.scene?.elements.some(element => element.sourceRef.sourceId === id));
+        const identitySelection = identities?.selection?.flatMap(id => byIdentity.get(id) ?? []);
+        const recoveredSelection = identitySelection && keptAxisParts.length > 0
+          ? [...new Set([...identitySelection, ...keptAxisParts])] : identitySelection;
         const selectedElementIds = recoveredSelection && (recoveredSelection.length !== doc.selectedElementIds.size ||
           recoveredSelection.some(id => !doc.selectedElementIds.has(id)))
           ? new Set(recoveredSelection) : doc.selectedElementIds;

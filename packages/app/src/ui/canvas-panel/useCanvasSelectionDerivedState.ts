@@ -9,7 +9,7 @@ import { collectSourceWorldBounds } from "@tikz-editor/core/edit/snapping";
 import { createEditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { inverseMatrix } from "@tikz-editor/core/semantic/transform";
 import { parseCoordinateLike, parseLength } from "@tikz-editor/core/semantic/coords/parse-length";
-import type { EditHandle, EvaluateOptions, NodeAnchorTarget, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
+import type { EditHandle, EvaluateOptions, NodeAnchorTarget, PgfplotsAxisEditInfo, SceneElement, ScenePath, SceneText } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds, WorldPoint } from "../coords/types";
 import type { CanvasTransform, ToolMode } from "../../store/types";
 import {
@@ -28,7 +28,7 @@ import { resolveResizeFrameForSource } from "./resize-frames";
 import { resolveResizeFrameInFrame } from "./resize-frames";
 import { RESIZE_FRAME_CORNER_ROLES } from "./resize-frames";
 import { resolveRotateHandlePosition } from "./rotate-handle";
-import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex, scopeWorldBounds } from "./scope-overlay";
+import { augmentScopeOverlayWithMatrices, buildScopeOverlayIndex, collectAxisOverlayParts, scopeWorldBounds } from "./scope-overlay";
 import type { MatrixCellAnchorHint } from "./endpoint-anchor-snap";
 import type {
   AdornmentConnectorDisplay,
@@ -70,6 +70,16 @@ export type UseCanvasSelectionDerivedStateArgs = {
 };
 
 const SIDE_RESIZE_HANDLE_MIN_DIMENSION_PX = 96;
+
+/** A pgfplots axis' outer bounding box, in the frame `inverse` maps world points into. */
+function axisOuterBoundsIn(info: PgfplotsAxisEditInfo, inverse: ReturnType<typeof inverseMatrix> & object): WorldBounds {
+  const { a, b, c, d, e, f } = info.frame;
+  const points = [[info.bbox.minX, info.bbox.minY], [info.bbox.maxX, info.bbox.minY], [info.bbox.minX, info.bbox.maxY], [info.bbox.maxX, info.bbox.maxY]]
+    .map(([x = 0, y = 0]) => ({ x: a * x + c * y + e, y: b * x + d * y + f }))
+    .map((w) => ({ x: inverse.a * w.x + inverse.c * w.y + inverse.e, y: inverse.b * w.x + inverse.d * w.y + inverse.f }));
+  const xs = points.map((p) => p.x); const ys = points.map((p) => p.y);
+  return worldBounds(pt(Math.min(...xs)), pt(Math.min(...ys)), pt(Math.max(...xs)), pt(Math.max(...ys)));
+}
 
 export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedStateArgs) {
   const {
@@ -250,11 +260,11 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
   const scopeOverlay = useMemo(
     () =>
       augmentScopeOverlayWithMatrices(
-        buildScopeOverlayIndex(snapshot.parseResult?.figure.body, sourceBoundsSvg),
+        buildScopeOverlayIndex(snapshot.parseResult?.figure.body, sourceBoundsSvg, collectAxisOverlayParts(snapshot.scene?.elements, svgResult?.viewBox)),
         snapshot.scene?.elements,
         sourceBoundsSvg
       ),
-    [snapshot.parseResult, snapshot.scene, sourceBoundsSvg]
+    [snapshot.parseResult, snapshot.scene, sourceBoundsSvg, svgResult?.viewBox]
   );
 
   const movableScopeSourceIds = useMemo(() => {
@@ -305,7 +315,8 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
   const selectionBounds = useMemo<SelectionBounds[]>(() => {
     const selected: SelectionBounds[] = [];
     for (const sourceId of selectedElementIds) {
-      const fallbackBounds = sourceBoundsSvg.get(sourceId) ?? scopeOverlay.boundsByScopeId.get(sourceId);
+      // A container's own bounds (a pgfplots axis' outer box) win over the elements it draws itself.
+      const fallbackBounds = scopeOverlay.boundsByScopeId.get(sourceId) ?? sourceBoundsSvg.get(sourceId);
       const bounds =
         snapshot.scene && svgResult && (
           selectedNodeSourceIds.has(sourceId)
@@ -518,7 +529,11 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
         const inverse = parent ? inverseMatrix(worldTransform(parent.a, parent.b, parent.c, parent.d, parent.e, parent.f)) : null;
         const elements = snapshot.scene.elements.filter(element =>
           scopeOverlay.ancestorScopeIdsBySourceId.get(element.sourceRef.sourceId)?.includes(sourceId));
-        const bounds = inverse ? [...collectSourceWorldBounds(elements, inverse).values()] : [];
+        // A pgfplots axis: its outer bounding box (behaviour F1), what its resize writes from.
+        const axisInfo = snapshot.scene.elements.find((element): element is ScenePath => element.kind === "Path" && element.pgfplotsAxis?.axisId === sourceId)?.pgfplotsAxis;
+        const bounds = axisInfo && inverse
+          ? [axisOuterBoundsIn(axisInfo, inverse)]
+          : inverse ? [...collectSourceWorldBounds(elements, inverse).values()] : [];
         const scopeBounds = bounds.length > 0 ? worldBounds(
           pt(Math.min(...bounds.map(value => value.minX))), pt(Math.min(...bounds.map(value => value.minY))),
           pt(Math.max(...bounds.map(value => value.maxX))), pt(Math.max(...bounds.map(value => value.maxY)))

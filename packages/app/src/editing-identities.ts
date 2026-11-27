@@ -54,7 +54,11 @@ export function reconcileEditingIdentities(
     candidates.push({ sourceId, kind, span, text: snapshot.source.slice(span.from, span.to) });
   };
   if (snapshot.parseResult) walkStatements(snapshot.parseResult.figure.body, {
-    onStatement: statement => { add(statement.id, statement.kind, statement.span); },
+    onStatement: statement => {
+      add(statement.id, statement.kind, statement.span);
+      // pgfplots plots are objects with handles (data points) of their own.
+      if (statement.kind === "Axis") for (const item of statement.body) if (item.kind === "AddPlot") add(item.id, item.kind, item.span);
+    },
     onNode: node => { add(node.id, node.kind, node.span); }
   });
   for (const element of snapshot.scene?.elements ?? []) {
@@ -105,7 +109,9 @@ export function withEditingHandleIdentities(snapshot: SessionSnapshot, state: Ed
   const counts = new Map<string, number>();
   const editHandles = snapshot.editHandles.map(handle => {
     const owner = bySource.get(handle.sourceRef.sourceId);
-    if (!owner) return handle;
+    // Data points of a pgfplots plot keep their runtime ids (`handle:axis:N:plot:M:path-point:K`),
+    // which name the point by its index in the coordinate list.
+    if (!owner || /^axis:\d+:plot:\d+$/u.test(handle.sourceRef.sourceId)) return handle;
     // Repeated template instances retain their own runtime handle slot. An
     // ambiguous structural source change cancels a gesture at the session guard.
     const role = `${owner}:${handle.kind}`;

@@ -344,7 +344,18 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const textSpan = request.textSpan ?? axisDescriptionTextSpan(request.role, model, source, context.source);
     const textSpanOk = textSpan !== undefined && context.source.slice(textSpan.from, textSpan.to) === request.text;
     const sourceId = axisSubSelectionId(axis.id, request.role);
-    return { elements: elements.map((element) => attributeTo(element, sourceId, axis.span, textSpanOk ? textSpan : undefined)), probe };
+    return { elements: elements.map((element) => attributeTo(element, sourceId, partSpan(request.role), textSpanOk ? textSpan : undefined)), probe };
+  };
+  // Each part points at its own source (the key or legend command), so editing identities tell them apart.
+  const legendCommand = source.body.find((item) => item.kind === "AddLegendEntry" || item.kind === "Legend");
+  const inDocument = (span: Span | undefined): span is Span => span !== undefined && span.from >= axis.span.from && span.to <= axis.span.to;
+  const partSpan = (role: LabelRequest["role"]): Span => {
+    if (role === "xlabel" || role === "ylabel" || role === "title") {
+      const span = role === "xlabel" ? model.x.label?.span : role === "ylabel" ? model.y.label?.span : model.title?.span;
+      return inDocument(span) ? span : axis.beginSpan;
+    }
+    if (role === "legend" || role === "legend-entry") return legendCommand?.span ?? axis.optionsSpan ?? axis.beginSpan;
+    return axis.span;
   };
   const measure = (request: LabelRequest): LabelGeometry | null => {
     const { probe } = evaluateLabel(request, request.at, false);

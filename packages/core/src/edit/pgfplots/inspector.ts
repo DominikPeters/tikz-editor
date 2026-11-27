@@ -148,7 +148,7 @@ function buildAxisDescriptor(axis: AxisStatement, elementId: string, elements: r
   const part = elementId.slice(axis.id.length + 1);
   if (part === "legend") sections.sort((a, b) => (a.id === "pgfplots-legend" ? -1 : b.id === "pgfplots-legend" ? 1 : 0));
   else if (part === "xlabel" || part === "ylabel" || part === "title") sections.sort((a, b) => (a.id === "pgfplots-labels" ? -1 : b.id === "pgfplots-labels" ? 1 : 0));
-  return { elementKind: "scope", elementId, writeTargetId: elementId, sections };
+  return { elementKind: "axis", elementId, writeTargetId: elementId, sections };
 }
 
 /** G1: the mark the default cycle list gives plot i. */
@@ -205,7 +205,7 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
       { kind: "text", id: "pgfplots-plot-samples", label: "Samples (auto: 25)", value: authored(entries, "samples") ?? "", write: write(id, "samples") }
     );
   }
-  return { elementKind: "path", elementId: id, writeTargetId: id, sections: [style, data] };
+  return { elementKind: "plot", elementId: id, writeTargetId: id, sections: [style, data] };
 }
 
 function needsBraces(value: string): boolean {
