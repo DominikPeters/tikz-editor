@@ -263,6 +263,8 @@ export type PgfplotsAxisEditInfo = {
   legend?: { bbox: { minX: number; minY: number; maxX: number; maxY: number }; anchor: string };
   /** Whether bare coordinates in the axis map linearly to the canvas (point editing). */
   linear: boolean;
+  /** The enclosing frame's x/y vectors (canvas pt per unit), how a unitless `at` is read. */
+  parentBasis: { x: { x: number; y: number }; y: { x: number; y: number } };
 };
 
 export type ScenePath = {

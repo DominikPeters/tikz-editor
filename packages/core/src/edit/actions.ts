@@ -97,6 +97,8 @@ import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
 import { nestedStatements } from "../ast/walk.js";
+import { isAxisId, parseAxisDescriptionId } from "../pgfplots/edit-ids.js";
+import { applyMoveAxisAction, applyMoveLegendAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 
 export type ResizeRole =
   | "top-left"
@@ -411,6 +413,7 @@ export function applyEditAction(
       case "transposeMatrix":
         return applyTransposeMatrixAction(source, action, parseOptions);
       case "resizeElement":
+        if (isAxisId(action.elementId.trim())) return applyResizeAxisAction(geometry?.source ?? source, { ...action, elementId: action.elementId.trim() }, parseOptions, geometry);
         return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
   });
@@ -926,7 +929,40 @@ function applyMoveElements(
   baseline?: MoveElementsBaseline,
   geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
+  // pgfplots: an axis moves by `at`, its legend by `legend style`/`legend pos`; everything else by its handles.
+  const axisIds = elementIds.filter((id) => isAxisId(id.trim()));
+  const legendIds = elementIds.filter((id) => parseAxisDescriptionId(id.trim())?.part === "legend");
+  const otherIds = elementIds.filter((id) => !axisIds.includes(id) && !legendIds.includes(id));
+  if (axisIds.length === 0 && legendIds.length === 0) {
+    return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
+  }
+  if (baseline) {
+    source = baseline.source;
+    editHandles = baseline.editHandles;
+  }
+  let current: EditActionResult = { kind: "success", newSource: unchangedSource(source), patches: [] };
+  const steps: SourcePatch[][] = [];
+  const changed = new Set<string>();
+  const apply = (run: (from: string) => EditActionResult) => {
+    if (current.kind !== "success" && current.kind !== "partial") return;
+    const from = current.newSource;
+    const next = run(from);
+    if (next.kind !== "success" && next.kind !== "partial") { current = next; return; }
+    const normalized = normalizeResultPatches(from, next);
+    if (normalized.kind === "success" || normalized.kind === "partial") steps.push(normalized.patches);
+    for (const id of next.changedSourceIds ?? []) changed.add(id);
+    current = next.kind === "partial" || current.kind === "partial"
+      ? { ...next, kind: "partial", skippedHandles: next.kind === "partial" ? next.skippedHandles : [], reason: next.kind === "partial" ? next.reason : current.kind === "partial" ? current.reason : "" }
+      : next;
+  };
+  if (otherIds.length > 0) apply((from) => applyMoveElementsAction(from, editHandles, otherIds, delta, formatPrecision, parseOptions, baseline ? { ...baseline, source: from } : undefined, geometry));
+  for (const id of axisIds) apply((from) => applyMoveAxisAction(from, id.trim(), delta, formatPrecision, parseOptions, geometry));
+  for (const id of legendIds) {
+    const axisId = parseAxisDescriptionId(id.trim())?.axisId;
+    if (axisId && !axisIds.includes(axisId)) apply((from) => applyMoveLegendAction(from, axisId, delta, parseOptions, geometry));
+  }
+  if (current.kind !== "success" && current.kind !== "partial") return current;
+  return { ...current, patches: composeSourcePatches(source, steps), changedSourceIds: [...changed] };
 }
 
 function applyPasteStatements(

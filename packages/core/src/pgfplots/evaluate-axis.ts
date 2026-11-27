@@ -635,7 +635,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   registerAxisNode(context, "current axis", layout, toWorld, axis.id);
   if (model.name) registerAxisNode(context, model.name, layout, toWorld, axis.id);
 
-  boxPath.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null);
+  boxPath.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null, parent.axisBasis);
   const evaluation: AxisEvaluation = { axisId: axis.id, model, layout, frameTransform, labels: labelRecords, clip: model.clip ? clip : null };
   const list = axisEvaluations.get(context) ?? [];
   list.push(evaluation);
@@ -816,7 +816,7 @@ function pushPlotPointHandles(statement: AddPlotStatement, context: SemanticCont
   }
 }
 
-function axisEditInfo(axisId: string, model: AxisModel, layout: AxisLayout, frame: WorldTransform, legend: { bbox: Box | null; anchor: string } | null): PgfplotsAxisEditInfo {
+function axisEditInfo(axisId: string, model: AxisModel, layout: AxisLayout, frame: WorldTransform, legend: { bbox: Box | null; anchor: string } | null, basis: { x: Point; y: Point }): PgfplotsAxisEditInfo {
   const point = (q: Point) => ({ x: q.x, y: q.y });
   return {
     axisId,
@@ -836,7 +836,8 @@ function axisEditInfo(axisId: string, model: AxisModel, layout: AxisLayout, fram
       ...(model.y.unit === undefined ? {} : { yUnit: model.y.unit })
     },
     ...(legend?.bbox ? { legend: { bbox: { ...legend.bbox }, anchor: legend.anchor } } : {}),
-    linear: true
+    linear: true,
+    parentBasis: { x: point(basis.x), y: point(basis.y) }
   };
 }
 
