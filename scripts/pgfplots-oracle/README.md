@@ -96,10 +96,11 @@ determinism check; fixed).
 | Axis rectangle | `\coordinate[overlay] (…-r00) at (rel axis cs:0,0);` …(1,0),(0,1),(1,1); read after `\end{axis}` with `\pgfpointanchor{…}{center}` under `\pgftransformreset` | `rel axis cs`: `pgfplots.reference.gridoptions-axiscoordinates.tex` | no |
 | Data-to-canvas map | `\coordinate[overlay] … at (axis cs:\pgfkeysvalueof{/pgfplots/xmin},\pgfkeysvalueof{/pgfplots/ymin});` and (xmax,ymin), (xmin,ymax); affine map derived from these and the limits | `axis cs`: same file; annotations may use `\pgfkeysvalueof` (specifyrange, `xmin`) | no |
 | Axis anchors, outer bbox | after `\end{axis}`: `\pgfpointanchor{current axis}{<anchor>}` for all 35 documented anchors (rectangle, outer, mixed, origin sets) | `pgfplots.reference.alignment.tex` ("Basic Alignment", `current axis`) | no (read-only) |
-| Tick values | harness version 3: `xticklabel style={execute at begin node={\pgfplotsoracle@tick…}}` in `every axis/.append style` (and in `every extra x tick` for extra ticks, reported as `xe`/`ye`); the macro writes `\ticknum` and `\tick` from inside each tick label node, so the label code (`xticklabel`, log labels) stays the document's. Version 2 replaced `xticklabel`, which broke `axis` with `xmode=log` (FPU error) and lost custom labels | `\tick`, `\ticknum`, `every extra x tick`: `pgfplots.reference.tickoptions.tex`, styleoptions; `execute at begin node`: TikZ | no (all fixtures; Tier 2 of the 28 older fixtures unchanged by the switch) |
+| Tick values | harness version 4: `xticklabel style={execute at begin node={\pgfplotsoracle@tick…}}` in `every axis/.append style` (and in `every extra x tick` for extra ticks, reported as `xe`/`ye`); the macro writes `\ticknum` and `\tick` from inside each tick label node, so the label code (`xticklabel`, log labels) stays the document's. Version 2 replaced `xticklabel`, which broke `axis` with `xmode=log` (FPU error) and lost custom labels | `\tick`, `\ticknum`, `every extra x tick`: `pgfplots.reference.tickoptions.tex`, styleoptions; `execute at begin node`: TikZ | no (all fixtures; Tier 2 of the 28 older fixtures unchanged by the switch) |
 | Tick label nodes | same style: `xticklabel style={name=pgfplotsoracle-<case>-a1-x\ticknum}`, anchors read after the axis | `xticklabel style={name=tick no \ticknum}` example, tickoptions "typeset ticklabels with strut" | no |
 | Tick label strings | PDF glyphs (Tier 2) inside the label node's anchor quad | (derived) | — |
 | Title, xlabel, ylabel, legend | `title style={name=…}`, `xlabel style`, `ylabel style`, `legend style={name=…}` in `every axis/.append style`; 13 node anchors each; text from PDF glyphs inside the quad | `title style={name=MyTitleNode}` example in alignment; description styles in `pgfplots.reference.axisdescription.tex`, `pgfplots.reference.styleoptions.tex` | no |
+| Legend entry nodes (v3) | `legend style={nodes={name=pgfplotsoracle-<case>-<axis>-legend-\the\pgfmatrixcurrentrow-\the\pgfmatrixcurrentcolumn}}`; after the axis, rows/columns 1..16 are read silently | `legend style`, `nodes` in the documented `every axis legend` (axisdescription.tex "Legend Appearance"); `\pgfmatrixcurrentrow` is PGF's (pgfmodulematrix, LPPL) | no (legend-marks, both engines, "descriptions" row) |
 | Picture bounding box | before `\end{tikzpicture}`: `\pgfpointanchor{current bounding box}{south west|north east}` | PGF/TikZ | no (read-only) |
 
 "Disturbs output?" comes from `disturbance`: each probe kind alone, all
@@ -129,6 +130,21 @@ Harness version 2 (2026-11-27) defines `\ticknum` as `S` outside tick
 labels, so the tick scale label of scaled ticks (typeset with the tick label
 style, where the name probe uses `\ticknum`) no longer crashes the run; the
 scale label node is named `…-xS`/`…-yS` and is not read.
+
+Harness version 3 (2026-11-27) adds the legend entry nodes above
+(`OracleAxis.legendEntries`, compared anchor by anchor as `legend-entry`)
+and assigns glyphs to *text boxes* by their baseline probes only (origin
+and advance end): text boxes are tight, so the 0.6 em ink probe left
+x-height glyphs of a short box (a legend entry with `text depth`) to the
+enclosing box. Node quads keep the three probes.
+
+Harness version 4 (2026-11-27, merged with version 3's legend probe): the
+tick probe runs from the tick label node (`execute at begin node`) instead
+of replacing `xticklabel`; extra ticks are probed (`xExtra`/`yExtra`); a
+`MODE` record gives Tier 1 a per-direction `scale`, and log directions take
+their map from `rect` and the limits; description node names are appended
+in `every axis post`, after the axis options (an `axis x line=middle`
+redefines `every axis x label` with `.style`, which dropped the name).
 
 ## Renderer comparison
 
@@ -222,7 +238,8 @@ come out as designed:
 | x ticks off by one step (values, labels, tick marks, glyphs) | yes/yes | yes/yes |
 | dropped plot path | no/yes | no/yes |
 | one plot vertex 0.05 pt off | no/yes | no/yes |
-| legend 2 pt low (legend-marks only) | yes/yes | yes/yes |
+| legend 2 pt low (fixtures with a legend) | yes/yes | yes/yes |
+| legend entry 1 pt right (fixtures with legend entries) | yes/yes | yes/yes |
 | swapped fill colour | no/yes | no/yes |
 | tick label string changed | yes/yes | yes/yes |
 | axis box 0.05 pt wider | yes/yes | yes/yes |
@@ -283,11 +300,10 @@ read, so parser changes never need a flush.
   assembled: on a log direction limits and `\tick` are logarithms and the map
   is derived from `rect` and the limits. A mode set through a macro is missed.
 - Positive controls of `disturbance` are injected before the axis end of any
-  of the four environments (before version 3 only `\end{axis}`, so log
+  of the four environments (before version 4 only `\end{axis}`, so log
   fixtures got no control).
 - Not probed: minor ticks, z axis, tick mark lengths (Tier 2
-  has them), legend entries individually (only the legend matrix node and its
-  glyphs), colorbars, multiple axes beyond reading each one's `current axis`
+  has them), legend images (Tier 2 has them), colorbars, multiple axes beyond reading each one's `current axis`
   (two side-by-side axes were tried once and read correctly).
 - Description/tick text is recovered from PDF glyphs inside the node quad,
   using an approximate ink box (origin, advance end, 0.6 em up), which is what

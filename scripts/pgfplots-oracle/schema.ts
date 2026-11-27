@@ -11,7 +11,7 @@
 
 export const PGFPLOTS_ORACLE_SCHEMA = "pgfplots-oracle/v1";
 /** Bump when the TeX instrumentation or parsing changes meaning. Part of the cache key. */
-export const PGFPLOTS_ORACLE_HARNESS_VERSION = 3;
+export const PGFPLOTS_ORACLE_HARNESS_VERSION = 4;
 
 export interface Point { x: number; y: number }
 export interface Box { minX: number; minY: number; maxX: number; maxY: number }
@@ -65,7 +65,7 @@ export interface OracleAxis {
   anchors?: Record<string, Point>;
   ticks?: { x: OracleTick[]; y: OracleTick[]; xExtra?: OracleTick[]; yExtra?: OracleTick[] };
   /**
-   * Scale per direction (harness version 3). On a log direction, limits,
+   * Scale per direction (harness version 4). On a log direction, limits,
    * `\tick` values and the map are in pgfplots' internal coordinate, the
    * logarithm of the data value (natural log unless `log basis` is set), and
    * the map is derived from `rect` and the limits (the `axis cs` probe takes
@@ -73,6 +73,8 @@ export interface OracleAxis {
    */
   scale?: { x: "linear" | "log"; y: "linear" | "log" };
   descriptions?: Partial<Record<"title" | "xlabel" | "ylabel" | "legend", NodeGeometry>>;
+  /** Legend entry text nodes (harness v3), by matrix row and column (1-based), row-major. */
+  legendEntries?: Array<{ row: number; column: number; node: NodeGeometry }>;
 }
 
 export interface Tier1 {
@@ -300,6 +302,12 @@ function axis(value: Json, path: string): OracleAxis {
       if (key !== "title" && key !== "xlabel" && key !== "ylabel" && key !== "legend") fail(`${path}.descriptions`, `unknown description ${key}`);
       result.descriptions[key] = nodeGeometry(item, `${path}.descriptions.${key}`);
     }
+  }
+  if (r.legendEntries !== undefined) {
+    result.legendEntries = arr(r.legendEntries, `${path}.legendEntries`).map((item, i) => {
+      const e = rec(item, `${path}.legendEntries[${i}]`);
+      return { row: num(e.row, `${path}.legendEntries[${i}].row`), column: num(e.column, `${path}.legendEntries[${i}].column`), node: nodeGeometry(e.node, `${path}.legendEntries[${i}].node`) };
+    });
   }
   return result;
 }

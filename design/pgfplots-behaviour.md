@@ -723,3 +723,250 @@ fixtures.
 `domain` (log-semilogy-grid, Tier 2 path exact). On a log x direction the
 samples are also taken linearly in x and then mapped (implemented, not
 separately measured).
+
+## M. Function plots (2026-11-27)
+
+Experiment `e16-functions.mts` (sets `a` discovery, `b` fresh): one
+expression plot per axis with explicit, exactly representable limits and
+`clip=false`; the ideal points are computed with the editor's float pgfmath
+(`compilePgfMathExpression`, mode `float`) and mapped through the axis box
+*as painted* (Tier 2 box stroke), which cancels the PDF pt→bp scale (N3).
+Raw data `artifacts/pgfplots-experiments/e16-functions/functions-{a,b}.tsv`.
+
+**M1 — Float evaluation everywhere.** pgfplots evaluates plot expressions,
+`domain` bounds, `samples at` entries, coordinates with math and numeric
+options (`xmin=1e5`) with the fpu (manual axis-addplot.tex, "About the
+precision and number range": "\addplot expression uses a floating point
+unit"; `plot coordinates/math parser` initially true). No TeX dimension
+limit applies: an axis with `domain=0:1e5` and `{x^2}` (y up to 1e10)
+compiles. Implemented: `readPgfNumber`/`readPgfFloat` (model.ts) and
+expression sampling (data.ts) evaluate in `mode: "float"`. CONFIRMED (a-big,
+a-exp, b-huge: values to 4e6 match to ≤ 0.0011 pt).
+
+**M2 — Sample positions.** `samples=N` (initially 25) equally spaced values
+over `domain=a:b` (initially −5:5), both ends included: x_i = a + i(b−a)/(N−1);
+`a > b` samples downwards (b-rev). `samples at={…}` is a `\foreach` list
+(dots allowed) and overrides `domain`/`samples` (manual). The last point is
+exactly b (no accumulated rounding: with `lua backend` the positions are
+doubles). VERIFIED: vertex count and positions of all 44 cases (22 + 22
+fresh), max point error **0.0035 pt** (set a), **0.0034 pt** (set b).
+
+**M3 — Variables, trig format, functions.** `x` and `\x` are the same
+sample (manual "Remarks"); `variable=t` (or `\t`) renames both. `trig
+format plots=rad` switches trigonometry to radians for plot expressions
+only (initially `default`: the enclosing `/pgf/trig format`). Functions from
+`declare function` (axis option, `\pgfplotsset`, `\tikzset`, plot option)
+and macros defined before the axis (`\def`, `\pgfmathsetmacro`) reach the
+expressions. Parametric `({x expr},{y expr})` samples both with the same
+variable. VERIFIED (a-sinrad, a-var, a-param, a-decl, a-pi; fresh b-rad,
+b-param, b-decl, b-ellipse), same tolerance as M2.
+
+**M4 — Unbounded samples.** A sample whose value is `nan` or ±`inf` in the
+fpu (`1/0`, `ln` of a negative number) is handled by `unbounded coords`
+(initially `discard`, manual 2dplots.tex): the point is dropped and the
+line joins its neighbours; with `jump` the path is split there (a new
+`moveto`). `restrict x/y to domain=min:max` maps values outside to ∓inf
+and sets `unbounded coords=jump`; the starred variant clamps instead
+(manual coordfiltering.tex). VERIFIED on subpath structure: a-recip (4
+points, one path), a-recipjump (2+2), fresh b-recip (8), b-recipjump
+(4+4), b-lnneg (6 of 11 kept). `restrict … to domain` is implemented from
+the manual, not swept.
+
+**M5 — Curve tolerance.** Measured float-vs-TeX difference on 44 varied
+expressions: ≤ 0.0035 pt, the size of the LuaLaTeX/pdfLaTeX path noise
+floor (0.00245 pt, harness README). The comparison's `curvePt` = 0.02 pt
+therefore stands; no loosening.
+
+---
+
+## L. Legend (2026-11-27)
+
+Experiment E17: `e17-legend.mts` prints a Tier 1/Tier 2 digest of the
+discovery cases; `e17-cases.ts` holds the discovery set (29 cases) and a
+fresh validation set `b` (18 cases, new values and combinations);
+`check-cases.mts ./e17-cases.js` renders every case with the editor and
+compares it with the cached LuaLaTeX result at the design tolerances
+(`E17_SET=b` for the fresh set). Raw output
+`artifacts/pgfplots-experiments/e17-legend*/`.
+
+**Result.** Discovery set: 26 / 29 pass both tiers; fresh set: 16 / 18 pass
+first time after the rules below were fixed on the discovery set. Max error
+over the passing cases: layout (legend node anchors, bbox) **0.0077 pt**,
+paths **0.0078 pt**, glyphs **0.0080 pt**. The five failures: `\Large` and
+`\small` legend text (K4: LuaLaTeX uses LMRoman12/LMRoman9, the editor's
+text engine scales lmroman10; 0.14–0.37 pt), `rounded corners` on the legend
+(a TikZ node-path start-point difference, not a legend rule), and
+`nodes={text width=…}` multi-line entries (OPEN, below).
+
+**L1 — The legend is a TikZ matrix node.** Documented initial style
+(manual axisdescription.tex, "The default every axis legend style is"):
+`cells={anchor=center}, inner xsep=3pt, inner ysep=2pt, nodes={inner
+sep=2pt, text depth=0.15em}, anchor=north east, shape=rectangle,
+fill=white, draw=black, at={(0.98,0.98)}`. `legend style={…}` appends to it.
+`at` is in `axis description cs` (a plain pair is relative to the box);
+`anchor` is the matrix node's anchor *including* its outer sep (0.5 ×
+line width). The node's text box is the cell grid; its `base` anchor is the
+last row's origin (Tier 2 text box of the matrix: origin = content left
+edge on that baseline, height/depth = grid above/below). VERIFIED (all
+cases; e.g. base: node NE at (195.996, 146.993) = 0.98 × box).
+
+**L2 — `legend pos`.** `south west` = `at={(0.03,0.03)},anchor=south west`,
+`south east` (0.97,0.03), `north west` (0.03,0.97), `north east`
+(0.97,0.97), `outer north east` = `at={(1.03,1)},anchor=north west`.
+Surprise: `legend pos=north east` is **not** the initial position
+(0.98,0.98); the four inner positions sit 3 % in. The manual names the
+values only. VERIFIED (pos-* discovery, b-title, b-dots, b-cycle10 fresh).
+
+**L3 — Cell layout = PGF's matrix.** pgfmodulematrix.code.tex (LPPL): each
+cell is a picture; per column, its width is max(extent left of the origin)
++ max(extent right of it) over the rows that have that cell; per row, the
+height is max(0, extents above) and the depth max(0, extents below); the
+origins are aligned per column and per row; `column sep` in effect in a
+column's cell (matrix `column sep`, or `every odd/even column` styles —
+the documented `/tikz/every even column/.append style={column sep=…}`)
+separates it from the next column; `row sep` separates rows. Defaults: no
+separation. Cell extents: a text node's border box without outer sep; a
+stroked image path grows by half its line width; marks count by their
+geometric extent; an empty image (`empty legend`) is a zero box at its
+origin. `matrix.ts` lays out cells by their centres and only holds nodes,
+so the legend uses a dedicated implementation of this algorithm
+(`pgfplots/legend.ts`) and TikZ nodes for the texts and the box (open
+question of design/pgfplots.md settled). VERIFIED (heights: rows of
+`$x^2$`, `g`; wide; cols2; colsall; transpose; b-colsep, b-evencol,
+b-cols3, b-revtrans fresh).
+
+**L4 — Entries.** `\legend{…}` replaces all other entries (the last one
+wins); otherwise `\addlegendentry` in order (position in the body does not
+matter: b-addleg-order); `legend entries` only when the axis has no legend
+command (b-legend-wins). `\legend` lists are `\foreach` lists (dots:
+b-dots). `[opts]text` or `{[opts]text}` give per-entry node options
+(b-entrykey, b-entryopts). Images come from every `\addplot` that is not
+`forget plot` and from `\addlegendimage{opts}` (as `\addplot[opts]`, no
+cycle list), in body order. Entry i pairs with image i; the legend has
+min(#entries, #images) pairs (fewer, more); an empty entry drops its pair
+and its image (emptyentry: `\legend{a,,c}` shows plots 1 and 3).
+`reverse legend` reverses the pairs; `legend columns=n` fills rows of n
+pairs (−1: one row); `transpose legend` (n > 1) turns the input rows into
+columns (a,b,c,d at n=2 → rows [a c], [b d]). `legend plot pos=left`
+(initial) puts image then text in each pair, `right` text then image,
+`none` text only. VERIFIED (reverse, transpose, cols2, plotright,
+plotnone; fresh b-revtrans, b-entrykey).
+
+**L5 — Images.** Drawn with the plot's style followed by `every legend
+image post` (`legend image post style`), inside the matrix: a line width
+set on the legend (`legend style={thick}`) reaches the images (b-sep).
+`line legend` (initial): one path (0,0)–(0.3cm,0)–(0.6cm,0) (three points,
+as documented) and the plot's mark at the middle point only (`mark
+repeat=2, mark phase=2`); `only marks` draws the mark alone. `area legend`:
+`(0cm,-0.1cm) rectangle (0.6cm,0.1cm)` filled/stroked per the plot style
+(PDF path ends with a moveto to the far corner). `empty legend`: nothing.
+Marks keep the cycle list's mark fill and the plot's `mark options`
+(`scale=` scales the mark geometry, b-markopts). Bar legends and `legend
+image code/.code` are diagnosed (image omitted; other agents' plot types
+plug into `LEGEND_IMAGE_BUILDERS`). VERIFIED (onlymarks, area, empty,
+postmark, marksize; fresh b-image, b-post, b-fill, b-markopts).
+
+**L6 — Text cells.** `\node[<cells>, <every odd/even column>, <nodes>,
+<entry options>]{text}`, i.e. anchor from `cells` (`legend cell align`
+= `cells={anchor=west|east|center}`), `inner sep=2pt`, `text depth=0.15em`
+with the em of the legend's font, `font`/`text` of `legend style` reaching
+the cells. `text depth` replaces only the depth: the entry text box is
+(natural height, 1.5 pt) — the editor's node layout replaced *both* height
+and depth when either was given (fixed in `semantic/nodes/layout.ts`;
+TikZ sets `\dp` of the text box only). VERIFIED (left, right, b-rounded's
+cells, entries; Tier 2 text boxes of legend-marks: depth 1.49994).
+
+**L7 — Paint order and bounding box.** After the axis descriptions (title,
+labels): legend fill, legend stroke, then per row and column the image
+paths (line, then mark fill/stroke) and the entry text. The legend node
+(border plus half its line width when drawn) counts for the axis' bounding
+box and `outer` anchors (pos-one: `current axis.outer east` = legend east).
+OBSERVED/VERIFIED (b-title paint order checked by the comparison;
+legend-marks fixture).
+
+**L8 — `legend to name`.** The legend is not drawn in the axis (manual);
+`\ref{name}` elsewhere is not rendered by the editor. Diagnosed.
+
+**OPEN — multi-line entries.** `legend style={nodes={text width=40pt}}`
+(b-textwidth): TeX's legend is 5.6 pt lower than ours. The manual notes the
+initial `text depth=0.15em` clips multi-line entries unless reset; how the
+editor's `text width` nodes report height/depth with a depth override needs
+its own experiment.
+
+---
+
+## P. Plot styling (2026-11-27)
+
+Experiment E18: `e18-cases.ts` (discovery set `a`, 29 cases; fresh set `b`,
+10 cases with new values and combinations), checked with
+`check-cases.mts ./e18-cases.js` at the design tolerances. Discovery: 28 / 29
+pass; fresh: 9 / 10 pass. Max error over passing cases: layout 0.0080 pt,
+paths 0.0074 pt, glyphs 0.0039 pt. The two failures are both `exotic`
+(below, P2).
+
+**P1 — Plot handlers are PGF's** (pgflibraryplothandlers.code.tex, LPPL),
+applied to the canvas points, restarted after each jump: `sharp plot`
+(initial), `smooth`, `const plot` = `const plot mark left`, `const plot mark
+right`, `const plot mark mid`, `jump mark left/right/mid`, `ycomb`, `xcomb`
+(lines from the canvas image of y = 0, resp. x = 0, to each point; checked
+with `ymin=-1`/`xmin=-1` so the base is not the box edge). Surprise:
+**`smooth` in an axis uses tension 0.5** (PGF's initial
+`\pgfsetplottension{0.5}`), not TikZ's 0.55: with 0.55 the control points
+were 1.09 pt off (smooth), with 0.5 they match to 0.003 pt; an explicit
+`tension=` is honoured. Marks stay at the data points. The legend image
+(`\draw[<plot style>] plot coordinates {…}`) is drawn with the plot's
+handler too (b-const: a `jump mark mid` legend line has a gap). VERIFIED
+(smooth, smooth-t1, smooth-2pt, const*, jump*, ycomb, xcomb, sharp,
+smooth-jump; fresh b-smooth, b-const, b-comb).
+
+**P2 — Predefined cycle lists** are the definitions the manual prints
+(markers-meta.tex "The definitions of all predefined cycle lists follow"):
+`color`, `black white`, `exotic`, `mark list`, `mark list*` (not added),
+`color list`, `linestyles`, `linestyles*`; `mark list fill` initially
+`.!80!black`. VERIFIED by Tier 2 colours, dashes and marks: black white,
+color list (12 entries), linestyles*, mark list (8 entries); fresh b-bw,
+b-linestyles. `exotic` fails only on paint *space*: xcolor's `cyan` is CMYK,
+so `cyan!60!black` is painted as DeviceCMYK (0.6,0,0,0.4); the editor stores
+RGB (0, 0.6, 0.6) = xcolor's own conversion (r = 1 − min(1, c + k)), while
+the comparison converts CMYK multiplicatively ((1−c)(1−k) = 0.24 for red).
+A colour-model question, not a pgfplots rule; recorded, not changed.
+`dashdotted`/`dash dot dot` were missing from the editor's TikZ dash
+presets (`linestyles*` exposed it); added from tikz.code.tex
+(on 3pt off 2pt on \pgflinewidth off 2pt …).
+
+**P3 — `cycle list={…}`**: top-level comma list (`{red,blue}`: one key per
+entry), braced entries (`{{red,mark=*},{blue,mark=square}}`), or entries
+terminated by `\\`. `cycle list shift=n` takes entry i + n. The index i
+counts every `\addplot` except `forget plot` ones (manual; L4).
+`every axis plot no i` is applied before the cycle list entry and the
+options. `no markers` given to the axis is appended to `every axis plot
+post`, so it removes cycle-list marks (manual `no markers`). VERIFIED
+(cl-simple, cl-braced, cl-backslash, cl-shift, plotno, nomarkers; fresh
+b-custom, b-exotic's shift, b-plotno).
+
+**P4 — Mark selection.** Points are counted along the plot's (filtered)
+coordinate stream from 1; `mark phase=p` (initially 1) and `mark repeat=r`
+draw marks at p, p + r, p + 2r, …; `mark indices={…}` (a `\foreach` list)
+draws exactly those. Only selected marks inside the box are drawn and count
+for the bounding box. `mark options={scale=s}` scales the mark geometry
+(line width unchanged). VERIFIED (mark-repeat, mark-indices; fresh b-marks,
+b-markopts in E17).
+
+**P5 — Plot styles.** `fill`, `fill opacity`, `draw=none`, `line width`,
+`thick`…, `every axis plot post` reach the plot path as TikZ keys; a filled
+line plot is filled as an implicitly closed path. VERIFIED (fill, widths,
+post; fresh b-styles).
+
+**Note on tick steps at exact multiples of 35 pt.** With `height=140pt`
+(L = 140 = 4 × 35) TeX chose 3 intervals where I1 gives 4: at an exact
+transition the side is decided by N1 noise (I1 lists 245.0011 but
+174.99993). The E18 cases use 150 pt. Not a rule; do not test at exact
+multiples.
+
+**Note on A7a.** The fixture function-trig-rad shows `right of origin`
+0.054 pt off the box edge in the oracle (A7a gave ≤ 0.042 pt on the first 28
+fixtures); listed as a known oracle deviation for that fixture rather than
+widening `originProjectionPt`.
+
+**Not done.** `cycle multi list`, `mark list*` (half marks), `mark=text`
+(`mark list` entries 9–10), `every axis plot` interactions with `\addplot3`.

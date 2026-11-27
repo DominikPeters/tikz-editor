@@ -94,7 +94,7 @@ function instrumentation(engine: OracleEngine): string {
 % to "S" (behaviour log, harness notes; painting unchanged, disturbance.mts).
 \def\ticknum{S}
 \def\pgfplotsoracle@ticklist{}
-% Harness version 3: run from the tick label node (TikZ execute at begin
+% Harness version 4: run from the tick label node (TikZ execute at begin
 % node in xticklabel style), so the label code itself (xticklabel, the
 % log label of an axis with xmode=log) stays the document's. Not for the
 % scale label, which shares the style but has no tick (\ticknum = S).
@@ -134,12 +134,13 @@ function instrumentation(engine: OracleEngine): string {
   \ifpgfplotsoracle@descriptions
     % every axis post (applied after the axis options): axis x line=middle
     % and similar options redefine every axis x label with .style, which
-    % dropped a name appended earlier (harness version 3).
+    % dropped a name appended earlier (harness version 4).
     \pgfplotsset{every axis post/.append style={%
       title style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-title},
       xlabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-xlabel},
       ylabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-ylabel},
-      legend style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend}}}%
+      legend style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend,
+        nodes={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend-\the\pgfmatrixcurrentrow-\the\pgfmatrixcurrentcolumn}}}}%
   \fi}
 % Injected immediately before \end{axis}.
 \def\pgfplotsoracle@inaxis#1{%
@@ -170,7 +171,16 @@ function instrumentation(engine: OracleEngine): string {
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-xlabel}{\pgfplotsoracle@nodeanchors}%
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-ylabel}{\pgfplotsoracle@nodeanchors}%
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-legend}{\pgfplotsoracle@nodeanchors}%
+    \pgfplotsoracle@legendcells{#1}%
   \fi}
+% Legend entry nodes (harness v3): the legend matrix' text nodes are named
+% <legend>-<row>-<column> through the documented legend style's nodes={...}
+% (\pgfmatrixcurrentrow/-column are PGF's, LPPL); read rows/columns 1..16.
+\def\pgfplotsoracle@legendcells#1{%
+  \pgfutil@for\pgfplotsoracle@lr:={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}\do{%
+    \pgfutil@for\pgfplotsoracle@lc:={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}\do{%
+      \edef\pgfplotsoracle@ln{pgfplotsoracle-\pgfplotsoracle@case-#1-legend-\pgfplotsoracle@lr-\pgfplotsoracle@lc}%
+      \pgfutil@ifundefined{pgf@sh@ns@\pgfplotsoracle@ln}{}{\pgfplotsoracle@anchors{desc}{\pgfplotsoracle@ln}{\pgfplotsoracle@nodeanchors}}}}}
 % Injected immediately before \end{tikzpicture}: read-only.
 \def\pgfplotsoracle@endpicture{%
   \ifpgfplotsoracle@pictureBox

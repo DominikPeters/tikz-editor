@@ -49,10 +49,12 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
     .map((name) => [name, { tickPlacement: "log labels print b^k (or a fixed-point value), not \\tick (behaviour Q4)" }])),
   "log-pgfplotsset-mode": { map: "axis cs probe over a range of 600 carries 1e-3 pt noise (behaviour N2)", tickPlacement: "same probe noise" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
+  "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },
   "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },
   "scope-shift": { singleAxis: "a path outside the axis grows the picture" },
   "two-axes": { singleAxis: "two axes" },
+  "cycle-list-named": { singleAxis: "two axes" },
   "soa-at-anchor": { singleAxis: "a mark outside the axis grows the picture" },
   "axis-on-top": { clip: "clip=false", singleAxis: "unclipped content" },
   "embedded-tikz": { singleAxis: "unclipped node" }

@@ -29,9 +29,11 @@ const TOLERANCES = { colour: 0.002 };
 
 const LM_OPTICAL = "text at 8/9pt: TeX uses LMRoman9/8 (own metrics); the editor's text engine has only lmroman10/12/17 and scales lmroman10";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
-  "legend-marks": {
-    tier1: { "description-presence": "legends are not implemented (later phase); the evaluator warns" },
-    tier2: { "path-missing": "legend box, images and marks", "glyph-missing": "legend entries", "textbox-missing": "legend entries" }
+  "function-large": {
+    tier1: { map: "the oracle's axis cs probe at |y| ~ 3e6 reads points up to 7.7pt off its own rel axis cs rectangle (TeX fixed point, behaviour N2/K5); the plotted curves match in Tier 2" }
+  },
+  "function-trig-rad": {
+    tier1: { "axis-anchor": "`right of origin` is 0.054pt off the box edge in the oracle (behaviour A7a: projection noise, 0.042pt on the first 28 fixtures; the y part, 0.02pt, is the limit noise N2)" }
   },
   "scaled-ticks": {
     tier1: { map: "the oracle's axis cs probe at |y| ~ 1e4 is 0.16pt off its own rectangle (TeX fixed point, behaviour N2); plot geometry matches in Tier 2" }

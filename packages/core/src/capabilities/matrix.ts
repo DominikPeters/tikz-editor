@@ -920,7 +920,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_addplot_expression"],
-    notes: "`\\addplot {expr}` is sampled through pgfmath (domain -5:5 and 25 samples by default, degrees). Parametric plots are omitted with a warning."
+    notes: "`\\addplot {expr}` and parametric `({x},{y})` are sampled in pgfmath float mode (no TeX dimension limit): `domain`, `samples`, `samples at`, `variable`, `trig format plots`, `declare function`, macros; `unbounded coords=discard|jump`, `restrict x/y to domain[*]`. Checked against LuaLaTeX on 44 expressions (behaviour M). `x filter/.code` and `\\addplot3` expressions are not supported."
   },
   pgfplots_addplot_table: {
     parser: "partial",
@@ -948,11 +948,19 @@ export const capabilityMatrix: CapabilityMatrix = {
   },
   pgfplots_legend: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_legend"],
-    notes: "`\\addlegendentry`, `\\addlegendimage` and `\\legend` parse; legends are not drawn."
+    notes: "Legends from `\\addlegendentry[opts]`, `\\legend`, `legend entries`, `\\addlegendimage`, laid out as PGF's matrix with the documented `every axis legend` style: `legend pos`, `legend style` (at, anchor, draw, fill, font, nodes, cells, column/row sep, every even column), `legend columns` (incl. -1), `legend cell align`, `legend plot pos`, `reverse legend`, `transpose legend`, `line legend`, `area legend`, `empty legend`, `legend image post style`, `forget plot` (behaviour L). Bar legends, `legend image code/.code` and `legend to name`/`\\ref` are diagnosed."
+  },
+  pgfplots_plot_styles: {
+    parser: "partial",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_plot_styles"],
+    notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). `cycle multi list` is not supported."
   },
   pgfplots_pgfplotsset: {
     parser: "partial",

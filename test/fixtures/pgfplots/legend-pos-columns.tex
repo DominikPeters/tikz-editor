@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): legend pos=south east, two legend
+% columns, left-aligned cells.
+\begin{tikzpicture}
+\begin{axis}[legend pos=south east, legend columns=2, legend cell align=left]
+\addplot coordinates {(0,1) (1,2) (2,4)};
+\addplot coordinates {(0,2) (1,3) (2,5)};
+\addplot coordinates {(0,3) (1,4) (2,6)};
+\addplot coordinates {(0,4) (1,5) (2,7)};
+\legend{short,a longer entry,m,third row}
+\end{axis}
+\end{tikzpicture}

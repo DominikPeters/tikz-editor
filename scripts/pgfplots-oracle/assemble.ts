@@ -155,6 +155,10 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
       const anchors = named(kind);
       if (anchors) (axis.descriptions ??= {})[kind] = { anchors };
     }
+    for (let row = 1; row <= 16; row += 1) for (let column = 1; column <= 16; column += 1) {
+      const anchors = named(`legend-${String(row)}-${String(column)}`);
+      if (anchors) (axis.legendEntries ??= []).push({ row, column, node: { anchors } });
+    }
   }
   const tier1: Tier1 = { axes: [...axes.values()] };
   if (bbox["south west"] && bbox["north east"]) {
@@ -190,7 +194,7 @@ function textBoxQuad(box: TextBox): Point[] {
   return [at(0, -box.depth), at(box.width, -box.depth), at(box.width, box.height), at(0, box.height)];
 }
 
-interface PlacedGlyph { unicode: string; x: number; y: number; order: number; probes: Point[]; up: Point; size: number }
+interface PlacedGlyph { unicode: string; x: number; y: number; order: number; probes: Point[] }
 
 /**
  * Each glyph is represented by three probe points of its approximate ink
@@ -207,7 +211,7 @@ function glyphsOf(runs: GlyphRun[]): PlacedGlyph[] {
       { x: g.x + g.advance * d.x, y: g.y + g.advance * d.y },
       { x: g.x + 0.6 * run.size * up.x, y: g.y + 0.6 * run.size * up.y },
     ];
-    return { unicode: g.unicode, x: g.x, y: g.y, order: run.order, probes, up, size: run.size };
+    return { unicode: g.unicode, x: g.x, y: g.y, order: run.order, probes };
   }));
 }
 
@@ -216,15 +220,13 @@ function glyphInside(g: PlacedGlyph, quad: Point[]): boolean {
 }
 
 /**
- * A TeX box is tight: a lone math glyph such as `y` has a box only 4.3 pt
- * high, below the 0.6 em probe. In a text box the upper probe is therefore
- * capped at 90 % of the box height (harness version 3; the y label of
- * log-wide-range was assigned to the axis box before).
+ * Text boxes are tight (no inner sep), so the 0.6 em probe would leave out
+ * glyphs of a box shorter than that (x-height text, `text depth` legend
+ * entries: harness v3); the baseline probes decide, and the innermost
+ * containing box wins.
  */
-function glyphInBox(g: PlacedGlyph, quad: Point[], height: number): boolean {
-  const reach = Math.min(0.6 * g.size, 0.9 * height);
-  const top = { x: g.x + reach * g.up.x, y: g.y + reach * g.up.y };
-  return [g.probes[0], g.probes[1], top].every((p) => p !== undefined && insideQuad(p, quad, 0.05));
+function glyphInBox(g: PlacedGlyph, quad: Point[]): boolean {
+  return g.probes.slice(0, 2).every((p) => insideQuad(p, quad, 0.05));
 }
 
 function textIn(glyphs: PlacedGlyph[], quad: Point[]): string {
@@ -259,7 +261,7 @@ export function assembleTier2(page: MutoolPage, tier1: Tier1, rawBoxes: RawTextB
     let best = -1;
     for (let i = 0; i < textBoxes.length; i += 1) {
       const candidate = textBoxes[i]; const quad = quads[i];
-      if (!candidate || !quad || !glyphInBox(glyph, quad, candidate.height)) continue;
+      if (!candidate || !quad || !glyphInBox(glyph, quad)) continue;
       if (best < 0 || candidate.nesting > (textBoxes[best]?.nesting ?? -1)) best = i;
     }
     if (best >= 0) assigned.set(best, [...(assigned.get(best) ?? []), glyph]);

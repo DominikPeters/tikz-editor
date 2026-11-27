@@ -9,7 +9,7 @@
  * the host as `evaluateStatement`), installs the axis coordinate systems
  * and the data map for embedded TikZ, and registers the axis as a node.
  */
-import type { AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
+import type { AddPlotStatement, AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
 import type { FeatureId } from "../capabilities/feature-ids.js";
 import { worldBounds, worldPoint, worldVector, type WorldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -45,11 +45,14 @@ import { expandOptionListMacros } from "../semantic/style/macro-options.js";
 import { resolveContextDelta } from "../semantic/style/resolve.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix } from "../semantic/transform.js";
 import type { FeatureUsage, ResolvedStyle, SceneClipPath, SceneElement, ScenePath, ScenePathCommand } from "../semantic/types.js";
-import { collectPlotData, type PlotPoint } from "./data.js";
+import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
+import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
+import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
+import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
-import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { COLOR_CYCLE_LIST, readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { computeExtraTicks, computeLogTicks, computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 import { internalBase, internalLimitsModel, toInternal } from "./scale.js";
 
@@ -71,7 +74,7 @@ export type AxisEvaluation = {
   layout: AxisLayout;
   /** World transform of the frame the layout coordinates are in. */
   frameTransform: WorldTransform;
-  labels: Array<{ role: LabelRole; tickPosition?: number; probe: NodeGeometryProbe | null; text: string }>;
+  labels: Array<{ role: LabelRole; tickPosition?: number; probe: NodeGeometryProbe | null; text: string; textBox?: { origin: Point; width: number; height: number; depth: number }; cell?: { row: number; column: number } }>;
   /** The axis clip (C3), when `clip=true`. */
   clip: SceneClipPath | null;
 };
@@ -220,6 +223,10 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const axisScope = resolveStyle(context, parent, parent.style, axisTikz.length > 0 ? [keyUsesToOptionList(axisTikz)] : [], axis.id, axis.span);
   dedupeWarnings(diagnostics, axisScope.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: axis.optionsSpan ?? axis.beginSpan })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
   const axisFrame = childFrame(parent, { style: axisScope.style, transform: axisScope.transform });
+  // `declare function` and `trig format` given to the axis hold for everything in it.
+  const pgfmathScopeKeys = (uses: readonly PgfplotsKeyUse[]) => uses.filter((use) => /^(?:\/pgf\/)?(?:declare function|trig format)$/u.test(use.key)).map((use) => ({ ...use, key: use.key.replace(/^\/pgf\//u, "") }));
+  const axisPgfmath = pgfmathScopeKeys(model.tikzOptions);
+  if (axisPgfmath.length > 0) applyPgfMathScopeOptions(axisFrame.macroBindings, [keyUsesToOptionList(axisPgfmath)]);
   const frameTransform = axisScope.transform;
   const toWorld = (q: Point): WorldPoint => applyMatrix(frameTransform, p(q.x, q.y));
   const inverse = inverseMatrix(frameTransform) ?? frameTransform;
@@ -237,11 +244,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   // Stage 2.
   const plotStatements = axis.body.filter((item) => item.kind === "AddPlot");
   const plots: Array<{ model: PlotModel; points: PlotPoint[] | null }> = [];
-  plotStatements.forEach((statement, index) => {
-    const plot = resolvePlotModel(model, statement, index);
+  // `forget plot` uses the current cycle list entry without advancing it (manual markers-meta.tex, `every legend image post` example).
+  let cycleCounter = 0;
+  plotStatements.forEach((statement) => {
+    const plot = resolvePlotModel(model, statement, cycleCounter);
+    if (!plot.forget) cycleCounter += 1;
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings));
+    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings), plotMathEnvironment(axisFrame, plot));
     const input = statement.input.kind;
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
@@ -255,23 +265,19 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
     // Log directions work in the logarithm (Q1); a point without one is
     // discarded (`unbounded coords=discard`, initially), its neighbours joined (Q2).
+    const filtered = filterPlotPoints(data.points, plot);
     const points = logAxis
-      ? data.points.flatMap((point) => {
+      ? filtered.flatMap((point) => {
         const x = toInternal(model.x, point.x); const y = toInternal(model.y, point.y);
         if ((Number.isFinite(point.x) && !Number.isFinite(x)) || (Number.isFinite(point.y) && !Number.isFinite(y))) return [];
         return [{ ...point, x, y }];
       })
-      : data.points;
+      : filtered;
     plots.push({ model: plot, points });
+    if (plot.handler !== "sharp" || plot.markRepeat !== 1 || plot.markPhase !== 1 || plot.markIndices || model.cycleListShift !== 0 || model.cycleList.join("\n") !== COLOR_CYCLE_LIST.join("\n")) markFeature("pgfplots_plot_styles", "supported");
   });
   for (const item of axis.body) {
-    if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend") {
-      markFeature("pgfplots_legend", "unsupported");
-      if (!warned.has("legend")) {
-        warned.add("legend");
-        diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-legend", message: "Legends are not drawn yet.", span: item.span });
-      }
-    } else if (item.kind === "PgfplotsExtra") {
+    if (item.kind === "PgfplotsExtra") {
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-extra", message: "`\\pgfplotsextra` is not evaluated.", span: item.span });
     }
   }
@@ -316,7 +322,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   // Label measurement through the node pipeline.
   const labelFrame = childFrame(axisFrame, { pictureSizeRelevant: false });
   const labelStatements = new Map<LabelRequest, PathStatement | null>();
-  const evaluateLabel = (request: LabelRequest, at: Point, emit: boolean): { elements: SceneElement[]; probe: NodeGeometryProbe | null } => {
+  const evaluateLabel = (request: LabelRequest, at: Point, emit: boolean, frame: SemanticContextFrame = labelFrame): { elements: SceneElement[]; probe: NodeGeometryProbe | null } => {
     let statement = labelStatements.get(request);
     if (statement === undefined) {
       statement = buildLabelStatement(request, model, axis);
@@ -329,7 +335,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     let probe: NodeGeometryProbe | null = null;
     const previousProbe = context.nodeGeometryProbe;
     context.nodeGeometryProbe = (report) => { probe ??= report; };
-    pushFrame(context, labelFrame);
+    pushFrame(context, frame);
     let elements: SceneElement[];
     try {
       elements = host.evaluateStatement(positioned);
@@ -360,7 +366,9 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     yscale: styleLists(model.styles, ["every tick label", "every y tick label", "every y tick scale label"]),
     xlabel: styleLists(model.styles, ["every axis label", "every axis x label"]),
     ylabel: styleLists(model.styles, ["every axis label", "every axis y label"]),
-    title: styleLists(model.styles, ["every axis title"])
+    title: styleLists(model.styles, ["every axis title"]),
+    legend: [],
+    "legend-entry": []
   };
 
   // Plot styles (needed for marks in F1 and for emission).
@@ -370,23 +378,31 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     dedupeWarnings(diagnostics, resolved.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: plot.model.statement.optionsSpan ?? plot.model.statement.span })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
     return resolved.style;
   });
-  const markStyles = plots.map((plot, index) => {
-    const base = plotStyles[index];
-    if (!plot.points || !base || plot.model.mark === null) return null;
-    if (!isPlotMarkName(plot.model.mark)) {
-      diagnostics.push({ severity: "warning", code: `unknown-plot-mark:${plot.model.mark}`, message: `PGF defines no plot mark named \`${plot.model.mark}\`; no marks are drawn.`, span: plot.model.statement.span });
+  const marksFor = (plotModel: PlotModel, base: ResolvedStyle, warn: boolean): LegendMarks | null => {
+    const mark = plotModel.mark;
+    if (mark === null) return null;
+    if (!isPlotMarkName(mark)) {
+      if (warn) diagnostics.push({ severity: "warning", code: `unknown-plot-mark:${mark}`, message: `PGF defines no plot mark named \`${mark}\`; no marks are drawn.`, span: plotModel.statement.span });
       return null;
     }
     const markBase: ResolvedStyle = { ...base, stroke: base.stroke ?? base.textColor ?? "black", fill: base.fill ?? base.textColor ?? "black", drawExplicit: true, markerStart: null, markerEnd: null };
-    const lists = plot.model.markKeys.length > 0 ? [keyUsesToOptionList(plot.model.markKeys)] : [];
-    const resolved = resolveStyle(context, axisFrame, markBase, lists, plot.model.statement.id, plot.model.statement.span);
+    const lists = plotModel.markKeys.length > 0 ? [keyUsesToOptionList(plotModel.markKeys)] : [];
+    const resolved = resolveStyle(context, axisFrame, markBase, lists, plotModel.statement.id, plotModel.statement.span);
     const style = { ...resolved.style, stroke: resolved.style.stroke ?? resolved.style.textColor ?? markBase.stroke, fill: resolved.style.fill ?? resolved.style.textColor ?? markBase.fill };
-    const primitives = plotMarkPrimitives(plot.model.mark, { size: plot.model.markSize ?? 2, strokeColor: style.stroke ?? "black", fillColor: style.fill ?? "black" });
+    // `mark options={scale=…}` scales the mark's geometry (PGF transforms the mark; line widths stay).
+    const markScale = plotModel.markKeys.reduce((f, use) => (use.key === "scale" ? f * (readPgfNumber(use.value ?? "") ?? 1) : f), 1);
+    const primitives = plotMarkPrimitives(mark, { size: plotModel.markSize ?? 2, strokeColor: style.stroke ?? "black", fillColor: style.fill ?? "black" })
+      ?.map((primitive) => (primitive.kind === "path" && markScale !== 1 ? { ...primitive, segments: primitive.segments.map((seg) => scaleMarkSegment(seg, markScale)) } : primitive));
     if (!primitives || primitives.some((primitive) => primitive.kind !== "path")) {
-      diagnostics.push({ severity: "warning", code: `unsupported-plot-mark:${plot.model.mark}`, message: `The \`${plot.model.mark}\` mark is not drawn in axes yet.`, span: plot.model.statement.span });
+      if (warn) diagnostics.push({ severity: "warning", code: `unsupported-plot-mark:${mark}`, message: `The \`${mark}\` mark is not drawn in axes yet.`, span: plotModel.statement.span });
       return null;
     }
     return { style, primitives: primitives.flatMap((primitive) => (primitive.kind === "path" ? [primitive] : [])) };
+  };
+  const markStyles = plots.map((plot, index) => {
+    const base = plotStyles[index];
+    if (!plot.points || !base) return null;
+    return marksFor(plot.model, base, true);
   });
 
   const insideBox = (q: Point, box: { x0: number; y0: number; x1: number; y1: number }) => {
@@ -419,8 +435,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (!marks || !plot.points) return;
         const extent = segmentsBounds(marks.primitives.flatMap((primitive) => primitive.segments));
         if (!extent) return;
+        let streamIndex = 0;
         for (const point of plot.points) {
           if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+          streamIndex += 1;
+          if (!markSelected(plot.model, streamIndex)) continue;
           const q = map(point.x, point.y);
           if (!insideBox(q, area)) continue;
           box = unionBox(box, { minX: q.x + extent.minX, minY: q.y + extent.minY, maxX: q.x + extent.maxX, maxY: q.y + extent.maxY });
@@ -508,15 +527,13 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
         if (!plot.model.onlyMarks) {
-          const commands: ScenePathCommand[] = [];
-          let pen = false;
-          for (const point of plot.points) {
-            if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-            const w = toWorld(mapPoint(point.x, point.y));
-            commands.push({ kind: pen && !point.jump ? "L" : "M", to: w });
-            pen = true;
-          }
-          if (commands.some((command) => command.kind === "L")) {
+          // P1: the plot handler (sharp, smooth, const, jump, comb) on the canvas points.
+          const canvas = plot.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)).map((point) => ({ p: mapPoint(point.x, point.y), jump: point.jump }));
+          const commands: ScenePathCommand[] = plotHandlerCommands(canvas, plot.model.handler, {
+            tension: plot.model.tension,
+            combBase: (q) => (plot.model.handler === "xcomb" ? { x: mapPoint(0, 0).x, y: q.y } : { x: q.x, y: mapPoint(0, 0).y })
+          }).map((c): ScenePathCommand => (c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) }));
+          if (commands.some((command) => command.kind !== "M")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
             path.commands = commands;
             path.clipChain = [...contentClip];
@@ -526,8 +543,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         }
         if (marks) {
           let n = 0;
+          let streamIndex = 0;
           for (const point of plot.points) {
             if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+            streamIndex += 1;
+            if (!markSelected(plot.model, streamIndex)) continue;
             const q = mapPoint(point.x, point.y);
             if (!insideBox(q, layout.box)) continue;
             marks.primitives.forEach((primitive, primitiveIndex) => {
@@ -565,8 +585,56 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     layout = extendAxisLayout(layout, extra);
   }
 
-  if (model.axisOnTop) elements.push(...content, ...decorations, ...tickLabelElements, ...markElements, ...descriptionElements);
-  else elements.push(...decorations, ...tickLabelElements, ...content, ...markElements, ...descriptionElements);
+  // The legend (behaviour L), painted after the descriptions; it counts for the axis' box (F1).
+  const legendImagePost = styleLists(model.styles, ["every legend image post"]);
+  const legendImages: LegendImageSource[] = [];
+  {
+    let plotIndex = 0;
+    let cycle = 0;
+    for (const item of axis.body) {
+      if (item.kind === "AddPlot") {
+        const plot = plots[plotIndex];
+        plotIndex += 1;
+        if (!plot || plot.model.forget) continue;
+        cycle = plot.model.cycleIndex + 1;
+        legendImages.push({ plot: resolvePlotModel(model, item, plot.model.cycleIndex, legendImagePost), sourceId: item.id, span: item.span });
+      } else if (item.kind === "AddLegendImage") {
+        // `\addlegendimage{opts}` acts as `\addplot[opts]` for the legend only; the plot index does not advance (manual).
+        const synthetic: AddPlotStatement = { kind: "AddPlot", id: item.id, axisId: item.axisId, plotIndex: -1, span: item.span, commandSpan: item.span, dimension: 2, increment: false, options: item.options, input: { kind: "other", span: item.span, name: "legend image", nameSpan: item.span, raw: "" }, terminated: true };
+        legendImages.push({ plot: resolvePlotModel(model, synthetic, cycle, legendImagePost), sourceId: item.id, span: item.span });
+      }
+    }
+  }
+  const legendResult = emitLegend({
+    axis, model, images: legendImages, diagnostics,
+    pathStyle: (plotModel, legendKeys) => resolveStyle(context, axisFrame, drawBase(axisScope.style), [...legendKeys, ...plotModel.pathKeys].length > 0 ? [keyUsesToOptionList([...legendKeys, ...plotModel.pathKeys])] : [], plotModel.statement.id, plotModel.statement.span).style,
+    marks: (plotModel, base) => marksFor(plotModel, base, false),
+    frameWith: (uses) => uses.length === 0 ? labelFrame : childFrame(labelFrame, { style: resolveStyle(context, labelFrame, labelFrame.style, [keyUsesToOptionList(uses)], axis.id, axis.span).style }),
+    node: (request, frame, emit) => {
+      const { elements: nodeElements, probe } = evaluateLabel(request, request.at, emit, frame);
+      return { elements: nodeElements, probe, geometry: probe ? probeGeometry(probe, toLocal) : null };
+    },
+    path: (sourceId, itemId, style, span, commands) => {
+      const path = makePath(sourceId, itemId, style, axisFrame.styleChain, span);
+      path.commands = commands.map((c): ScenePathCommand => c.kind === "Z" ? { kind: "Z" } : c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) });
+      path.clipChain = [...parent.clipChain];
+      path.pictureSizeRelevant = false;
+      return path;
+    },
+    box: layout.box,
+    resolvePoint: (raw) => resolveLegendPoint(raw, layout, context, axisFrame, toLocal),
+    expand: (text) => expandMacroBindings(text, parent.macroBindings)
+  });
+  const legendElements = legendResult?.elements ?? [];
+  if (legendResult) {
+    markFeature("pgfplots_legend", "supported");
+    layout = extendAxisLayout(layout, legendResult.bbox);
+    labelRecords.push({ role: "legend", probe: legendResult.probe, text: legendResult.text, textBox: legendResult.textBox });
+    for (const entry of legendResult.entries) labelRecords.push({ role: "legend-entry", tickPosition: entry.index, probe: entry.probe, text: entry.text, cell: { row: entry.row, column: entry.column } });
+  }
+
+  if (model.axisOnTop) elements.push(...content, ...decorations, ...tickLabelElements, ...markElements, ...descriptionElements, ...legendElements);
+  else elements.push(...decorations, ...tickLabelElements, ...content, ...markElements, ...descriptionElements, ...legendElements);
 
   // F1: the axis' box extends the picture; `current axis` and `name=` become nodes.
   const worldBox = transformBox(layout.bbox, toWorld);
@@ -600,6 +668,59 @@ function elementBounds(element: SceneElement): Box | null {
   const w = (element.nodeVisualWidth ?? 0) / 2; const h = (element.nodeVisualHeight ?? 0) / 2;
   const c = element.nodeVisualCenter ?? element.position;
   return { minX: c.x - w, minY: c.y - h, maxX: c.x + w, maxY: c.y + h };
+}
+
+/** Functions and trig format for a plot's expressions: the axis scope, the plot's own `declare function`, then `trig format plots`. */
+function plotMathEnvironment(axisFrame: SemanticContextFrame, plot: PlotModel): PlotMathEnvironment {
+  let bindings = axisFrame.macroBindings;
+  if (plot.pgfmathKeys.length > 0) {
+    bindings = bindings.fork();
+    applyPgfMathScopeOptions(bindings, [keyUsesToOptionList(plot.pgfmathKeys)]);
+  }
+  const scope = readPgfMathScope(bindings);
+  return {
+    ...(scope.functions ? { functions: scope.functions } : {}),
+    trigFormat: plot.trigFormatPlots ?? scope.trigFormat ?? "deg"
+  };
+}
+
+/**
+ * The legend's `at`: a plain pair is `axis description cs` (manual "Legend
+ * Appearance": "relative to the axis rectangle (unless units like cm or pt
+ * are specified explicitly)"); `(… cs:…)` and other TikZ coordinates are
+ * read in the axis frame.
+ */
+function resolveLegendPoint(raw: string, layout: AxisLayout, context: SemanticContext, frame: SemanticContextFrame, toLocal: (w: WorldPoint) => Point): Point | null {
+  const text = stripBraces(raw).trim();
+  const inner = text.startsWith("(") && text.endsWith(")") ? text.slice(1, -1) : text;
+  const parts = splitArgs(inner);
+  const { x0, y0, x1, y1 } = layout.box;
+  if (parts.length === 2 && !inner.includes("cs:")) {
+    const ax = readNumber(parts[0] ?? ""); const ay = readNumber(parts[1] ?? "");
+    if (ax !== null && ay !== null) return { x: x0 + ax * (x1 - x0), y: y0 + ay * (y1 - y0) };
+  }
+  const cs = /^\s*(axis description|rel axis|axis)\s+cs:(.*)$/u.exec(inner);
+  if (cs) {
+    const pair = splitArgs(cs[2] ?? "");
+    const ax = readNumber(pair[0] ?? ""); const ay = readNumber(pair[1] ?? "");
+    if (ax === null || ay === null) return null;
+    if (cs[1] === "axis") return { x: layout.map.origin.x + ax * layout.map.xUnit.x, y: layout.map.origin.y + ay * layout.map.yUnit.y };
+    return { x: x0 + ax * (x1 - x0), y: y0 + ay * (y1 - y0) };
+  }
+  const world = evaluateTransformCoordinateInFrame(text, context, frame);
+  return world ? toLocal(world) : null;
+}
+
+/** P3: `mark indices` (1-based), else `mark repeat`/`mark phase` (TikZ: the phase-th point, then every repeat-th). */
+function markSelected(plot: PlotModel, index: number): boolean {
+  if (plot.markIndices) return plot.markIndices.includes(index);
+  return index >= plot.markPhase && (index - plot.markPhase) % plot.markRepeat === 0;
+}
+
+function scaleMarkSegment(segment: PlotMarkSegment, f: number): PlotMarkSegment {
+  if (segment.op === "Z") return segment;
+  if (segment.op === "C") return { ...segment, x1: segment.x1 * f, y1: segment.y1 * f, x2: segment.x2 * f, y2: segment.y2 * f, x: segment.x * f, y: segment.y * f };
+  return { ...segment, x: segment.x * f, y: segment.y * f };
 }
 
 function boxSizeOf(model: AxisModel, limits: { xmin: number; xmax: number; ymin: number; ymax: number }): { width: number; height: number } {

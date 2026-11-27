@@ -4,11 +4,12 @@
  * and reports how many axes render without unsupported-key/plot
  * diagnostics, and the unsupported keys/features ranked by distinct paper.
  *
- *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [--corpus <dir>] [--out <file.json>]
+ *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-axes-dir] [out.json]
  *
- * `--corpus` takes an absolute corpus directory (default
- * artifacts/pgfplots-corpus/axes of this checkout). Output:
- * artifacts/pgfplots-corpus/editor-run.json (or `--out`) and a summary on stdout.
+ * The corpus directory defaults to this checkout's
+ * artifacts/pgfplots-corpus/axes (pass an absolute path from a worktree).
+ * Output: <out.json> (default artifacts/pgfplots-corpus/editor-run.json) and
+ * a summary on stdout.
  */
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,9 +19,8 @@ import { renderTikzToSvgAsync } from "../../packages/core/src/render/index.js";
 import { createTexNodeTextEngine } from "../../packages/core/src/text/tex-node-text-engine.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
-const argValue = (flag: string): string | undefined => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : undefined; };
-const corpus = resolve(argValue("--corpus") ?? join(root, "artifacts", "pgfplots-corpus", "axes"));
-const outFile = resolve(argValue("--out") ?? join(root, "artifacts", "pgfplots-corpus", "editor-run.json"));
+const corpus = resolve(process.argv[2] ?? join(root, "artifacts", "pgfplots-corpus", "axes"));
+const outFile = resolve(process.argv[3] ?? join(root, "artifacts", "pgfplots-corpus", "editor-run.json"));
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

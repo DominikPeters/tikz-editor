@@ -202,6 +202,16 @@ export function applyFlagEntry(
   if (key === "loosely dotted") {
     return { style: { ...style, dashArray: [style.lineWidth, 4] }, transform, diagnostics: [] };
   }
+  // tikz.code.tex: dash dot (dashdotted) = on 3pt off g on \pgflinewidth off g, dash dot dot adds one more
+  // dot; densely g = 1pt, plain 2pt, loosely 4pt.
+  const dashDot = /^(densely |loosely )?(?:dash dot|dashdotted|dash dot dot|dashdotdotted)$/u.exec(key);
+  if (dashDot) {
+    const gap = dashDot[1] === "densely " ? 1 : dashDot[1] === "loosely " ? 4 : 2;
+    const dots = /dot dot|dotdotted/u.test(key) ? 2 : 1;
+    const dashArray = [3, gap];
+    for (let i = 0; i < dots; i += 1) dashArray.push(style.lineWidth, gap);
+    return { style: { ...style, dashArray }, transform, diagnostics: [] };
+  }
   if (NAMED_COLORS.has(key) || normalizedColorCandidate !== key) {
     const normalizedColor = normalizedColorCandidate;
     return {

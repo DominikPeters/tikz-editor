@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): cycle list given inline, braced
+% entries, every axis plot no N, no markers at axis level.
+\begin{tikzpicture}
+\begin{axis}[cycle list={{teal,thick,mark=triangle*},{violet,dashed,mark=o},{orange}},
+  every axis plot no 2/.style={mark=x}]
+\addplot coordinates {(0,0) (1,1) (2,0.5)};
+\addplot coordinates {(0,1) (1,2) (2,1.5)};
+\addplot coordinates {(0,2) (1,3) (2,2.5)};
+\addplot+[mark size=3pt] coordinates {(0,3) (1,4) (2,3.5)};
+\end{axis}
+\end{tikzpicture}

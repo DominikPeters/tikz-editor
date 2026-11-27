@@ -1,0 +1,15 @@
+% pgfplots oracle fixture (hand-written): legend images: only marks, area
+% legend, \addlegendimage with empty legend and a custom style, legend image
+% post style.
+\begin{tikzpicture}
+\begin{axis}[legend pos=north west, legend image post style={semithick}]
+\addplot+[only marks] coordinates {(0,1) (1,2) (2,1.5)};
+\addlegendentry{measured}
+\addplot+[area legend, fill=red!20] coordinates {(0,0) (1,1) (2,0.5)};
+\addlegendentry{area}
+\addlegendimage{empty legend}
+\addlegendentry{--- model ---}
+\addlegendimage{black, dashed, mark=triangle*}
+\addlegendentry{custom}
+\end{axis}
+\end{tikzpicture}
