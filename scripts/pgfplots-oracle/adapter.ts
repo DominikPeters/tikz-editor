@@ -101,10 +101,11 @@ type TextGeometry = {
   height: number;
   depth: number;
   glyphs: GlyphPosition[];
+  rules: Array<{ from: Point; to: Point; lineWidth: number }>;
   text: string;
 };
 
-const CMSY: Record<number, string> = { 0: "−", 1: "·", 2: "×", 3: "∗", 6: "±", 20: "≤", 21: "≥", 33: "→", 48: "′", 49: "∞", 106: "|", 107: "∥" };
+const CMSY: Record<number, string> = { 0: "−", 1: "·", 2: "×", 3: "∗", 6: "±", 20: "≤", 21: "≥", 33: "→", 48: "′", 49: "∞", 106: "|", 107: "∥", 14: "◦" };
 const CMMI_EXTRA: Record<number, string> = { 58: ".", 59: ",", 60: "<", 61: "/", 62: ">" };
 // Greek slots of cmmi (11-39) and cmr (0-10), as the PDF's ToUnicode maps them (compared after NFKC).
 const CMMI_GREEK = "αβγδϵζηθικλμνξπρστυϕχψωεϑϖϱςφ";
@@ -112,7 +113,7 @@ const CMR_GREEK = "ΓΔΘΛΞΠΣΥΦΨΩ";
 
 function unicodeOf(font: string, code: number): string {
   if (font.startsWith("lm")) return String.fromCodePoint(code).normalize("NFKC");
-  if (font.startsWith("cmsy")) return CMSY[code] ?? "\uFFFD";
+  if (font.startsWith("cmsy")) return CMSY[code] ?? (code >= 65 && code <= 90 ? String.fromCharCode(code) : "\uFFFD");
   if (font.startsWith("cmmi")) return (CMMI_EXTRA[code] ?? (code >= 11 && code <= 39 ? [...CMMI_GREEK][code - 11] : undefined) ?? (code >= 65 && code <= 122 ? String.fromCharCode(code) : "\uFFFD")).normalize("NFKC");
   if (font.startsWith("cmr") && code <= 10) return [...CMR_GREEK][code] ?? "\uFFFD";
   if (code >= 32 && code < 127) return String.fromCharCode(code);
@@ -165,12 +166,31 @@ function payloadGlyphs(body: string): Array<{ font: string; code: number; x: num
   return out;
 }
 
+/** TeX rules of a payload (`\overline`, fraction bars) as rectangles in payload coordinates. */
+function payloadRules(body: string): Array<{ x: number; y: number; width: number; height: number }> {
+  const out: Array<{ x: number; y: number; width: number; height: number }> = [];
+  const stack: Affine[] = [IDENTITY];
+  for (const tag of body.matchAll(/<(\/?)(g|rect)\b([^>]*?)(\/?)>/gu)) {
+    const top = stack[stack.length - 1] ?? IDENTITY;
+    const attrs = tag[3] ?? "";
+    if (tag[1] === "/") { if (tag[2] === "g") stack.pop(); continue; }
+    const m = compose(top, parseTransform(/\stransform="([^"]*)"/u.exec(attrs)?.[1]));
+    if (tag[2] === "g") { stack.push(m); continue; }
+    if (!attrs.includes("data-tex-rule")) continue;
+    const num = (name: string) => Number(new RegExp(`\\s${name}="([^"]*)"`, "u").exec(attrs)?.[1] ?? "0");
+    const x = num("x"); const y = num("y"); const w = num("width"); const h = num("height");
+    out.push({ x: m.a * x + m.e, y: m.d * y + m.f, width: m.a * w, height: m.d * h });
+  }
+  return out;
+}
+
 function textGeometry(element: SceneText, textEngine: NodeTextEngine): TextGeometry {
   const info = element.textRenderInfo;
   const width = element.textBlockWidth ?? 0;
   const blockHeight = element.textBlockHeight ?? 0;
   let baselineY = -blockHeight / 2;
   let glyphsLocal: ReturnType<typeof payloadGlyphs> = [];
+  let rulesLocal: ReturnType<typeof payloadRules> = [];
   if (info?.mode === "tex") {
     const metrics = textEngine.measure({
       text: info.renderSourceText, textWidthPt: null, fontStyle: element.style.fontStyle, fontWeight: element.style.fontWeight,
@@ -178,7 +198,7 @@ function textGeometry(element: SceneText, textEngine: NodeTextEngine): TextGeome
     });
     if (metrics) baselineY = metrics.baselineY;
     const payload = textEngine.renderFromCache(info.cacheKey);
-    if (payload) glyphsLocal = payloadGlyphs(payload.body);
+    if (payload) { glyphsLocal = payloadGlyphs(payload.body); rulesLocal = payloadRules(payload.body); }
   }
   const height = blockHeight / 2 - baselineY;
   const depth = blockHeight - height;
@@ -195,8 +215,13 @@ function textGeometry(element: SceneText, textEngine: NodeTextEngine): TextGeome
     const w = toWorld(g.x - width / 2, blockHeight / 2 - g.y);
     return { unicode: unicodeOf(g.font, g.code), x: w.x, y: w.y, font: pdfFontName(g.font), size: g.size * glyphScale, math: g.math };
   });
+  // LuaTeX paints a rule as a stroked line through its middle, as wide as the rule is high.
+  const rules = rulesLocal.map((r) => {
+    const yMid = r.y + r.height / 2;
+    return { from: toWorld(r.x - width / 2, blockHeight / 2 - yMid), to: toWorld(r.x + r.width - width / 2, blockHeight / 2 - yMid), lineWidth: Math.abs(r.height) * glyphScale };
+  });
   return {
-    element,
+    element, rules,
     origin: toWorld(-width / 2, baselineY),
     xAxis: { x: linear.a, y: linear.b },
     yAxis: { x: linear.c, y: linear.d },
@@ -463,6 +488,10 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
       const geometry = texts.get(element);
       if (!geometry) continue;
       const paint = paintOf(element.style.textColor ?? "black", element.style.textOpacity) ?? { space: "DeviceRGB", components: [0, 0, 0], alpha: 1 };
+      // TeX ships a rule before the glyphs of its box here (overline over its nucleus).
+      for (const rule of geometry.rules) {
+        primitives.push({ type: "path", order: order(), operation: "stroke", segments: [{ op: "M", ...rule.from }, { op: "L", ...rule.to }], paint, lineWidth: rule.lineWidth, lineCap: 0, lineJoin: 0, miterLimit: 10, ...clipState });
+      }
       // Consecutive glyphs of one font form a run, as in the PDF.
       const runs: GlyphPosition[][] = [];
       for (const g of geometry.glyphs) {

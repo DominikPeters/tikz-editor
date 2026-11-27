@@ -408,6 +408,9 @@ function glyphItems(tier2: Tier2): GlyphItem[] {
 // ---------------------------------------------------------------------------
 // Tier 2: comparison
 
+/** Paint tie-break for coincident subpaths (pt): far below every tolerance, far above float noise. */
+const PAINT_TIE_PT = 1e-4;
+
 export function compareTier2(expected: Tier2, observed: Tier2, options: CompareOptions = {}): CompareResult {
   const tol = { ...DEFAULT_TOLERANCES, ...options.tolerances };
   const findings: Finding[] = [];
@@ -420,7 +423,15 @@ export function compareTier2(expected: Tier2, observed: Tier2, options: CompareO
   const matchedOrder: { e: number; o: number; bounds: Box; painted: boolean }[] = [];
   for (const kind of new Set([...ePaths, ...oPaths].map((p) => p.kind))) {
     const es = ePaths.filter((p) => p.kind === kind); const os = oPaths.filter((p) => p.kind === kind);
-    const { pairs, unmatchedExpected, unmatchedObserved } = assign(es, os, (e, o) => boxGap(e.bounds, o.bounds) > tol.searchRadiusPt ? Infinity : itemDistance(e, o), tol.searchRadiusPt);
+    // Coincident subpaths (a plot line on a grid line) are told apart by paint: a pair whose
+    // paint differs ranks behind an equally close pair whose paint agrees (PAINT_TIE_PT).
+    const ranked = assign(es, os, (e, o) => {
+      if (boxGap(e.bounds, o.bounds) > tol.searchRadiusPt) return Infinity;
+      const d = itemDistance(e, o);
+      return d + (e.kind !== "clip" && paintDelta(e.source.paint, o.source.paint) > tol.colour ? PAINT_TIE_PT : 0);
+    }, tol.searchRadiusPt + PAINT_TIE_PT);
+    const pairs = ranked.pairs.map(([i, j]): [number, number, number] => [i, j, itemDistance(es[i] as PathItem, os[j] as PathItem)]);
+    const { unmatchedExpected, unmatchedObserved } = ranked;
     for (const i of unmatchedExpected) { const e = es[i]; if (e) add("path-missing", e.key, `${kind} subpath ${describe(e)} not found in observed`); }
     for (const j of unmatchedObserved) { const o = os[j]; if (o) add("path-extra", o.key, `observed ${kind} subpath ${describe(o)} not in oracle`); }
     for (const [i, j, d] of pairs) {
