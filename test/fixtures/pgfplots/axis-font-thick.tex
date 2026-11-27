@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): TikZ keys on the axis apply to the
+% whole axis (box line width, text font); minor x ticks from a list and a
+% tick distance.
+\begin{tikzpicture}
+\begin{axis}[thick, font=\small, xtick distance=0.5, minor xtick={0.25,0.75,1.25}, xlabel={Small}]
+\addplot coordinates {(0,0) (1,1) (2,0)};
+\end{axis}
+\end{tikzpicture}

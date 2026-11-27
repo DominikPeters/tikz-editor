@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): expression plots with the default
+% domain and samples, and degrees for trigonometry.
+\begin{tikzpicture}
+\begin{axis}
+\addplot {x^2/5 - 2};
+\addplot[domain=-5:5, samples=41, red] {3*sin(36*x)};
+\end{axis}
+\end{tikzpicture}

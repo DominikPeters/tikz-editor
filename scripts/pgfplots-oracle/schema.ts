@@ -11,7 +11,7 @@
 
 export const PGFPLOTS_ORACLE_SCHEMA = "pgfplots-oracle/v1";
 /** Bump when the TeX instrumentation or parsing changes meaning. Part of the cache key. */
-export const PGFPLOTS_ORACLE_HARNESS_VERSION = 1;
+export const PGFPLOTS_ORACLE_HARNESS_VERSION = 2;
 
 export interface Point { x: number; y: number }
 export interface Box { minX: number; minY: number; maxX: number; maxY: number }

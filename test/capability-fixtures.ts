@@ -418,6 +418,21 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
   \end{axis}
   \draw (0,0) -- (1,1);
 \end{tikzpicture}`,
+  pgfplots_ticks: String.raw`\begin{tikzpicture}
+  \begin{axis}[xtick distance=0.5, minor tick num=1, ytick={0,0.5,...,2}]
+    \addplot coordinates {(0,0) (1,1) (2,0)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_axis_descriptions: String.raw`\begin{tikzpicture}
+  \begin{axis}[xlabel={$x$}, ylabel={$y$}, title={Title}]
+    \addplot coordinates {(0,0) (1,1)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_axis_coordinates: String.raw`\begin{tikzpicture}
+  \begin{axis}[xmin=0, xmax=2, ymin=0, ymax=2]
+    \draw (axis cs:0,0) -- (1,1) -- (rel axis cs:1,0);
+  \end{axis}
+\end{tikzpicture}`,
   pgfplots_log_axes: String.raw`\begin{tikzpicture}
   \begin{loglogaxis}
     \addplot coordinates {(1,10) (10,100)};

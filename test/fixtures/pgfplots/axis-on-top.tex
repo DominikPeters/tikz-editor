@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): axis on top with a thick plot
+% crossing the box, and clip=false with a path outside the box.
+\begin{tikzpicture}
+\begin{axis}[axis on top, clip=false, xmin=0, xmax=4, ymin=0, ymax=4]
+\addplot[orange, line width=4pt] coordinates {(0,1) (2,4) (4,0)};
+\draw[purple] (axis cs:3,3) -- (axis cs:5,5);
+\end{axis}
+\end{tikzpicture}

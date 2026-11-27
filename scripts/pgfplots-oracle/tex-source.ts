@@ -90,6 +90,10 @@ function instrumentation(engine: OracleEngine): string {
 \def\pgfplotsoracle@axisanchors{${anchorList(AXIS_ANCHORS)}}
 % Tick probe: documented xticklabel code; reports \tick and \ticknum, then
 % typesets the documented default label.
+% The tick scale label (scaled ticks) is typeset with the tick label style
+% but outside the tick loop, where \ticknum is undefined; there it expands
+% to "S" (behaviour log, harness notes; painting unchanged, disturbance.mts).
+\def\ticknum{S}
 \def\pgfplotsoracle@ticklist{}
 \def\pgfplotsoracle@tick#1#2{%
   \pgfplotsoracle@rec{TICK|#1|#2|\ticknum|\tick}%

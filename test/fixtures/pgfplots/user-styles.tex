@@ -1,0 +1,13 @@
+% pgfplots oracle fixture (hand-written): user styles defined with
+% \pgfplotsset and used in axis and plot options, every axis plot.
+\begin{tikzpicture}
+\pgfplotsset{
+  myaxis/.style={width=8cm, height=5cm, grid=major},
+  myplot/.style={red, thick, mark=square*},
+  every axis plot/.append style={line width=1pt},
+}
+\begin{axis}[myaxis]
+\addplot[myplot] coordinates {(0,2) (1,3) (2,2.5) (3,4)};
+\addplot coordinates {(0,1) (1,1.5) (2,1) (3,2)};
+\end{axis}
+\end{tikzpicture}

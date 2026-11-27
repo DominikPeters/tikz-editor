@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): \addplot[...] without the cycle
+% list: colours, line widths, dash patterns, opacity, marks.
+\begin{tikzpicture}
+\begin{axis}
+\addplot[red, thick, dashed] coordinates {(0,0) (1,1) (2,0.5)};
+\addplot[only marks, mark=x] coordinates {(0,1.5) (1,2) (2,1.8)};
+\addplot[blue, mark=+, densely dotted] coordinates {(0,2.5) (1,3) (2,2.6)};
+\addplot[draw=green!50!black, line width=1.5pt] coordinates {(0,3.5) (1,3.2) (2,4)};
+\addplot[black, opacity=0.5, mark=*] coordinates {(0,4.5) (1,4.8) (2,4.3)};
+\end{axis}
+\end{tikzpicture}

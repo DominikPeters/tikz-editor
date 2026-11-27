@@ -1,7 +1,7 @@
 import { defBinding } from "../macros/bindings.js";
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
-import { nestedStatements } from "../ast/walk.js";
+import { axisBodyStatements, nestedStatements } from "../ast/walk.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
 import type {
   AxisStatement,
@@ -90,6 +90,7 @@ import type { SemanticDependencyGraph } from "./dependencies.js";
 import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
+import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
 import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
@@ -639,6 +640,7 @@ export function finalizeSemanticEvaluationRun(
     unresolvedSymbols: listContextUnresolvedSymbols(run.context)
   };
   rememberGeometryCheckpoints(result, run.geometryCheckpoints);
+  rememberAxisEvaluations(result.scene, run.context);
   return result;
 }
 
@@ -883,6 +885,11 @@ function classifyStatementSuffixSkipKind(
       return "unsafe";
     }
     return "scope-safe";
+  }
+  // An axis is one fragment, classified like a path (design/pgfplots.md 4.3):
+  // the names it produces (`current axis`, `name=`) are dependency producers.
+  if (statement.kind === "Axis") {
+    return isScopeBodySuffixSkipSafe(axisBodyStatements(statement)) ? "safe" : "unsafe";
   }
   return "unsafe";
 }
@@ -1429,21 +1436,27 @@ function evaluateStatement(
     return [];
   }
 
-  // pgfplots is parsed but not yet evaluated: an axis draws nothing, and the
-  // statements after it go on as if it were not there.
   if (statement.kind === "Axis") {
     markPgfplotsAxisFeatures(statement, featureUsage);
-    diagnostics.push({
-      severity: "warning",
-      code: "unsupported-pgfplots-axis",
-      message: `pgfplots axes are not rendered yet; this editor skips this \`${statement.environment}\` environment and everything inside it.`,
-      span: statement.beginSpan
+    return evaluateAxisStatement(statement, context, {
+      evaluateStatement: (nested) => evaluateStatement(nested, context, diagnostics, featureUsage, statementMacroAttribution),
+      diagnostics,
+      markFeature: (id, status) => { markFeature(featureUsage, id, status); },
+      featureUsage
     });
+  }
+
+  if (statement.kind === "PgfplotsSet") {
+    markFeature(featureUsage, "pgfplots_pgfplotsset", "supported");
+    const payload = statement.optionList.raw.replace(/^\[|\]$/gu, "");
+    const previous = readContextMacroBinding(context, PGFPLOTS_SETTINGS_BINDING);
+    const value = previous?.kind === "text" && previous.value.length > 0 ? `${previous.value}\u0000${payload}` : payload;
+    writeContextMacroBinding(context, PGFPLOTS_SETTINGS_BINDING, { kind: "text", value, provenance: [] });
     return [];
   }
 
-  if (statement.kind === "PgfplotsSet" || statement.kind === "PgfplotsLibrary") {
-    markFeature(featureUsage, "pgfplots_pgfplotsset", "unsupported");
+  if (statement.kind === "PgfplotsLibrary") {
+    markFeature(featureUsage, "pgfplots_pgfplotsset", "supported");
     return [];
   }
 
@@ -1476,20 +1489,8 @@ function evaluateStatement(
 }
 
 function markPgfplotsAxisFeatures(axis: AxisStatement, featureUsage: FeatureUsage): void {
-  markFeature(featureUsage, "pgfplots_axis", "unsupported");
-  if (axis.environment !== "axis") markFeature(featureUsage, "pgfplots_log_axes", "unsupported");
   for (const item of axis.body) {
-    if (item.kind === "AddPlot") {
-      if (item.dimension === 3) markFeature(featureUsage, "pgfplots_addplot3", "unsupported");
-      const input = item.input.kind;
-      markFeature(featureUsage, input === "coordinates" ? "pgfplots_addplot_coordinates"
-        : input === "table" ? "pgfplots_addplot_table"
-          : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
-    } else if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend") {
-      markFeature(featureUsage, "pgfplots_legend", "unsupported");
-    } else if (item.kind === "PgfplotsSet") {
-      markFeature(featureUsage, "pgfplots_pgfplotsset", "unsupported");
-    }
+    if (item.kind === "AddPlot" && item.dimension === 3) markFeature(featureUsage, "pgfplots_addplot3", "unsupported");
   }
 }
 

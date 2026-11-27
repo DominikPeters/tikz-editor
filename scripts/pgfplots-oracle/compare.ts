@@ -26,6 +26,12 @@ export interface Tolerances {
   tickRelative: number;
   /** Pairs further apart than this are not considered the same primitive (pt). */
   searchRadiusPt: number;
+  /**
+   * The `above/below/left/right of origin` axis anchors. pgfplots reports
+   * them up to 0.042pt off the box edge they lie on (28 fixtures, 2026-11-27;
+   * behaviour A7), a computation noise of the oracle, not a rule.
+   */
+  originProjectionPt: number;
 }
 
 export const DEFAULT_TOLERANCES: Tolerances = {
@@ -36,6 +42,7 @@ export const DEFAULT_TOLERANCES: Tolerances = {
   colour: 1e-3,
   tickRelative: 1e-6,
   searchRadiusPt: 4,
+  originProjectionPt: 0.05,
 };
 
 export interface CompareOptions {
@@ -83,17 +90,20 @@ export function compareTier1(expected: Tier1, observed: Tier1, options: CompareO
   const stats = newStats();
   const add = (code: string, where: string, message: string, delta?: number, tolerance?: number) =>
     findings.push({ tier: 1, code, where, message, ...(delta === undefined ? {} : { delta }), ...(tolerance === undefined ? {} : { tolerance }) });
-  const point = (code: string, where: string, e: Point | undefined, o: Point | undefined) => {
+  const point = (code: string, where: string, e: Point | undefined, o: Point | undefined, limit = tol.layoutPt) => {
     if (!e) return;
     if (!o) { add(`${code}-missing`, where, "missing in observed"); return; }
     const d = dist(e, o);
     noteDelta(stats, code, d);
-    if (d > tol.layoutPt) add(code, where, `off by ${d.toFixed(4)}pt (expected ${fmt(e)}, observed ${fmt(o)})`, d, tol.layoutPt);
+    if (d > limit) add(code, where, `off by ${d.toFixed(4)}pt (expected ${fmt(e)}, observed ${fmt(o)})`, d, limit);
   };
   const anchors = (code: string, where: string, e: Record<string, Point> | undefined, o: Record<string, Point> | undefined) => {
     if (!e) return;
     if (!o) { add(`${code}-missing`, where, "anchors missing in observed"); return; }
-    for (const [name, p] of Object.entries(e)) point(code, `${where}.${name}`, p, o[name]);
+    for (const [name, p] of Object.entries(e)) {
+      const noisy = code === "axis-anchor" && /^(above|below|left of|right of) origin$/u.test(name);
+      point(code, `${where}.${name}`, p, o[name], noisy ? Math.max(tol.layoutPt, tol.originProjectionPt) : tol.layoutPt);
+    }
   };
   const node = (code: string, where: string, e: NodeGeometry | undefined, o: NodeGeometry | undefined) => {
     if (!e && !o) return;

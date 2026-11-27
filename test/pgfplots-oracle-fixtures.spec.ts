@@ -37,12 +37,31 @@ function axisOf(oracle: PgfplotsOracle): OracleAxis {
   return axis;
 }
 
+/**
+ * Fixtures whose own options defeat a generic check below, with why. The
+ * checks themselves stay strict; these fixtures are covered by the renderer
+ * comparison (test/pgfplots-oracle-compare.spec.ts).
+ */
+const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip", string>>> = {
+  "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
+  xticklabels: { probes: "xticklabels/ytick=\\empty replace the tick probe (README: lost probes)", tickPlacement: "no tick probe" },
+  "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
+  "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },
+  "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },
+  "scope-shift": { singleAxis: "a path outside the axis grows the picture" },
+  "two-axes": { singleAxis: "two axes" },
+  "soa-at-anchor": { singleAxis: "a mark outside the axis grows the picture" },
+  "axis-on-top": { clip: "clip=false", singleAxis: "unclipped content" },
+  "embedded-tikz": { singleAxis: "unclipped node" }
+};
+
 /** Normalise TeX's math minus for numeric comparison of label strings. */
 const labelNumber = (text: string) => Number(text.replace(/−/gu, "-"));
 
 describe("pgfplots oracle fixtures", () => {
-  it("has the three Phase 0 fixtures", () => {
+  it("has the three Phase 0 fixtures and at least 25 in all", () => {
     expect(names).toEqual(expect.arrayContaining(["default-axis", "explicit-axis", "legend-marks"]));
+    expect(names.length).toBeGreaterThanOrEqual(25);
   });
 
   describe.each(names)("%s", (name) => {
@@ -57,7 +76,8 @@ describe("pgfplots oracle fixtures", () => {
       expect(oracle.toolchain.pgfplotsVersion).toMatch(/^\d+\.\d+/u);
     });
 
-    it("has every Tier 1 probe kind", () => {
+    const skip = SKIP[name] ?? {};
+    it.skipIf(skip.probes !== undefined)("has every Tier 1 probe kind", () => {
       expect(oracle.tier1.boundingBox).toBeDefined();
       expect(axis.limits && axis.rect && axis.map && axis.anchors && axis.ticks).toBeTruthy();
       expect(axis.ticks?.x.length).toBeGreaterThan(1);
@@ -70,7 +90,7 @@ describe("pgfplots oracle fixtures", () => {
       expect(oracle.tier2.page.height).toBeCloseTo(box.maxY - box.minY, 3);
     });
 
-    it("rel axis cs, axis cs at the limits and the axis anchors agree", () => {
+    it.skipIf(skip.map !== undefined)("rel axis cs, axis cs at the limits and the axis anchors agree", () => {
       const { rect, map, limits, anchors } = axis;
       expect(near(applyMap(map!, limits!.xmin, limits!.ymin), rect!.r00, 1e-3)).toBe(true);
       expect(near(applyMap(map!, limits!.xmax, limits!.ymin), rect!.r10, 1e-3)).toBe(true);
@@ -83,13 +103,13 @@ describe("pgfplots oracle fixtures", () => {
       expect(map!.yUnit.x).toBeCloseTo(0, 6);
     });
 
-    it("single-axis picture: outer anchors span the picture bounding box", () => {
+    it.skipIf(skip.singleAxis !== undefined)("single-axis picture: outer anchors span the picture bounding box", () => {
       const box = oracle.tier1.boundingBox!;
       expect(near(axis.anchors!["outer south west"], { x: box.minX, y: box.minY }, 1e-4)).toBe(true);
       expect(near(axis.anchors!["outer north east"], { x: box.maxX, y: box.maxY }, 1e-4)).toBe(true);
     });
 
-    it("ticks lie in the limits and their labels hang on the axis edges", () => {
+    it.skipIf(skip.tickPlacement !== undefined)("ticks lie in the limits and their labels hang on the axis edges", () => {
       const { map, rect, limits } = axis;
       for (const tick of axis.ticks!.x) {
         expect(tick.value).toBeGreaterThanOrEqual(limits!.xmin);
@@ -113,7 +133,7 @@ describe("pgfplots oracle fixtures", () => {
       }
     });
 
-    it("trace has the axis box as a closed stroked rectangle, and a matching clip", () => {
+    it.skipIf(skip.map !== undefined || skip.clip !== undefined)("trace has the axis box as a closed stroked rectangle, and a matching clip", () => {
       const rect = axis.rect!;
       const box = strokes(oracle).find((p) => p.rect && near({ x: p.rect.minX, y: p.rect.minY }, rect.r00) && near({ x: p.rect.maxX, y: p.rect.maxY }, rect.r11));
       expect(box, "axis box stroke").toBeDefined();
@@ -121,7 +141,7 @@ describe("pgfplots oracle fixtures", () => {
       expect(clip?.rect && near({ x: clip.rect.minX, y: clip.rect.minY }, rect.r00) && near({ x: clip.rect.maxX, y: clip.rect.maxY }, rect.r11)).toBe(true);
     });
 
-    it("trace has a tick mark at every x tick on the bottom edge and every y tick on the left edge", () => {
+    it.skipIf(skip.tickPlacement !== undefined)("trace has a tick mark at every x tick on the bottom edge and every y tick on the left edge", () => {
       const { map, rect } = axis;
       const subs = strokes(oracle).flatMap(subpathEnds).filter((pts) => pts.length === 2);
       for (const tick of axis.ticks!.x) {
@@ -134,7 +154,7 @@ describe("pgfplots oracle fixtures", () => {
       }
     });
 
-    it("every tick label has exactly one LuaTeX text box with the same text", () => {
+    it.skipIf(skip.probes !== undefined)("every tick label has exactly one LuaTeX text box with the same text", () => {
       for (const tick of [...axis.ticks!.x, ...axis.ticks!.y]) {
         const matching = oracle.tier2.textBoxes.filter((tb) => tb.text === tick.label!.text && tb.nesting === 1 &&
           Math.abs(tb.origin.x + tb.width / 2 - tick.label!.anchors.center.x) < 0.01);
@@ -148,7 +168,8 @@ describe("pgfplots oracle fixtures", () => {
       expect(comparePicture(oracle, structuredClone(oracle)).pass).toBe(true);
       const rows = runMutationTest(oracle, name);
       expect(rows.filter((r) => !r.asExpected).map((r) => `${r.mutation}: ${JSON.stringify(r.detected)}`)).toEqual([]);
-      expect(rows.filter((r) => r.applicable).length).toBeGreaterThanOrEqual(7);
+      // Mutations need a feature to mutate (a clipped blue plot, a legend, ticks); the controls always apply.
+      expect(rows.filter((r) => r.applicable).length).toBeGreaterThanOrEqual(3);
     });
   });
 

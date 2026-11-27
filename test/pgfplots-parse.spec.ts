@@ -423,8 +423,8 @@ describe("pgfplots legends and settings", () => {
   });
 });
 
-describe("pgfplots: evaluation stub", () => {
-  it("draws nothing for an axis, warns once, and draws the statements around it", () => {
+describe("pgfplots: evaluation entry", () => {
+  it("draws the axis, its plot and embedded TikZ, and the statements around it", () => {
     const source = picture(String.raw`\draw (0,0) -- (1,0);
 \begin{axis}[xmin=0]
   \addplot coordinates {(0,0) (1,1)};
@@ -434,19 +434,15 @@ describe("pgfplots: evaluation stub", () => {
 \draw (0,1) -- (1,1);`);
     const parsed = parseTikz(source);
     const semantic = evaluateTikzFigure(parsed.figure, source);
-    expect(semantic.scene.elements.map((element) => element.sourceRef.sourceId)).toEqual(["path:0", "path:4"]);
-    const warnings = semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis");
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.message).toContain("pgfplots");
-    expect(warnings[0]?.span).toEqual(axisAt(source).beginSpan);
+    const ids = new Set(semantic.scene.elements.map((element) => element.sourceRef.sourceId));
+    expect([...ids]).toEqual(expect.arrayContaining(["path:0", "axis:1", "axis:1:plot:0", "path:2", "path:3", "path:4"]));
+    expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis")).toEqual([]);
     expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-statement" || diagnostic.code === "unsupported-environment")).toEqual([]);
-    expect(semantic.featureUsage.pgfplots_axis).toBe("used-unsupported");
-    expect(semantic.featureUsage.pgfplots_addplot_coordinates).toBe("used-unsupported");
-    const rendered = renderTikzToSvg(source);
-    expect(rendered.svg.svg.match(/<path\b/gu)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(semantic.featureUsage.pgfplots_axis).toBe("used-supported");
+    expect(semantic.featureUsage.pgfplots_addplot_coordinates).toBe("used-supported");
   });
 
-  it("expands loops and macros around and inside an axis without choking", () => {
+  it("expands loops and macros around and inside an axis without choking; log axes are skipped with a warning", () => {
     const source = picture(String.raw`\def\n{3}
 \foreach \i in {1,2} {
   \begin{axis}[name=a\i] \addplot {\i*x}; \draw (0,0) -- (\i,0); \end{axis}
@@ -455,11 +451,15 @@ describe("pgfplots: evaluation stub", () => {
   \foreach \j in {1,2} { \draw (0,\j) -- (1,\j); }
   \addplot coordinates {(0,\n)};
 \end{axis}
+\begin{loglogaxis}\addplot coordinates {(1,1) (10,10)};\end{loglogaxis}
 \draw (0,0) -- (\n,0);`);
     const semantic = evaluateTikzFigure(parseTikz(source).figure, source);
-    expect(semantic.scene.elements).toHaveLength(1);
-    expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis")).toHaveLength(3);
+    expect(semantic.diagnostics.filter((diagnostic) => diagnostic.code === "unsupported-pgfplots-axis")).toHaveLength(1);
     expect(semantic.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    const ids = semantic.scene.elements.map((element) => element.sourceRef.sourceId);
+    // Elements of the loop's axes are attributed to the loop; the macro in the third axis' coordinates is expanded.
+    expect(ids.filter((id) => id.startsWith("foreach:")).length).toBeGreaterThan(10);
+    expect(ids.some((id) => /^axis:\d+:plot:0$/u.test(id))).toBe(true);
   });
 });
 

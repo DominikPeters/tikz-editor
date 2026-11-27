@@ -152,6 +152,16 @@ and the axis' own bounding box `[X0,X1]×[Y0,Y1]` (F1):
 - `origin` = canvas image of data (0,0).
 OBSERVED (E13, 14 cases). Source: manual alignment.tex (anchor list).
 
+**A7a — Origin anchors stay on the box** (correction, 2026-11-27). `origin`
+is data (0,0) *clamped into the box*; `above origin` = (origin.x, y1),
+`below origin` = (origin.x, y0), `left of origin` = (x0, origin.y),
+`right of origin` = (x1, origin.y) — box edges, not the outer box. The four
+projections carry noise: they come out up to **0.042 pt** off the edge
+(28 fixtures; e.g. `right of origin` x = x1 + 0.0417 in default-axis, + 0 in
+xtick-data), no pattern in limits or size. Not emulated; the comparison
+gives these four anchors 0.05 pt (`compare.ts`, `originProjectionPt`).
+OBSERVED on all 28 oracle fixtures (`test/fixtures/pgfplots/*.oracle.json`).
+
 ---
 
 ## B. Data-to-canvas map (linear axes)
@@ -217,6 +227,24 @@ Drawn before the ticks. Source: manual styleoptions.tex `every axis grid`.
 
 **C6 — Default plot line width** 0.4 pt, butt cap, miter join (TikZ defaults).
 
+**C7 — Content order under the clip** (2026-11-27). Plot paths and embedded
+TikZ are painted interleaved in source order (fixture embedded-tikz: a
+`\draw` written before the first `\addplot` is painted before it). The
+clip path is emitted even when nothing is drawn under it (single-point:
+`only marks`). With `axis on top`, the clipped content comes first, then
+grid, ticks, box and tick labels, then markers (axis-on-top). OBSERVED
+(fixtures embedded-tikz, single-point, axis-on-top; Tier 2 paint order
+checked).
+
+**C8 — Plot marks.** Each mark is its own path (fill then stroke for
+`*`-type marks), positioned only for points inside the box, painted
+unclipped after the content (C1.6). Marks inherit the plot's dash pattern
+(legend-marks: `\addplot+[mark=square*, dashed]` has dashed mark outlines)
+except for the dashed cycle-list entries 5–9, whose marks are **solid**
+(cycle-list fixture, all ten entries). Marks are PGF's plot marks
+(`semantic/path/plot-marks.ts`). OBSERVED/CONFIRMED by Tier 2 on
+cycle-list, addplot-plus, plot-options, legend-marks.
+
 ---
 
 ## D. Tick labels
@@ -238,6 +266,18 @@ to north/east as above. VERIFIED (E04: discovery seed 0, 160 axes; fresh seed 1,
 **D2 — Line width dependence.** With `every axis/.append style={line width=3pt}`
 the tick labels move outwards by (3 − 0.4)/2 = 1.3 pt: their outer sep follows
 the line width (TikZ semantics). OBSERVED (E13 `thick`).
+
+**D4 — `\ticknum`.** Automatic ticks and `xtick distance` count from the
+grid point one step below trunc(lo/step) (trunc towards zero):
+`\ticknum` of tick j·step is j − (trunc(lo/step) − 1). So the first drawn
+tick has `\ticknum` 1 when lo ≤ 0 < first tick and 2 when 0 < lo
+(default-axis x 1, y 2; negative-ranges, expression-plot, limits-enlarge,
+description-styles all fit). For a degenerate data range (H2) the count
+starts from the value before widening: single point (2,3) gives x ticks
+1.8, 2, 2.2, 2.4 with `\ticknum` 0, 1, 2, 3 — the tick at the widened lower
+limit 1.6 is **not drawn** although it is inside. Explicit lists number
+their entries from 0 in list order (explicit-axis). OBSERVED on 24 axes
+of the oracle fixtures (exact), not swept.
 
 **D3 — Tick placement tolerance.** A tick (mark and label) is drawn when it lies
 no more than `x tick placement tolerance` = 0.05 pt (manual tickoptions.tex)
@@ -283,6 +323,11 @@ decimal point).
 ## F. Bounding box
 
 **F1 — Picture/axis bounding box** = union of
+- tick marks outset by half *their* line width (tick-styles fixture:
+  `tick style={thick}` gives x0 − 0.4 pt; OBSERVED, 1 case),
+- with `clip=false`, plots and embedded TikZ, outset by half their line
+  width (axis-on-top: a 0.4 pt `\draw` to (5,5) puts the box edge at
+  its endpoint + 0.2 pt; OBSERVED, 1 case),
 - the box rectangle outset by half its line width (0.2 pt default; 1.5 pt with
   `line width=3pt`),
 - tick label, xlabel, ylabel, title node boxes (border without outer sep),
@@ -363,10 +408,13 @@ range is zero, so a single point gives ±20 % for `auto`, `true`, `0.3`,
 special cases in E07 (both seeds share them, so this is OBSERVED on ~15
 cases, exact).
 
-**H3 — Empty axis.** No plots and no limits: ticks 0, 0.2, …, 1 on both axes,
-i.e. limits [0, 1]² with no enlargement; the limits probe (`\pgfplotsextra`)
-does not run in an empty axis. `\draw`/`\node` at `axis cs` do not update
-limits. OBSERVED (E07, E14).
+**H3 — Empty axis.** No plots and no limits: the data range is [0, 1]² and
+is **enlarged like data** (default: [−0.1, 1.1]², ticks 0, 0.2, …, 1). The
+original entry said "no enlargement", inferred from the tick list only; the
+empty-axis fixture's rectangle, tick label positions and Tier 2 trace show
+the 10 % enlargement (corrected 2026-11-27, max error 0.003 pt). The limits
+probe (`\pgfplotsextra`) does not run in an empty axis. `\draw`/`\node` at
+`axis cs` do not update limits. OBSERVED (E07, E14, empty-axis fixture).
 
 **H4 — `enlargelimits={abs=<dimen>}`** (e.g. 1cm): limits grow so that the data
 range occupies about (box length − 2 dimen); applied after H2 widening.
@@ -484,6 +532,35 @@ t / 10^e when scaling is active. Consequence for the harness: its tick
 
 ---
 
+## K. Implementation cross-checks (2026-11-27)
+
+The evaluator (`packages/core/src/pgfplots/`) reproduces all of A–J on 28
+hand-written fixtures (`test/pgfplots-oracle-compare.spec.ts`): structural
+geometry to ≤ 0.009 pt, text boxes and glyphs to ≤ 0.010 pt where the
+editor's text engine has the font. Found on the way:
+
+- **K1 — TikZ node `em` and `mid`.** `inner sep=.3333em` and the `mid`
+  anchor's `.5ex` are evaluated outside the node's text box, in the
+  ambient font, not in the node's `font=` (axis `font=\small`: tick label
+  inner sep 3.333 pt, not 3.0; `mid` 2.153 pt above the baseline). PGF:
+  `\tikz@textfont` is applied inside the text box only; `\anchor{mid}` in
+  pgfmoduleshapes.code.tex. Fixed in the TikZ node layout.
+- **K2 — The editor's default font size was 9.96264 pt** (10 bp) instead of
+  `\normalsize` = 10 pt; every text box came out 0.37 % small (0.065 pt
+  on a tick label, 0.17 pt on the picture box). Set to 10 pt.
+- **K3 — `densely dashed`/`loosely dashed`** were [4,2]/[6,4] in the
+  editor; tikz.code.tex says on 3pt off 2pt / on 3pt off 6pt. Fixed.
+- **K4 — Text at 8–9 pt** (e.g. `label style={font=\small}`) is set by
+  LuaLaTeX in LMRoman9/LMRoman8 with their own metrics; the editor's text
+  engine has only lmroman10/12/17 and scales lmroman10, so such labels are
+  up to 0.6 pt wide off (description-styles, axis-font-thick). Math at
+  8 pt (CMR8) is right. Not a pgfplots rule; recorded as the cause of
+  those two fixtures' text findings.
+- **K5 — Oracle `map` probe at large magnitudes.** With limits ≈ 1e4
+  (scaled-ticks: y ∈ [10100, 32900]) the `axis cs` probe points are 0.16 pt
+  off the oracle's own `rel axis cs` rectangle, while the plotted data in
+  Tier 2 match ours to 0.002 pt: probe noise (N2), not a rule.
+
 ## Surprises (manual silent or different)
 
 1. The size model's 45 pt is truly constant; descriptions never feed back into
@@ -500,6 +577,8 @@ t / 10^e when scaling is active. Consequence for the harness: its tick
 9. Scaling is decided by the limits' magnitude, not range (so [1e4, 1e4+1]
    gets six "1" labels).
 10. Empty axis: `\pgfplotsextra` code is not executed.
+11. A degenerate range drops the tick on its widened lower limit (D4).
+12. Dashed cycle-list entries draw solid marks; a user `dashed` dashes marks (C8).
 
 ## Harness notes (to upstream into `scripts/pgfplots-oracle`)
 
@@ -508,7 +587,8 @@ t / 10^e when scaling is active. Consequence for the harness: its tick
   label, where `\ticknum` is undefined → "Undefined control sequence". The
   experiments define `\ticknum` as `S` globally (`lib.ts`), which names the
   scale label node `…-xS`/`-yS` and leaves painting identical
-  (`disturbance.mts`). Upstream: define a fallback and read the S node.
+  (`disturbance.mts`). Upstreamed into the harness (harness version 2,
+  2026-11-27): `\ticknum` is `S` outside tick labels.
 - **Extra ticks** (`extra x ticks`) reuse `\ticknum`, so `assembleTier1` throws
   "reported twice with different values".
 - **Case ids** must match `[A-Za-z0-9-]` (no `.` or `_`).

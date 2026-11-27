@@ -205,6 +205,32 @@ export type SemanticContext = {
   statementEffectTracker: SemanticStatementEffectTracker | null;
   symbolResolver: SemanticSymbolResolver;
   mathRandom: PgfRandom;
+  /**
+   * Coordinate systems registered by an enclosing environment (`axis cs`,
+   * `rel axis cs`, `axis description cs` while a pgfplots axis is open),
+   * keyed by name without ` cs`. Installed and removed around the
+   * environment's body, so it is frame-scoped in effect.
+   */
+  coordinateSystems?: ReadonlyMap<string, CoordinateSystemResolver> | undefined;
+  /** Observes every node placed while set (pgfplots measures its generated labels with it). */
+  nodeGeometryProbe?: ((probe: NodeGeometryProbe) => void) | undefined;
+};
+
+/** Resolves the argument of `(<name> cs:<argument>)` to a world point, or explains why not. */
+export type CoordinateSystemResolver = (argumentRaw: string, context: SemanticContext) => { point: WorldPoint } | { error: string };
+
+export type NodeGeometryProbe = {
+  /** World position of a node anchor (outer sep included, as TikZ's anchors). */
+  anchor: (name: string) => WorldPoint;
+  outerXSep: number;
+  outerYSep: number;
+  /** Text box: baseline left end (world), and the box extents (pt). */
+  textOrigin: WorldPoint;
+  textWidth: number;
+  textHeight: number;
+  textDepth: number;
+  /** Linear part of the node transform (rotation). */
+  linear: { a: number; b: number; c: number; d: number };
 };
 
 export type SemanticBackgroundHookKind = "rectangle" | "grid" | "top" | "bottom" | "left" | "right";

@@ -125,6 +125,20 @@ Observations worth knowing:
 - `scale only axis, width=6cm` gives a 170.71826 pt rectangle (6 cm =
   170.71654 pt).
 
+Harness version 2 (2026-11-27) defines `\ticknum` as `S` outside tick
+labels, so the tick scale label of scaled ticks (typeset with the tick label
+style, where the name probe uses `\ticknum`) no longer crashes the run; the
+scale label node is named `…-xS`/`…-yS` and is not read.
+
+## Renderer comparison
+
+`adapter.ts` converts the editor's evaluated scene and the axis evaluations
+the pgfplots evaluator records into Tier 1 / Tier 2; `test/pgfplots-oracle-compare.spec.ts`
+compares every fixture (known deviations listed there with their causes) and
+writes `artifacts/pgfplots-oracle/compare.tsv`. `gallery.mts` renders editor
+and LuaLaTeX side by side into `artifacts/pgfplots-gallery/`;
+`corpus-run.mts` runs the evaluator over the untracked arXiv corpus.
+
 ## Tier 2 primitive trace
 
 **Source: `mutool trace` of the final PDF** (MuPDF interprets the content

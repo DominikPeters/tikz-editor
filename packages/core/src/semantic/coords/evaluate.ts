@@ -49,6 +49,7 @@ function asFrameTransform(transform: { a: number; b: number; c: number; d: numbe
 
 type ParsedExplicitCoordinate =
   | { kind: "canvas"; x: string; y: string }
+  | { kind: "system"; system: string; argumentRaw: string }
   | { kind: "perpendicular"; horizontalLineThrough: string; verticalLineThrough: string }
   | { kind: "intersection"; firstLine: ParsedLineSpec; secondLine: ParsedLineSpec; solution: number };
 
@@ -145,6 +146,27 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
         item.relativePrefix,
         { ...(optionalX1 === undefined ? {} : { x: optionalX1 }), ...(optionalY2 === undefined ? {} : { y: optionalY2 }) }
       );
+    }
+
+    if (parsed.kind === "system") {
+      const resolver = context.coordinateSystems?.get(parsed.system);
+      if (!resolver) {
+        diagnostics.push(`unsupported-coordinate-system:${parsed.system}`);
+        return invalidCoordinate("explicit", diagnostics, item.relativePrefix === "++");
+      }
+      const resolved = resolver(parsed.argumentRaw, context);
+      if ("error" in resolved) {
+        diagnostics.push(`invalid-explicit-coordinate:${resolved.error}`);
+        return invalidCoordinate("explicit", diagnostics, item.relativePrefix === "++");
+      }
+      const world = item.relativePrefix && context.currentPoint
+        ? (() => {
+            const origin = resolver("0,0", context);
+            const base = "point" in origin ? origin.point : worldPoint(pt(0), pt(0));
+            return worldPoint(pt(context.currentPoint.x + resolved.point.x - base.x), pt(context.currentPoint.y + resolved.point.y - base.y));
+          })()
+        : resolved.point;
+      return worldOnlyCoordinate("explicit", world, diagnostics, item.relativePrefix === "++", "named");
     }
 
     if (parsed.kind === "perpendicular") {
@@ -416,6 +438,12 @@ function parseExplicitCoordinate(raw: string): ParsedExplicitCoordinate | null {
     };
   }
 
+  if (system !== "canvas") {
+    // Any other system is resolved through the registry an enclosing
+    // environment installs (pgfplots' `axis cs`), or diagnosed: reading it
+    // as canvas would place it plausibly but wrongly.
+    return { kind: "system", system, argumentRaw: requireArrayValue(csMatch, 2) };
+  }
   const x = kvValues.get("x");
   const y = kvValues.get("y");
   if (!x || !y) {

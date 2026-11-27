@@ -1,0 +1,7 @@
+% pgfplots oracle fixture (hand-written): explicit tick positions with text
+% labels, an empty y tick list.
+\begin{tikzpicture}
+\begin{axis}[xtick={1,2,3,4}, xticklabels={Mon,Tue,Wed,Thu}, ytick=\empty]
+\addplot coordinates {(1,3) (2,1) (3,4) (4,2)};
+\end{axis}
+\end{tikzpicture}

@@ -1,0 +1,7 @@
+% pgfplots oracle fixture (hand-written): huge y and tiny x magnitudes, so
+% both axes show a common factor (scaled ticks) and its scale label.
+\begin{tikzpicture}
+\begin{axis}[xlabel={Strain}, ylabel={Stress}]
+\addplot coordinates {(0.0012,12000) (0.0025,24000) (0.0031,26500) (0.0047,31000)};
+\end{axis}
+\end{tikzpicture}

@@ -859,11 +859,35 @@ export const capabilityMatrix: CapabilityMatrix = {
   },
   pgfplots_axis: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_axis"],
-    notes: "The axis environment parses with its options and a body of axis commands and TikZ statements; it is skipped with an `unsupported-pgfplots-axis` warning and draws nothing yet. Package requirements are exported."
+    notes: "Linear `axis`: size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on 28 oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name; legends and `axis lines` are not drawn."
+  },
+  pgfplots_ticks: {
+    parser: "not-applicable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_ticks"],
+    notes: "Automatic ticks (step, list, few-ticks fallback), explicit lists with `...`, `\\empty`, `data`, `xtick distance`, `xticklabels`, minor ticks, tick align/pos, tick label position, number formatting via `\\pgfmathprintnumber`, scaled ticks with the scale label (behaviour I, J, D)."
+  },
+  pgfplots_axis_descriptions: {
+    parser: "not-applicable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["pgfplots_axis_descriptions"],
+    notes: "`xlabel`, `ylabel`, `title` placed per behaviour E1-E3 as nodes through the TikZ node pipeline, with label/title styles, `label shift`, fonts; the picture bounding box per F1."
+  },
+  pgfplots_axis_coordinates: {
+    parser: "not-applicable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["pgfplots_axis_coordinates"],
+    notes: "Embedded TikZ in an axis: `axis cs`, `rel axis cs`, `axis description cs` through a coordinate-system registry, bare coordinates as axis cs (the data map is the frame transform, so coordinate edit handles work), clipped at the right paint slot; unknown `<name> cs:` is diagnosed instead of being read as canvas."
   },
   pgfplots_log_axes: {
     parser: "partial",
@@ -875,27 +899,27 @@ export const capabilityMatrix: CapabilityMatrix = {
   },
   pgfplots_addplot_coordinates: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_addplot_coordinates"],
-    notes: "`\\addplot coordinates` parses with per-point spans, error parts, meta and empty-line jumps."
+    notes: "`\\addplot coordinates` draws sharp lines and marks with the default cycle list, `\\addplot+`/`\\addplot[...]` semantics, line options, `only marks`, `mark`, `mark size`, `mark options`. Symbolic coordinates and error bars are not drawn."
   },
   pgfplots_addplot_expression: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_addplot_expression"],
-    notes: "Expression `{…}`, `expression {…}` and parametric `(…,…)` inputs parse; nothing is sampled yet."
+    notes: "`\\addplot {expr}` is sampled through pgfmath (domain -5:5 and 25 samples by default, degrees). Parametric plots are omitted with a warning."
   },
   pgfplots_addplot_table: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "partial",
     edit: "none",
     fixtures: ["pgfplots_addplot_table"],
-    notes: "`\\addplot table` parses inline data as one raw span, file names and loaded-table macros; a small reader splits inline rows and cells."
+    notes: "Inline `\\addplot table` with `x`/`y` column names, `x index`/`y index`, header detection, `col sep` and `row sep`. Tables from files or macros, `x expr`/`y expr` are omitted with a warning."
   },
   pgfplots_addplot_other_inputs: {
     parser: "partial",
@@ -923,11 +947,11 @@ export const capabilityMatrix: CapabilityMatrix = {
   },
   pgfplots_pgfplotsset: {
     parser: "partial",
-    semantic: "none",
-    svg: "none",
+    semantic: "partial",
+    svg: "not-applicable",
     edit: "none",
     fixtures: ["pgfplots_pgfplotsset"],
-    notes: "`\\pgfplotsset` parses in pictures, axes and the preamble (with `compat`), and `\\usepgfplotslibrary` in the preamble; the `/pgfplots/` key tree is not implemented."
+    notes: "`\\pgfplotsset` in the preamble, picture and axis: key styles (`.style`, `.append style`, `.prefix style`), documented short style keys, user styles, `every axis`, `every axis plot`, element styles (`every tick`, `every axis grid`, labels), `cycle list`, `compat`. `.code` handlers warn."
   },
   render_pipeline: {
     parser: "not-applicable",

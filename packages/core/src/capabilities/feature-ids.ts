@@ -121,8 +121,11 @@ export const FEATURE_IDS = [
   "beamer_frame_continuations",
   "beamer_overlay_pictures", // TikZ `overlay` pictures: empty boxes in the text, drawn over the page.
   "beamer_poster", // beamerposter page sizes, scaled font table and list registers.
-  // pgfplots (design/pgfplots.md): parsed, not yet evaluated or drawn.
+  // pgfplots (design/pgfplots.md): linear axes evaluated and drawn, checked against a LuaLaTeX oracle.
   "pgfplots_axis",
+  "pgfplots_ticks",
+  "pgfplots_axis_descriptions",
+  "pgfplots_axis_coordinates",
   "pgfplots_log_axes",
   "pgfplots_addplot_coordinates",
   "pgfplots_addplot_expression",

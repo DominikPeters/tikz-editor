@@ -1,0 +1,7 @@
+% pgfplots oracle fixture (hand-written): ticks outside, only on the left
+% and bottom, labels pushed out by the tick length.
+\begin{tikzpicture}
+\begin{axis}[tick align=outside, tick pos=left, xlabel={Outside}, ylabel={Ticks}]
+\addplot coordinates {(0,0) (10,30) (20,25) (30,45)};
+\end{axis}
+\end{tikzpicture}

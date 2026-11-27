@@ -597,6 +597,24 @@ export function evaluateNodeItem(
     expandedNodeOptions,
     nodeTransform
   );
+  if (context.nodeGeometryProbe) {
+    const drawn = worldPoint(pt(center.x + nodeTransform.e), pt(center.y + nodeTransform.f));
+    const at = (offset: WorldPoint) => {
+      const v = applyMatrixToVector(nodeTransform, offset);
+      return worldPoint(pt(drawn.x + v.x), pt(drawn.y + v.y));
+    };
+    const textHeight = nodeLayout.textBlockHeight / 2 - nodeLayout.baseLineY;
+    context.nodeGeometryProbe({
+      anchor: (name) => at(nodeAnchorOffset(nodeShape, nodeLayout, name, expandedNodeOptions)),
+      outerXSep: nodeLayout.outerXSep,
+      outerYSep: nodeLayout.outerYSep,
+      textOrigin: at(nodeAnchorOffset(nodeShape, nodeLayout, "text", expandedNodeOptions)),
+      textWidth: nodeLayout.textBlockWidth,
+      textHeight,
+      textDepth: nodeLayout.textBlockHeight - textHeight,
+      linear: { a: nodeTransform.a, b: nodeTransform.b, c: nodeTransform.c, d: nodeTransform.d }
+    });
+  }
   // Where the node is drawn, for editing its placement later (positioning it relative to another).
   if (!item.adornment) {
     const record: NodePlacementRecord = {

@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): \addplot+ appends to the cycle
+% entry; mark options change the mark fill.
+\begin{tikzpicture}
+\begin{axis}
+\addplot+[green] coordinates {(0,0) (1,1) (2,0.5)};
+\addplot+[only marks] coordinates {(0,1.5) (1,2) (2,1.8)};
+\addplot+[mark=none] coordinates {(0,2.5) (1,3) (2,2.6)};
+\addplot+[thick] coordinates {(0,3.5) (1,3.2) (2,4)};
+\addplot+[mark options={fill=yellow}] coordinates {(0,4.5) (1,4.8) (2,4.3)};
+\end{axis}
+\end{tikzpicture}

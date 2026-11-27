@@ -28,7 +28,9 @@ const DOCUMENT_SETS: FuzzDocument[][] = [
   [fixture("beamer/overlay_conformance_beamer.tex")],
   [longDeck(fixture("differential/mixed-deck.tex"), 25)],
   [longDeck(fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex"), 12)],
-  [longFigure(fixture("differential/node-graph.tex"), 12)]
+  [longFigure(fixture("differential/node-graph.tex"), 12)],
+  // pgfplots axes: one fragment each, named, with embedded TikZ (design/pgfplots.md 4.3).
+  [fixture("differential/pgfplots-axis.tex")]
 ];
 
 // Shortcuts the default budget must reach; without them a clean run means little.
@@ -99,6 +101,21 @@ describe("compute differential fuzzing", () => {
     }
     if (process.env.COMPUTE_FUZZ_VERBOSE) console.log(reach);
     if (!process.env.COMPUTE_FUZZ_SET) for (const [name, measure] of REQUIRED_REACH) expect(measure(reach), `the fuzzer reached no ${name}`).toBeGreaterThan(0);
+  }, 600_000);
+});
+
+// The default budget covers the first document sets only; the axis set gets its own seeds.
+describe("compute differential fuzzing on pgfplots axes", () => {
+  it("matches a cold render after every request, warm caches across axis edits", async () => {
+    const documents = DOCUMENT_SETS[DOCUMENT_SETS.length - 1] ?? [];
+    for (const seed of [SEED * 1000 + 700, SEED * 1000 + 701, SEED * 1000 + 702]) {
+      const ops = await generateOps(documents, seed, STEPS);
+      const result = await runOps(documents, ops);
+      if (result.failure) {
+        const shrunk = await shrinkOps(documents, ops);
+        throw new Error(describeFailure(documents, seed, shrunk.ops, shrunk.failure));
+      }
+    }
   }, 600_000);
 });
 

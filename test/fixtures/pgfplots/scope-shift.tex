@@ -1,0 +1,10 @@
+% pgfplots oracle fixture (hand-written): an axis inside a shifted scope, a
+% path after the scope at the picture origin.
+\begin{tikzpicture}
+\begin{scope}[shift={(3cm,2cm)}]
+\begin{axis}[width=7cm, height=5cm]
+\addplot coordinates {(1,1) (2,4) (3,9) (4,16)};
+\end{axis}
+\end{scope}
+\draw (0,0) -- (1,0);
+\end{tikzpicture}

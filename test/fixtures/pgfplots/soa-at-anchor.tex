@@ -1,0 +1,8 @@
+% pgfplots oracle fixture (hand-written): scale only axis with an explicit
+% size, placed with at and anchor; a marker on the picture origin.
+\begin{tikzpicture}
+\fill[red] (0,0) circle (1pt);
+\begin{axis}[scale only axis, width=5cm, height=3cm, at={(2cm,1cm)}, anchor=north east]
+\addplot coordinates {(0,0) (1,2) (2,1) (3,4)};
+\end{axis}
+\end{tikzpicture}

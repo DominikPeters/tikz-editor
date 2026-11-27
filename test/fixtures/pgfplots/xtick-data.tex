@@ -1,0 +1,7 @@
+% pgfplots oracle fixture (hand-written): ticks at the data x coordinates,
+% y ticks by distance, major x grid.
+\begin{tikzpicture}
+\begin{axis}[xtick=data, ytick distance=1.5, xmajorgrids]
+\addplot coordinates {(1,2) (2,5) (4,6.5) (6,8)};
+\end{axis}
+\end{tikzpicture}

@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): styled descriptions and tick
+% labels (fonts), label shift.
+\begin{tikzpicture}
+\begin{axis}[
+  xlabel={Frequency $f$}, ylabel={Gain}, title={Response},
+  label style={font=\small}, title style={font=\bfseries},
+  tick label style={font=\footnotesize}, ylabel style={red},
+  xlabel shift=4pt,
+]
+\addplot coordinates {(10,1) (20,3) (30,2) (40,5)};
+\end{axis}
+\end{tikzpicture}
