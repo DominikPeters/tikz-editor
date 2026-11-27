@@ -1,0 +1,9 @@
+% pgfplots oracle fixture (hand-written): parametric plot with variable=t,
+% a declared function, a macro constant and samples at.
+\begin{tikzpicture}
+\pgfmathsetmacro{\radius}{1.5}
+\begin{axis}[declare function={wave(\u)=0.4*sin(4*\u);}]
+\addplot[variable=t, domain=0:360, samples=73, red] ({(\radius + wave(t))*cos(t)}, {(\radius + wave(t))*sin(t)});
+\addplot+[samples at={-1.5,-1,...,1.5}] {x^2/2 - 1};
+\end{axis}
+\end{tikzpicture}

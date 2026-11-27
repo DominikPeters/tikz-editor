@@ -72,7 +72,7 @@ export type AxisEvaluation = {
   layout: AxisLayout;
   /** World transform of the frame the layout coordinates are in. */
   frameTransform: WorldTransform;
-  labels: Array<{ role: LabelRole; tickPosition?: number; probe: NodeGeometryProbe | null; text: string; textBox?: { origin: Point; width: number; height: number; depth: number } }>;
+  labels: Array<{ role: LabelRole; tickPosition?: number; probe: NodeGeometryProbe | null; text: string; textBox?: { origin: Point; width: number; height: number; depth: number }; cell?: { row: number; column: number } }>;
   /** The axis clip (C3), when `clip=true`. */
   clip: SceneClipPath | null;
 };
@@ -607,7 +607,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     markFeature("pgfplots_legend", "supported");
     layout = extendAxisLayout(layout, legendResult.bbox);
     labelRecords.push({ role: "legend", probe: legendResult.probe, text: legendResult.text, textBox: legendResult.textBox });
-    for (const entry of legendResult.entries) labelRecords.push({ role: "legend-entry", tickPosition: entry.index, probe: entry.probe, text: entry.text });
+    for (const entry of legendResult.entries) labelRecords.push({ role: "legend-entry", tickPosition: entry.index, probe: entry.probe, text: entry.text, cell: { row: entry.row, column: entry.column } });
   }
 
   if (model.axisOnTop) elements.push(...content, ...decorations, ...tickLabelElements, ...markElements, ...descriptionElements, ...legendElements);

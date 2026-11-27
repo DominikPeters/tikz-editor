@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "xtick-data",
   "sourceSha256": "362ceda55654323976a17a1226217e3f6e9c70db4bde11d27fb552de9c394d54"

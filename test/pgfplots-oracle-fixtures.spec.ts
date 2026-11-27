@@ -46,6 +46,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
   xticklabels: { probes: "xticklabels/ytick=\\empty replace the tick probe (README: lost probes)", tickPlacement: "no tick probe" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
+  "function-large": { map: "axis cs probe at |y| ~ 3e6 carries up to 7.7pt noise (behaviour N2/K5)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },
   "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },
   "scope-shift": { singleAxis: "a path outside the axis grows the picture" },

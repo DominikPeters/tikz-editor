@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "axis-on-top",
   "sourceSha256": "e52ad0f5579fd680216c812037e2c960c0e18a61f130af29d99187e11095d734"

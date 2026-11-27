@@ -226,6 +226,13 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     const inside = (p: Point) => sw && ne && p.x >= sw.x && p.x <= ne.x && p.y >= sw.y && p.y <= ne.y;
     descriptions.legend = { anchors: legend.anchors, text: texts.filter((t) => inside(t.origin)).map((t) => t.text).join("") };
   }
+  const legendEntries = axis.labels.flatMap((record) => {
+    if (record.role !== "legend-entry" || !record.probe || !record.cell) return [];
+    const probe = record.probe;
+    const anchors: Record<string, Point> = {};
+    for (const name of LABEL_ANCHORS) { const a = probe.anchor(name); anchors[name] = { x: a.x, y: a.y }; }
+    return [{ row: record.cell.row, column: record.cell.column, node: { anchors } }];
+  }).sort((a, b) => a.row - b.row || a.column - b.column);
   return {
     id: `a${String(index + 1)}`,
     limits: { ...limits },
@@ -235,7 +242,8 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     map: { origin, xUnit: { x: ex.x - origin.x, y: ex.y - origin.y }, yUnit: { x: ey.x - origin.x, y: ey.y - origin.y } },
     anchors: Object.fromEntries(Object.entries(layout.anchors).map(([k, q]) => [k, w(q)])),
     ticks: { x: ticks("x"), y: ticks("y") },
-    descriptions
+    descriptions,
+    ...(legendEntries.length > 0 ? { legendEntries } : {})
   };
 }
 

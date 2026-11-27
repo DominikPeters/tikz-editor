@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): legend below the axis in one row,
+% legend style at/anchor/draw/fill, every even column sep, reverse legend.
+\begin{tikzpicture}
+\begin{axis}[xlabel=$x$, legend columns=-1, reverse legend,
+  legend style={at={(0.5,-0.15)}, anchor=north, draw=none, fill=yellow!20,
+    /tikz/every even column/.append style={column sep=0.3cm}}]
+\addplot coordinates {(0,0) (1,1)};
+\addplot coordinates {(0,1) (1,0)};
+\addplot coordinates {(0,0.5) (1,0.5)};
+\legend{up,down,flat}
+\end{axis}
+\end{tikzpicture}

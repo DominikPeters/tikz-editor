@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "axis-font-thick",
   "sourceSha256": "e16e73168d1f7d8eb417df40b5c271206431fe9bab090d78675616c2d03267d0"

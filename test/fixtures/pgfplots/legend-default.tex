@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): default legend from
+% \addlegendentry, cycle-list images, math entries.
+\begin{tikzpicture}
+\begin{axis}
+\addplot {x};
+\addlegendentry{$x$}
+\addplot {x^2/5};
+\addlegendentry{$x^2/5$}
+\addplot coordinates {(-4,-3) (0,1) (4,2)};
+\addlegendentry{data}
+\end{axis}
+\end{tikzpicture}

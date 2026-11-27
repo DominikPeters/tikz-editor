@@ -11,7 +11,7 @@
 
 export const PGFPLOTS_ORACLE_SCHEMA = "pgfplots-oracle/v1";
 /** Bump when the TeX instrumentation or parsing changes meaning. Part of the cache key. */
-export const PGFPLOTS_ORACLE_HARNESS_VERSION = 2;
+export const PGFPLOTS_ORACLE_HARNESS_VERSION = 3;
 
 export interface Point { x: number; y: number }
 export interface Box { minX: number; minY: number; maxX: number; maxY: number }
@@ -65,6 +65,8 @@ export interface OracleAxis {
   anchors?: Record<string, Point>;
   ticks?: { x: OracleTick[]; y: OracleTick[] };
   descriptions?: Partial<Record<"title" | "xlabel" | "ylabel" | "legend", NodeGeometry>>;
+  /** Legend entry text nodes (harness v3), by matrix row and column (1-based), row-major. */
+  legendEntries?: Array<{ row: number; column: number; node: NodeGeometry }>;
 }
 
 export interface Tier1 {
@@ -284,6 +286,12 @@ function axis(value: Json, path: string): OracleAxis {
       if (key !== "title" && key !== "xlabel" && key !== "ylabel" && key !== "legend") fail(`${path}.descriptions`, `unknown description ${key}`);
       result.descriptions[key] = nodeGeometry(item, `${path}.descriptions.${key}`);
     }
+  }
+  if (r.legendEntries !== undefined) {
+    result.legendEntries = arr(r.legendEntries, `${path}.legendEntries`).map((item, i) => {
+      const e = rec(item, `${path}.legendEntries[${i}]`);
+      return { row: num(e.row, `${path}.legendEntries[${i}].row`), column: num(e.column, `${path}.legendEntries[${i}].column`), node: nodeGeometry(e.node, `${path}.legendEntries[${i}].node`) };
+    });
   }
   return result;
 }

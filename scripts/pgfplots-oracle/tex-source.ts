@@ -121,7 +121,8 @@ function instrumentation(engine: OracleEngine): string {
       title style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-title},
       xlabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-xlabel},
       ylabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-ylabel},
-      legend style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend}}}%
+      legend style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend,
+        nodes={name=pgfplotsoracle-\pgfplotsoracle@case-#1-legend-\the\pgfmatrixcurrentrow-\the\pgfmatrixcurrentcolumn}}}}%
   \fi}
 % Injected immediately before \end{axis}.
 \def\pgfplotsoracle@inaxis#1{%
@@ -152,7 +153,16 @@ function instrumentation(engine: OracleEngine): string {
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-xlabel}{\pgfplotsoracle@nodeanchors}%
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-ylabel}{\pgfplotsoracle@nodeanchors}%
     \pgfplotsoracle@anchors{desc}{pgfplotsoracle-\pgfplotsoracle@case-#1-legend}{\pgfplotsoracle@nodeanchors}%
+    \pgfplotsoracle@legendcells{#1}%
   \fi}
+% Legend entry nodes (harness v3): the legend matrix' text nodes are named
+% <legend>-<row>-<column> through the documented legend style's nodes={...}
+% (\pgfmatrixcurrentrow/-column are PGF's, LPPL); read rows/columns 1..16.
+\def\pgfplotsoracle@legendcells#1{%
+  \pgfutil@for\pgfplotsoracle@lr:={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}\do{%
+    \pgfutil@for\pgfplotsoracle@lc:={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}\do{%
+      \edef\pgfplotsoracle@ln{pgfplotsoracle-\pgfplotsoracle@case-#1-legend-\pgfplotsoracle@lr-\pgfplotsoracle@lc}%
+      \pgfutil@ifundefined{pgf@sh@ns@\pgfplotsoracle@ln}{}{\pgfplotsoracle@anchors{desc}{\pgfplotsoracle@ln}{\pgfplotsoracle@nodeanchors}}}}}
 % Injected immediately before \end{tikzpicture}: read-only.
 \def\pgfplotsoracle@endpicture{%
   \ifpgfplotsoracle@pictureBox

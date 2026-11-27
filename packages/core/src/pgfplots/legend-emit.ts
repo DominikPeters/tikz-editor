@@ -60,7 +60,7 @@ export type LegendResult = {
   /** The matrix' text box (content left edge on the baseline, size): what TeX boxes as the node text. */
   textBox: { origin: Point; width: number; height: number; depth: number };
   /** Each drawn entry node, in paint order. */
-  entries: Array<{ index: number; probe: NodeGeometryProbe | null; text: string }>;
+  entries: Array<{ index: number; probe: NodeGeometryProbe | null; text: string; row: number; column: number }>;
 };
 
 /** Keys of `every axis legend` that belong to the matrix layout rather than the legend node. */
@@ -112,7 +112,8 @@ function readLegendStyle(model: AxisModel): LegendStyle {
     } else {
       if (!MATRIX_KEYS.has(key)) style.node.push(use);
       if (CASCADING_KEYS.has(key)) style.cascade.push(use);
-      if (IMAGE_KEYS.has(key)) style.image.push(use);
+      // The line width reaches the images and the entry nodes (their outer sep: legend-entries-key).
+      if (IMAGE_KEYS.has(key)) { style.image.push(use); style.cascade.push(use); }
       if (key === "inner sep" || key === "inner xsep") style.innerXSep = readLength(value ?? "") ?? style.innerXSep;
     }
   }, {});
@@ -251,7 +252,7 @@ export function emitLegend(host: LegendHost): LegendResult | null {
     if (cell.kind === "text") {
       const drawnEntry = host.node({ ...cell.request, at: o }, frame, true);
       elements.push(...drawnEntry.elements);
-      entryRecords.push({ index: cell.request.tickPosition ?? 0, probe: drawnEntry.probe, text: cell.request.text });
+      entryRecords.push({ index: cell.request.tickPosition ?? 0, probe: drawnEntry.probe, text: cell.request.text, row: r + 1, column: c + 1 });
       visibleText.push(cell.request.text);
       return;
     }

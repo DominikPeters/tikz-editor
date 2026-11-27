@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "empty-axis",
   "sourceSha256": "0d7d09de81bcb58863685d4486fb0c6978b1b249a5a0adc74fd156976031141b"

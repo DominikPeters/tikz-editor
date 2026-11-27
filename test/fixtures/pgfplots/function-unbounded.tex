@@ -1,0 +1,10 @@
+% pgfplots oracle fixture (hand-written): samples that are inf or nan,
+% discarded (initial) or interrupting the line, and restrict y to domain.
+\begin{tikzpicture}
+\begin{axis}[ymin=-6, ymax=6]
+\addplot[domain=-3:3, samples=13] {1/x};
+\addplot[domain=-3:3, samples=13, red, unbounded coords=jump] {1/x + 2};
+\addplot[domain=-2:4, samples=25, blue] {ln(x)};
+\addplot[domain=-3:3, samples=31, green!50!black, restrict y to domain=-4:4] {x^3};
+\end{axis}
+\end{tikzpicture}

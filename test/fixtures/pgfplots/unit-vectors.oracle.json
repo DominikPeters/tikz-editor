@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "unit-vectors",
   "sourceSha256": "04180bb424b555dd305e1e2d7e8277489fcb3941daa431cef9484bb856880e89"

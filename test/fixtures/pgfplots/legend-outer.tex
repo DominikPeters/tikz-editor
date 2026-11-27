@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): legend outside the axis with a
+% title, \legend with an empty entry, and a forget plot.
+\begin{tikzpicture}
+\begin{axis}[legend pos=outer north east, title=Outer legend, xlabel=$x$, ylabel=$y$]
+\addplot coordinates {(0,0) (1,1) (2,1.5)};
+\addplot+[forget plot, only marks] coordinates {(0.5,0.5) (1.5,1.2)};
+\addplot coordinates {(0,1) (1,0.5) (2,0)};
+\addplot coordinates {(0,2) (1,2.2) (2,2.4)};
+\legend{rising,,constant}
+\end{axis}
+\end{tikzpicture}
