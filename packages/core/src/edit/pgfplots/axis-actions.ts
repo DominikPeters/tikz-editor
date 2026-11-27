@@ -19,7 +19,7 @@ import { sourceSlice, tikz, unchangedSource, userText } from "../fragment.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
 import type { SourcePatch } from "../types.js";
-import { coordinateText } from "../writer/coordinate-text.js";
+import { readLengthWithUnit, stripBraces, writeAxisAt, writeAxisLength } from "../writer/pgfplots-values.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import { applyOptionMutationsToTarget, type OptionMutation } from "../option-mutations.js";
 import { normalizeOptionKey } from "../option-key.js";
@@ -32,7 +32,6 @@ import type { ResizeRole } from "../actions.js";
 type Pt = { x: number; y: number };
 type Box = { minX: number; minY: number; maxX: number; maxY: number };
 
-const PT_PER_UNIT: Record<string, number> = { pt: 1, cm: 72.27 / 2.54, mm: 72.27 / 25.4, in: 72.27, bp: 72.27 / 72 };
 
 /** The edit geometry of an axis, from the scene's axis box path. */
 export function readAxisEditInfo(elements: readonly SceneElement[], axisId: string): PgfplotsAxisEditInfo | null {
@@ -89,25 +88,6 @@ function kvEntry(entries: readonly OptionEntry[] | undefined, key: string): Extr
   return found;
 }
 
-function stripBraces(raw: string): string {
-  let text = raw.trim();
-  while (text.startsWith("{") && text.endsWith("}")) text = text.slice(1, -1).trim();
-  return text;
-}
-
-/** `2cm` → { value: 2, unit: "cm" }; `3` → unit null; anything else (macros, `0.8\textwidth`) → null. */
-function readLengthWithUnit(raw: string): { value: number; unit: string | null } | null {
-  const match = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*(pt|cm|mm|in|bp)?$/u.exec(stripBraces(raw));
-  if (!match?.[1]) return null;
-  return { value: Number(match[1]), unit: match[2] ?? null };
-}
-
-/** A length in `unit`, to the edit's write tolerance (pt). */
-function writeLength(valuePt: number, unit: string): string {
-  const perUnit = PT_PER_UNIT[unit] ?? 1;
-  return `${shortestDecimal(valuePt / perUnit, writeTolerancePt() / perUnit)}${unit}`;
-}
-
 function success(source: string, target: PropertyTarget, mutations: Map<string, OptionMutation>, axisId: string, note?: string): EditActionResultLike {
   const rewritten = applyOptionMutationsToTarget(source, target, mutations);
   if (!rewritten) return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [axisId] };
@@ -118,33 +98,6 @@ function success(source: string, target: PropertyTarget, mutations: Map<string, 
 function resolveAxisTarget(source: string, axisId: string, parseOptions: EditParseOptions): PropertyTarget | null {
   const resolved = resolvePropertyTarget(source, axisId, parseOptions);
   return resolved.kind === "found" && resolved.target.kind === "pgfplots-axis" ? resolved.target : null;
-}
-
-/**
- * The `at` value placing the axis anchor at `local` (pt in the parent frame),
- * in the spelling of the existing value: the same unit when both components
- * carry one, unitless through the parent's x/y vectors when the value is
- * unitless, cm otherwise.
- */
-function writeAtValue(existing: string | null, local: Pt, parentBasis: { x: Pt; y: Pt } | undefined, fallbackUnit = "cm"): string {
-  const inner = existing ? stripBraces(existing) : "";
-  const pair = /^\(\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)$/u.exec(inner);
-  const x = pair?.[1] ? readLengthWithUnit(pair[1]) : null;
-  const y = pair?.[2] ? readLengthWithUnit(pair[2]) : null;
-  if (x && y && x.unit === null && y.unit === null && parentBasis) {
-    const { x: bx, y: by } = parentBasis;
-    const det = bx.x * by.y - bx.y * by.x;
-    if (Math.abs(det) > 1e-12) {
-      const u = (by.y * local.x - by.x * local.y) / det;
-      const v = (-bx.y * local.x + bx.x * local.y) / det;
-      const scale = Math.hypot(bx.x, bx.y) || 1;
-      const tol = writeTolerancePt() / scale;
-      return `{(${shortestDecimal(u, tol)},${shortestDecimal(v, tol)})}`;
-    }
-  }
-  const unitX = x?.unit ?? y?.unit ?? fallbackUnit;
-  const unitY = y?.unit ?? x?.unit ?? fallbackUnit;
-  return `{(${writeLength(local.x, unitX)},${writeLength(local.y, unitY)})}`;
 }
 
 /** Moves an axis by a world delta: writes `at={(x,y)}` (behaviour A6), keeping `anchor=`. */
@@ -169,8 +122,8 @@ export function applyMoveAxisAction(
   if (!anchorPoint) return { kind: "unsupported", reason: `Unknown axis anchor \`${info.anchor}\`.` };
   const next = { x: anchorPoint.x + localDelta.x, y: anchorPoint.y + localDelta.y };
   const existing = kvEntry(target.options?.entries, "at");
-  const value = writeAtValue(existing?.valueRaw ?? null, next, info.parentBasis, authoredLengthUnit(target.options?.entries));
-  return success(source, target, new Map([[existing ? normalizeOptionKey(existing.key) : "at", { kind: "set", value: coordinateText(value) }]]), axisId);
+  const value = writeAxisAt(existing?.valueRaw ?? null, next, info.parentBasis, authoredLengthUnit(target.options?.entries));
+  return success(source, target, new Map([[existing ? normalizeOptionKey(existing.key) : "at", { kind: "set", value }]]), axisId);
 }
 
 /** The point a fixed fraction along the box (or a fixed offset outside it) occupies after the box changes. */
@@ -245,7 +198,7 @@ export function applyResizeAxisAction(
     const existing = kvEntry(target.options?.entries, key);
     const read = existing ? readLengthWithUnit(existing.valueRaw) : null;
     if (existing && !read?.unit) notes.push(`\`${key}=${existing.valueRaw.trim()}\` was replaced by a length in cm.`);
-    mutations.set(existing ? normalizeOptionKey(existing.key) : key, { kind: "set", value: coordinateText(writeLength(valuePt, read?.unit ?? "cm")) });
+    mutations.set(existing ? normalizeOptionKey(existing.key) : key, { kind: "set", value: writeAxisLength(valuePt, read?.unit ?? "cm") });
   };
   if (affectsX) writeSize("width", targetFor(nx1 - nx0));
   if (affectsY) writeSize("height", targetFor(ny1 - ny0));
@@ -258,7 +211,7 @@ export function applyResizeAxisAction(
     const next = { x: carryAlong(anchorPoint.x, x0, x1, nx0, nx1), y: carryAlong(anchorPoint.y, y0, y1, ny0, ny1) };
     if (Math.hypot(next.x - anchorPoint.x, next.y - anchorPoint.y) > 1e-6) {
       const existing = kvEntry(target.options?.entries, "at");
-      mutations.set(existing ? normalizeOptionKey(existing.key) : "at", { kind: "set", value: coordinateText(writeAtValue(existing?.valueRaw ?? null, next, info.parentBasis, authoredLengthUnit(target.options?.entries))) });
+      mutations.set(existing ? normalizeOptionKey(existing.key) : "at", { kind: "set", value: writeAxisAt(existing?.valueRaw ?? null, next, info.parentBasis, authoredLengthUnit(target.options?.entries)) });
     }
   }
   return success(source, target, mutations, axisId, notes.length > 0 ? notes.join(" ") : undefined);

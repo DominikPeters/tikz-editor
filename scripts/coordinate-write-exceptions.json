@@ -491,6 +491,22 @@
     "rule": "F2",
     "symbol": "userText",
     "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyInsertPgfplotsTemplate.snippet",
+    "count": 1,
+    "expression": "userText(text.replace(/\\n/gu, \"\\n \"), \"pasted-tikz\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions.ts",
+    "declaration": "applyMoveElements.state.current.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/actions.ts",
     "declaration": "applyUpdateNodeText.text",
     "count": 1,
     "expression": "userText(action.text, \"node-text\")"
@@ -580,6 +596,14 @@
     "symbol": "unchangedSource",
     "file": "packages/core/src/edit/actions/delete-elements.ts",
     "declaration": "applyDeleteElementsAction.currentSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/actions/delete-elements.ts",
+    "declaration": "deleteAxisDescriptions.current",
     "count": 1,
     "expression": "unchangedSource(source)"
   },
@@ -1238,6 +1262,78 @@
     "declaration": "spellPath.pointText.text",
     "count": 1,
     "expression": "sourceSlice(source, coordinateAt(analysis, point.index).span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyDeletePlotPointAction.patches.replacement",
+    "count": 1,
+    "expression": "sourceSlice(source, { from, to: from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyDeletePlotPointAction.updated",
+    "count": 1,
+    "expression": "sourceSlice(source, { from, to: from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyMoveAxisAction.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyMoveLegendAction.value",
+    "count": 3,
+    "expression": "userText(name, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyReorderPlotsAction.current",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "applyReorderPlotsAction.fragment",
+    "count": 1,
+    "expression": "sourceSlice(source, findUnitSpan(units, next[slot] ?? \"\"))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
+    "declaration": "success.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/inspector.ts",
+    "declaration": "applyPgfplotsSetProperty.fragment",
+    "count": 3,
+    "expression": "userText(text, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/templates.ts",
+    "declaration": "ensurePgfplotsSetup",
+    "count": 4,
+    "expression": "userText(\"\\n\\\\usepackage{pgfplots}\", \"pasted-tikz\")"
   },
   {
     "rule": "F2",
