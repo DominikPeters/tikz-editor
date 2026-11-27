@@ -67,7 +67,20 @@ export type DocumentGraphicsAsset =
       readonly revision?: string;
     };
 
+/** A text file of the document's project (a pgfplots table), as the host found it. */
+export type DocumentTextFileResolution =
+  | { status: "resolved"; text: string }
+  /** The host reads the document's folder, but the file is not there. */
+  | { status: "missing" };
+
 export type DocumentGraphicsResolver = {
   readonly cacheKey: string;
   resolve(request: DocumentGraphicsResolveRequest): DocumentGraphicsResolution;
+  /**
+   * Text files the document reads by name, relative to its folder (pgfplots
+   * `\addplot table {data.dat}`, `\pgfplotstableread{data.dat}`). Absent when
+   * the host cannot read the document's folder at all (the web shell, an
+   * unsaved document); the contents are part of `cacheKey`.
+   */
+  readTextFile?(filename: string): DocumentTextFileResolution;
 };

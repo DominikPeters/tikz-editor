@@ -137,7 +137,9 @@ a b
 \addplot table {data.dat};
 \addplot ({cos(x)},{sin(x)});
 \end{axis}\end{tikzpicture}`);
-    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(3);
+    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(2);
+    // Without a document folder the table file cannot be read; the diagnostic names it.
+    expect(result.diagnostics.filter((d) => d.code === "pgfplots-table-file-unavailable").map((d) => d.message)).toEqual([expect.stringContaining("`data.dat`")]);
     expect(result.scene.elements.some((e) => e.sourceRef.sourceId.includes(":plot:"))).toBe(false);
   });
 

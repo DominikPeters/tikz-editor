@@ -50,6 +50,7 @@ import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyU
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
 import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { readPgfplotsTableFile, readPgfplotsTableMacro } from "./table-io.js";
 import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
@@ -271,8 +272,18 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
     const bindings = bindingsOf(statement);
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings));
+    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings), {
+      tableKeys: [...model.tableKeys, ...plot.tableKeys],
+      readFile: (name) => readPgfplotsTableFile(context, name),
+      tableMacro: (name) => readPgfplotsTableMacro(context, name)
+    });
     const input = statement.input.kind;
+    if (data.kind === "unavailable") {
+      markFeature("pgfplots_addplot_table", "supported");
+      diagnostics.push({ severity: "warning", code: data.code, message: data.message, span: data.span });
+      plots.push({ model: plot, points: null });
+      return;
+    }
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn: ${data.reason} is not supported yet.`, span: data.span });
@@ -282,6 +293,11 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : "pgfplots_addplot_expression", "supported");
     if (statement.trailingPath) {
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: "Path operations after an `\\addplot` input (`\\closedcycle`, `node[pos=…]`) are not drawn yet.", span: statement.trailingPath.span });
+    }
+    for (const note of data.notes ?? []) {
+      if (warned.has(note.code)) continue;
+      warned.add(note.code);
+      diagnostics.push({ severity: "warning", code: note.code, message: note.message, span: note.span });
     }
     plots.push({ model: plot, points: data.points });
   });
@@ -525,9 +541,12 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
           for (const point of plot.points) {
             if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
             const w = toWorld(mapPoint(point.x, point.y));
+            // A piece of one point (between jumps) paints nothing: drop its moveto.
+            if (commands.at(-1)?.kind === "M" && !(pen && !point.jump)) commands.pop();
             commands.push({ kind: pen && !point.jump ? "L" : "M", to: w });
             pen = true;
           }
+          if (commands.at(-1)?.kind === "M") commands.pop();
           if (commands.some((command) => command.kind === "L")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
             path.commands = commands;

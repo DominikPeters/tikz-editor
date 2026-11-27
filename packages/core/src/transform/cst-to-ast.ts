@@ -461,7 +461,8 @@ function isRelevantDefinitionNode(node: SyntaxNode): boolean {
     typeName === "DefineColorStatement" ||
     typeName === "FontSizeStatement" ||
     typeName === "PgfplotsSetStatement" ||
-    typeName === "UsePgfplotsLibraryStatement"
+    typeName === "UsePgfplotsLibraryStatement" ||
+    typeName === "PgfplotsTableReadStatement"
   ) {
     return true;
   }

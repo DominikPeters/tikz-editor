@@ -6,7 +6,7 @@
  */
 import type { AddPlotStatement, AxisStatement, Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
-import type { OptionListAst } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
 import { evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
@@ -85,6 +85,8 @@ export type AxisModel = {
   invalid: Array<{ key: string; value: string; span: Span }>;
   /** Plot-level keys given at axis level (`mark=*`, `only marks`), applied to every plot after `every axis plot`. */
   plotDefaults: PgfplotsKeyUse[];
+  /** `table/…` keys from the settings and the axis options, in order (behaviour V). */
+  tableKeys: OptionEntry[];
 };
 
 export const PT_PER_CM = 72.27 / 2.54;
@@ -359,7 +361,10 @@ function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
  */
 export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
-  "every mark", "domain", "samples", "forget plot"
+  "every mark", "domain", "samples", "forget plot",
+  "unbounded coords", "each nth point", "skip coords between index", "filter discard warning",
+  "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
+  "restrict expr to domain", "restrict expr to domain*"
 ]);
 
 /** Keys of a plot that this evaluator understands, beyond the TikZ path keys. */
@@ -394,13 +399,18 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     cycleList: [...COLOR_CYCLE_LIST],
     unsupported: [],
     invalid: [],
-    plotDefaults: []
+    plotDefaults: [],
+    tableKeys: []
   };
   const ctx: Ctx = { model };
   const sink = (use: PgfplotsKeyUse): void => {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
       if (!handler(ctx, use.value, use)) model.invalid.push({ key: use.key, value: use.value ?? "", span: use.origin.span });
+      return;
+    }
+    if (use.key.startsWith("table/")) {
+      model.tableKeys.push(useToEntry(use));
       return;
     }
     if (use.key.startsWith("/pgf/number format/") || use.key.startsWith("/pgf/")) {
@@ -434,8 +444,22 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
   return model;
 }
 
+/** A key use as an option entry (its span is where it was written). */
+export function useToEntry(use: PgfplotsKeyUse): OptionEntry {
+  return use.value === null
+    ? { kind: "flag", key: use.key, span: use.origin.span, raw: use.key }
+    : { kind: "kv", key: use.key, valueRaw: use.value, span: use.origin.span, raw: `${use.key}=${use.value}` };
+}
+
 // ---------------------------------------------------------------------------
 // Plots
+
+/** The documented coordinate filters (manual coordfiltering.tex), in the order given. */
+export type PlotFilter =
+  | { kind: "each nth point"; n: number; span: Span }
+  | { kind: "skip coords between index"; from: number; to: number; span: Span }
+  | { kind: "restrict"; axis: "x" | "y"; min: number; max: number; clamp: boolean; span: Span }
+  | { kind: "restrict expr"; expr: string; min: number; max: number; clamp: boolean; span: Span };
 
 export type PlotModel = {
   statement: AddPlotStatement;
@@ -452,6 +476,11 @@ export type PlotModel = {
   domain?: { from: number; to: number };
   samples?: number;
   forget: boolean;
+  /** `unbounded coords` (initially discard; the non-starred `restrict … to domain` keys set jump). */
+  unboundedCoords: "discard" | "jump";
+  filters: PlotFilter[];
+  /** `table/…` keys given to the plot, in order. */
+  tableKeys: OptionEntry[];
   unsupported: Array<{ key: string; span: Span }>;
   invalid: Array<{ key: string; value: string; span: Span }>;
 };
@@ -471,6 +500,9 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     markKeys: [],
     onlyMarks: false,
     forget: false,
+    unboundedCoords: "discard",
+    filters: [],
+    tableKeys: [],
     unsupported: [],
     invalid: []
   };
@@ -485,6 +517,8 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   if (statement.options) lists.push(statement.options);
   for (const extra of statement.extraOptions ?? []) lists.push(extra.options);
   if (statement.legacyPlot?.options) lists.push(statement.legacyPlot.options);
+  // `no markers` given to the axis goes to `every axis plot post`, so it beats the cycle list (manual markers-meta.tex).
+  if (axis.plotDefaults.some((use) => use.key === "no marks" || use.key === "no markers")) lists.push(parseOptionListRaw("[no markers]"));
   lists.push(...(styles.get("every axis plot post") ?? []));
   // `every mark` is a TikZ style: it accumulates through definitions, and is read at the end.
   styles.set("every mark", []);
@@ -523,6 +557,51 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "forget plot") { plot.forget = readBoolean(value) ?? true; return; }
+    if (key.startsWith("table/")) { plot.tableKeys.push(useToEntry(use)); return; }
+    if (key === "unbounded coords") {
+      const mode = stripBraces(value ?? "");
+      if (mode === "discard" || mode === "jump") plot.unboundedCoords = mode;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "filter discard warning") return;
+    if (key === "each nth point") {
+      const n = value === null ? null : readPgfNumber(value);
+      if (n === null || n < 1) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.filters.push({ kind: "each nth point", n: Math.round(n), span: use.origin.span });
+      return;
+    }
+    if (key === "skip coords between index") {
+      const args = readBraceArguments(value ?? "");
+      const from = args[0] === undefined ? null : readPgfNumber(args[0]);
+      const to = args[1] === undefined ? null : readPgfNumber(args[1]);
+      if (from === null || to === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.filters.push({ kind: "skip coords between index", from, to, span: use.origin.span });
+      return;
+    }
+    const restrict = /^restrict (x|y|expr) to domain(\*?)$/u.exec(key);
+    if (restrict) {
+      const clamp = restrict[2] === "*";
+      let domain: string | undefined;
+      let expr: string | undefined;
+      if (restrict[1] === "expr") {
+        const args = readBraceArguments(value ?? "");
+        expr = args[0];
+        domain = args[1];
+      } else domain = stripBraces(value ?? "");
+      const [lo, hi] = (domain ?? "").split(":");
+      const min = lo === undefined ? null : readPgfNumber(lo);
+      const max = hi === undefined ? null : readPgfNumber(hi);
+      if (min === null || max === null || (restrict[1] === "expr" && expr === undefined)) {
+        plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+        return;
+      }
+      plot.filters.push(restrict[1] === "expr"
+        ? { kind: "restrict expr", expr: expr ?? "", min, max, clamp, span: use.origin.span }
+        : { kind: "restrict", axis: restrict[1] === "x" ? "x" : "y", min, max, clamp, span: use.origin.span });
+      if (!clamp) plot.unboundedCoords = "jump";
+      return;
+    }
     if (PLOT_KEYS.has(key)) return;
     if (DOCUMENTED_PGFPLOTS_KEYS.has(key) && !TIKZ_ALSO.has(key)) {
       plot.unsupported.push({ key, span: use.origin.span });
@@ -536,6 +615,25 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     origin: entry
   })));
   return plot;
+}
+
+/** `{a}{b}` → ["a", "b"] (TeX arguments of a key value). */
+export function readBraceArguments(raw: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < raw.length; i += 1) {
+    const c = raw.charAt(i);
+    if (c === "\\") { if (depth > 0) current += c + raw.charAt(i + 1); i += 1; continue; }
+    if (c === "{") { if (depth > 0) current += c; depth += 1; continue; }
+    if (c === "}") {
+      depth -= 1;
+      if (depth === 0) { out.push(current.trim()); current = ""; } else current += c;
+      continue;
+    }
+    if (depth > 0) current += c;
+  }
+  return out;
 }
 
 /** Documented pgfplots keys that are also plain TikZ keys and mean the same on a plot path. */

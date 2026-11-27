@@ -9,7 +9,8 @@ import {
   legendStatementId,
   pgfplotsExtraId,
   pgfplotsLibraryStatementId,
-  pgfplotsSetStatementId
+  pgfplotsSetStatementId,
+  pgfplotsTableReadStatementId
 } from "../../ast/ids.js";
 import type {
   AddLegendEntryStatement,
@@ -23,6 +24,7 @@ import type {
   PgfplotsExtraStatement,
   PgfplotsLibraryStatement,
   PgfplotsSetStatement,
+  PgfplotsTableReadStatement,
   PlotInput,
   PlotSourceText,
   PlotTableSource,
@@ -30,6 +32,7 @@ import type {
   Statement
 } from "../../ast/types.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
+import type { OptionListAst } from "../../options/types.js";
 import { readCoordinateList } from "../../pgfplots/coordinate-list.js";
 import { findFirstChildByName, forEachChild } from "../../syntax/cursor.js";
 import { mapUnknownStatement } from "../../transform/unknown.js";
@@ -379,7 +382,9 @@ export function mapPgfplotsSetStatement(node: SyntaxNode, source: string, state:
   const statementIndex = allocate(state);
   const payload = findFirstChildByName(node, "StylePayload");
   const payloadRaw = payload ? source.slice(payload.from, payload.to) : "";
-  const optionList = parseStyleValueAsOptionList(payloadRaw, payload?.from ?? node.from) ?? parseOptionListRaw("[]", node.from);
+  const parsedList = parseStyleValueAsOptionList(payloadRaw, payload?.from ?? node.from) ?? parseOptionListRaw("[]", node.from);
+  // `\pgfplotstableset{col sep=comma}` is `\pgfplotsset{table/col sep=comma}` (manual: pgfplotstable).
+  const optionList = source.startsWith("\\pgfplotstableset", node.from) ? prefixTableKeys(parsedList) : parsedList;
   const compatEntry = optionList.entries.filter((entry) => entry.kind === "kv" && entry.key.trim() === "compat").at(-1);
   const compat: PlotSourceText | undefined = compatEntry?.kind === "kv" && compatEntry.valueSpan
     ? { raw: compatEntry.valueRaw.trim(), span: compatEntry.valueSpan }
@@ -396,6 +401,33 @@ export function mapPgfplotsSetStatement(node: SyntaxNode, source: string, state:
     ...(payload ? { payloadSpan: toSpan(payload) } : {}),
     optionList,
     ...(compat ? { compat } : {})
+  };
+}
+
+function prefixTableKeys(list: OptionListAst): OptionListAst {
+  const entries = list.entries.map((entry) => {
+    if (entry.kind === "unknown" || /^\/?pgfplots\//u.test(entry.key)) return entry;
+    return { ...entry, key: `table/${entry.key.trim()}`, raw: `table/${entry.raw.trim()}` };
+  });
+  return { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+}
+
+export function mapPgfplotsTableReadStatement(node: SyntaxNode, source: string, state: AxisMappingState): PgfplotsTableReadStatement {
+  const statementIndex = allocate(state);
+  const options = findFirstChildByName(node, "OptionList");
+  const data = findFirstChildByName(node, "TableData");
+  const macro = findFirstChildByName(node, "CommandName");
+  const inner = data ? braceInner(data, source).span : { from: node.to, to: node.to };
+  return {
+    kind: "PgfplotsTableRead",
+    id: pgfplotsTableReadStatementId(statementIndex),
+    span: toSpan(node),
+    raw: source.slice(node.from, node.to),
+    ...(options ? { optionsSpan: toSpan(options), options: parseOptionListRaw(source.slice(options.from, options.to), options.from) } : {}),
+    dataRaw: source.slice(inner.from, inner.to),
+    dataSpan: inner,
+    macroName: macro ? source.slice(macro.from, macro.to) : "",
+    macroSpan: macro ? toSpan(macro) : { from: node.to, to: node.to }
   };
 }
 

@@ -505,7 +505,7 @@ describe("pgfplots: idioms from real documents (corpus parse gaps)", () => {
 \def\vb{0.5}
 \addplot coordinates {(0,\va) (1,\vb)};`);
     expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
-    expect(semantic.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
+    expect(semantic.diagnostics).toEqual([]);
     const evaluation = getAxisEvaluations(semantic.scene)[0];
     if (!evaluation) throw new Error("no axis");
     const map = evaluation.layout.map;

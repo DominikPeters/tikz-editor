@@ -90,6 +90,7 @@ import type { SemanticDependencyGraph } from "./dependencies.js";
 import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
+import { recordPgfplotsTableRead } from "../pgfplots/table-io.js";
 import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
 import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
@@ -1448,6 +1449,12 @@ function evaluateStatement(
       markFeature: (id, status) => { markFeature(featureUsage, id, status); },
       featureUsage
     });
+  }
+
+  if (statement.kind === "PgfplotsTableRead") {
+    markFeature(featureUsage, "pgfplots_addplot_table", "supported");
+    recordPgfplotsTableRead(context, statement);
+    return [];
   }
 
   if (statement.kind === "PgfplotsSet") {

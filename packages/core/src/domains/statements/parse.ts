@@ -36,7 +36,7 @@ import type {
   TikzStyleStatement
 } from "../../ast/types.js";
 import { mapOverlaySpec, mapPathStatement } from "../paths/parse.js";
-import { mapAxisStatement, mapPgfplotsLibraryStatement, mapPgfplotsSetStatement } from "../pgfplots/parse.js";
+import { mapAxisStatement, mapPgfplotsLibraryStatement, mapPgfplotsSetStatement, mapPgfplotsTableReadStatement } from "../pgfplots/parse.js";
 import { mapUnknownEnvironmentStatement, mapUnknownStatement } from "../../transform/unknown.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
@@ -200,6 +200,10 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
 
   if (node.type.name === "UsePgfplotsLibraryStatement") {
     return mapPgfplotsLibraryStatement(node, source, state);
+  }
+
+  if (node.type.name === "PgfplotsTableReadStatement") {
+    return mapPgfplotsTableReadStatement(node, source, state);
   }
 
   return null;

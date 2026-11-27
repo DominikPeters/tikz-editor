@@ -54,6 +54,7 @@ Statement {
   PgfMathStatement |
   PgfplotsSetStatement |
   UsePgfplotsLibraryStatement |
+  PgfplotsTableReadStatement |
   UnknownStatement
 }
 
@@ -181,6 +182,11 @@ PgfplotsSetStatement {
 
 UsePgfplotsLibraryStatement {
   UsePgfplotsLibraryCmd Group
+}
+
+// `\pgfplotstableread[options]{file name or inline rows}\macro`: the data is raw (newlines kept).
+PgfplotsTableReadStatement {
+  PgfplotsTableReadCmd Comment* (OptionList Comment*)? TableData Comment* CommandName
 }
 
 ForeachStatement {
@@ -1060,6 +1066,7 @@ TableKw { @specialize<Identifier, "table"> }
   UsePgfplotsLibraryCmd,
   PgfplotsInvokeForeachCmd,
   PgfplotsForeachUngroupedCmd,
+  PgfplotsTableReadCmd,
   AxisLabelCmd,
   BeginAxisFontEnv,
   EndAxisFontEnv,

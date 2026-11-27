@@ -88,6 +88,7 @@ export type Statement = (
   | AxisStatement
   | PgfplotsSetStatement
   | PgfplotsLibraryStatement
+  | PgfplotsTableReadStatement
   | UnknownStatement
 ) & OverlayGroupMember;
 
@@ -940,6 +941,25 @@ export type PgfplotsSetStatement = {
   optionList: OptionListAst;
   /** `compat=…`, the last one when there are several. */
   compat?: PlotSourceText;
+};
+
+/**
+ * `\pgfplotstableread[options]{data}\macro`: reads a table (a file name, or
+ * inline rows when the argument holds a row separator) into `\macro` for
+ * `\addplot table {\macro}` (manual: pgfplotstable, `\pgfplotstableread`).
+ */
+export type PgfplotsTableReadStatement = {
+  kind: "PgfplotsTableRead";
+  id: string;
+  span: Span;
+  raw: string;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** The braces' content, whitespace and newlines kept. */
+  dataRaw: string;
+  dataSpan: Span;
+  macroName: string;
+  macroSpan: Span;
 };
 
 /** `\usepgfplotslibrary{a,b}`. */

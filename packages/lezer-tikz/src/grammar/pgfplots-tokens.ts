@@ -15,6 +15,7 @@ import {
   PgfplotsForeachUngroupedCmd,
   PgfplotsInvokeForeachCmd,
   PgfplotsSetCmd,
+  PgfplotsTableReadCmd,
   PlotExpressionData,
   TableData,
   UsePgfplotsLibraryCmd,
@@ -44,6 +45,9 @@ const COMMAND_TERMS: ReadonlyMap<string, number> = new Map([
   ["addlegendimage", AddLegendImageCmd],
   ["legend", LegendCmd],
   ["pgfplotsset", PgfplotsSetCmd],
+  // `\pgfplotstableset{…}` sets `/pgfplots/table/…` keys; the AST prefixes them.
+  ["pgfplotstableset", PgfplotsSetCmd],
+  ["pgfplotstableread", PgfplotsTableReadCmd],
   ["pgfplotsextra", PgfplotsExtraCmd],
   ["usepgfplotslibrary", UsePgfplotsLibraryCmd],
   ["pgfplotsinvokeforeach", PgfplotsInvokeForeachCmd],
@@ -162,7 +166,7 @@ export const pgfplotsTokens = new ExternalTokenizer(
     // Like `\tikzset`, these start a statement of their own wherever one can
     // start, so in a preamble the command before them (`\usepackage{…}`,
     // read as an unknown statement) ends there instead of swallowing them.
-    if ((term === PgfplotsSetCmd || term === UsePgfplotsLibraryCmd) && stack.canShift(insertSemicolon)) {
+    if ((term === PgfplotsSetCmd || term === UsePgfplotsLibraryCmd || term === PgfplotsTableReadCmd) && stack.canShift(insertSemicolon)) {
       input.acceptToken(insertSemicolon);
     }
   },

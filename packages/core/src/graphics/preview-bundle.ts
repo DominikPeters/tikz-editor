@@ -4,6 +4,7 @@ import type {
   DocumentGraphicsResolution,
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,
+  DocumentTextFileResolution,
 } from "./types.js";
 
 /**
@@ -69,8 +70,15 @@ export function createDocumentGraphicsResolverFromPreviewBundle(
   const entries = new Map(
     bundle.entries.map((entry) => [entry.requestKey, entry.resolution])
   );
+  const textFiles = bundle.projectFiles ? new Map(bundle.projectFiles) : null;
   return {
     cacheKey: bundle.cacheKey,
+    ...(textFiles ? {
+      readTextFile(filename: string): DocumentTextFileResolution {
+        const text = textFiles.get(filename);
+        return text === undefined ? { status: "missing" } : { status: "resolved", text };
+      },
+    } : {}),
     resolve(
       request: DocumentGraphicsResolveRequest
     ): DocumentGraphicsResolution {
