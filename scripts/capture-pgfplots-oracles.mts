@@ -275,8 +275,15 @@ function timing(options: Options): void {
   go(ten, "warm-batch-10");
 }
 
+/**
+ * Fixtures whose picture transformation reaches the axis as a canvas transformation
+ * (behaviour Z1): the mutations locate geometry through Tier 1, which is read in the
+ * untransformed frame there (test/pgfplots-oracle-fixtures.spec.ts skips them too).
+ */
+const MUTATION_SKIP = new Set(["picture-scale", "picture-xscale-rotate"]);
+
 function mutation(options: Options): void {
-  const files = options.oracle ? [options.oracle] : listFixtures(FIXTURE_DIR, options.only).map((f) => join(FIXTURE_DIR, `${f.name}.oracle.json`));
+  const files = options.oracle ? [options.oracle] : listFixtures(FIXTURE_DIR, options.only).filter((f) => !MUTATION_SKIP.has(f.name)).map((f) => join(FIXTURE_DIR, `${f.name}.oracle.json`));
   const rows = files.flatMap((file) => runMutationTest(parsePgfplotsOracle(JSON.parse(readFileSync(file, "utf8"))), file));
   const table = formatMutationTable(rows);
   console.log(table);
