@@ -686,6 +686,8 @@ function wrapSerializedOptions(
       return content;
     case "braced":
       return tikz`{${content}}`;
+    case "plus-bracketed":
+      return tikz`+[${content}]`;
     case "bracketed":
     default:
       return tikz`[${content}]`;

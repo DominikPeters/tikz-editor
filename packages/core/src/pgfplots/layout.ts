@@ -29,6 +29,8 @@ export type LabelRequest = {
   placement: string;
   /** Where the anchor goes (local coordinates). */
   at: Point;
+  /** Where the label text is written in the document (editing only; no effect on layout). */
+  textSpan?: { from: number; to: number };
 };
 
 export type LabelGeometry = {
@@ -109,6 +111,60 @@ export function boxSize(model: AxisModel, limits: AxisLimits): { width: number; 
   const width = model.x.unit !== undefined ? model.x.unit * (limits.xmax - limits.xmin) : wTarget - allowance;
   const height = model.y.unit !== undefined ? model.y.unit * (limits.ymax - limits.ymin) : hTarget - allowance;
   return { width: width * model.scale, height: height * model.scale };
+}
+
+/**
+ * AA1: `unit vector ratio` (and `axis equal`) through `scale mode=scale
+ * uniformly`. From the limits after enlargement and the A2 box W×H (before
+ * `scale`), one common factor s gives e_x = r s, e_y = s (r = rx/ry) with
+ * s = min(W / (r Δx), H / Δy): the direction that already fits keeps its
+ * limits and box length; the other one gets more room, as wider limits (box
+ * length kept) when it may change them, else as a shorter box. Changing a
+ * direction's limits: `unit rescale keep size=false` never; `unless limits
+ * declared` unless both its limits are given; `true` always. With one limit
+ * given only the other moves; with none (or `true` overriding both) the
+ * range grows about its centre. Returns the unit vector lengths (pt per
+ * internal unit, before `scale`) and the new limits.
+ */
+export function applyUnitVectorRatio(model: AxisModel, limits: AxisLimits): { limits: AxisLimits; unitX: number; unitY: number; shrunk: { x: boolean; y: boolean } } | null {
+  const ratio = model.unitVectorRatio;
+  if (!ratio || model.x.unit !== undefined || model.y.unit !== undefined) return null;
+  const base = boxSize({ ...model, scale: 1 }, limits);
+  const r = ratio.x / ratio.y;
+  const dx = limits.xmax - limits.xmin;
+  const dy = limits.ymax - limits.ymin;
+  if (!(dx > 0) || !(dy > 0)) return null;
+  const s = Math.min(base.width / (r * dx), base.height / dy);
+  const unitX = r * s;
+  const unitY = s;
+  const out = { ...limits };
+  const widen = (letter: "x" | "y", length: number, unit: number): void => {
+    const dir = model[letter];
+    const lo = letter === "x" ? limits.xmin : limits.ymin;
+    const hi = letter === "x" ? limits.xmax : limits.ymax;
+    const range = length / unit;
+    if (!(range > hi - lo)) return;
+    const minGiven = dir.min !== undefined;
+    const maxGiven = dir.max !== undefined;
+    const keep = model.unitRescaleKeepSize;
+    if (keep === "false" || (keep === "unless limits declared" && minGiven && maxGiven)) return;
+    let nlo: number;
+    let nhi: number;
+    if (minGiven && !maxGiven) { nlo = lo; nhi = lo + range; }
+    else if (maxGiven && !minGiven) { nhi = hi; nlo = hi - range; }
+    else { const c = (lo + hi) / 2; nlo = c - range / 2; nhi = c + range / 2; }
+    if (letter === "x") { out.xmin = nlo; out.xmax = nhi; } else { out.ymin = nlo; out.ymax = nhi; }
+  };
+  widen("x", base.width, unitX);
+  widen("y", base.height, unitY);
+  // AA2: a direction shortened below a fifth of its A2 length (E22; the
+  // threshold lies between 0.193 and 0.215 on the discovery sweep).
+  const threshold = 0.2;
+  const shrunk = {
+    x: (out.xmax - out.xmin) * unitX < base.width * threshold,
+    y: (out.ymax - out.ymin) * unitY < base.height * threshold
+  };
+  return { limits: out, unitX, unitY, shrunk };
 }
 
 /** The box size when it does not depend on the limits (unit vectors not given), for enlargement by a dimension. */
@@ -310,12 +366,12 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
 
   // J3: scale labels.
   const W = x1 - x0; const H = y1 - y0;
-  if (ticks.x.scaleExponent !== 0 && ticks.x.major.length > 0) {
-    place({ role: "xscale", text: `$\\cdot 10^{${String(ticks.x.scaleExponent)}}$`, styles: input.labelStyles.xscale,
+  if (ticks.x.scaleLabel !== undefined && ticks.x.major.length > 0) {
+    place({ role: "xscale", text: ticks.x.scaleLabel, styles: input.labelStyles.xscale,
       placement: "anchor=north,inner sep=0pt", at: { x: x0 + 0.9 * W, y: bottom - 5 } });
   }
-  if (ticks.y.scaleExponent !== 0 && ticks.y.major.length > 0) {
-    place({ role: "yscale", text: `$\\cdot 10^{${String(ticks.y.scaleExponent)}}$`, styles: input.labelStyles.yscale,
+  if (ticks.y.scaleLabel !== undefined && ticks.y.major.length > 0) {
+    place({ role: "yscale", text: ticks.y.scaleLabel, styles: input.labelStyles.yscale,
       placement: "anchor=south west,inner sep=0pt", at: { x: x0 + 3, y: y0 + 1.03 * H } });
   }
 

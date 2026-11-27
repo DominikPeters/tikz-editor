@@ -1,0 +1,6 @@
+% axis equal (keep size=true) overrides declared limits (behaviour AA1).
+\begin{tikzpicture}
+\begin{axis}[axis equal, xmin=0, xmax=4, ymin=0, ymax=1, height=6cm]
+  \addplot coordinates {(0,0) (4,1)};
+\end{axis}
+\end{tikzpicture}

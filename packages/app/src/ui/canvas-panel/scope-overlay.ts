@@ -1,4 +1,5 @@
 import type { Statement } from "@tikz-editor/core/ast/types";
+import { axisBodyStatements } from "@tikz-editor/core/ast/walk";
 import { pt, svgBounds, worldBounds } from "@tikz-editor/core/coords/index";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
 import type { SvgBounds, SvgPoint, WorldBounds } from "../coords/types";
@@ -24,9 +25,47 @@ export type ResolveScopeAwareSelectionTargetInput = {
   focusedScopeId?: string | null;
 };
 
+/**
+ * The parts of pgfplots axes the scene draws: axis id → its plot and
+ * description ids, and each axis' outer bounding box (from the axis' edit
+ * geometry). An axis is a container like a scope: one click selects it, a
+ * second click on a plot, label or legend selects that part.
+ */
+export type AxisOverlayParts = {
+  partIdsByAxisId: ReadonlyMap<string, readonly string[]>;
+  boundsByAxisId: ReadonlyMap<string, SvgBounds>;
+};
+
+export function collectAxisOverlayParts(
+  sceneElements: readonly SceneElement[] | undefined,
+  viewBox: { y: number; height: number } | null | undefined
+): AxisOverlayParts {
+  const partIdsByAxisId = new Map<string, string[]>();
+  const boundsByAxisId = new Map<string, SvgBounds>();
+  for (const element of sceneElements ?? []) {
+    const info = element.kind === "Path" ? element.pgfplotsAxis : undefined;
+    if (info && viewBox) {
+      const { a, b, c, d, e, f } = info.frame;
+      const corners = [[info.bbox.minX, info.bbox.minY], [info.bbox.maxX, info.bbox.minY], [info.bbox.minX, info.bbox.maxY], [info.bbox.maxX, info.bbox.maxY]]
+        .map(([x = 0, y = 0]) => ({ x: a * x + c * y + e, y: b * x + d * y + f }));
+      const xs = corners.map((p) => p.x);
+      const ys = corners.map((p) => viewBox.y + viewBox.height - (p.y - viewBox.y));
+      boundsByAxisId.set(info.axisId, svgBounds(pt(Math.min(...xs)), pt(Math.min(...ys)), pt(Math.max(...xs)), pt(Math.max(...ys))));
+    }
+    const match = /^(axis:\d+):(?:plot:\d+|xlabel|ylabel|title|legend)$/u.exec(element.sourceRef.sourceId);
+    if (match?.[1]) {
+      const list = partIdsByAxisId.get(match[1]) ?? [];
+      if (!list.includes(element.sourceRef.sourceId)) list.push(element.sourceRef.sourceId);
+      partIdsByAxisId.set(match[1], list);
+    }
+  }
+  return { partIdsByAxisId, boundsByAxisId };
+}
+
 export function buildScopeOverlayIndex(
   statements: readonly Statement[] | undefined,
-  boundsBySourceId: SourceBoundsMap
+  boundsBySourceId: SourceBoundsMap,
+  axisParts?: AxisOverlayParts
 ): ScopeOverlayIndex {
   const scopesById = new Map<string, ScopeOverlayNode>();
   const ancestorScopeIdsBySourceId = new Map<string, string[]>();
@@ -49,6 +88,35 @@ export function buildScopeOverlayIndex(
 
     for (const statement of items) {
       ancestorScopeIdsBySourceId.set(statement.id, [...ancestors]);
+
+      if (statement.kind === "Axis") {
+        // Plots and descriptions are parts of the axis; its TikZ statements are children too.
+        const partIds = axisParts?.partIdsByAxisId.get(statement.id) ?? [];
+        for (const partId of partIds) ancestorScopeIdsBySourceId.set(partId, [...ancestors, statement.id]);
+        const body = axisBodyStatements(statement);
+        const childBounds = visit(body, statement.id, [...ancestors, statement.id]);
+        const ownBounds = boundsBySourceId.get(statement.id) ?? null;
+        let axisBounds = axisParts?.boundsByAxisId.get(statement.id) ?? null;
+        if (!axisBounds) {
+          axisBounds = ownBounds;
+          for (const partId of partIds) {
+            const partBounds = boundsBySourceId.get(partId);
+            if (partBounds) axisBounds = axisBounds ? mergeBounds(axisBounds, partBounds) : partBounds;
+          }
+          if (childBounds) axisBounds = axisBounds ? mergeBounds(axisBounds, childBounds) : childBounds;
+        }
+        scopesById.set(statement.id, {
+          scopeId: statement.id,
+          parentScopeId,
+          childStatementIds: [...partIds, ...body.map((entry) => entry.id)],
+          bounds: axisBounds
+        });
+        if (axisBounds) {
+          boundsByScopeId.set(statement.id, axisBounds);
+          mergedBounds = mergedBounds ? mergeBounds(mergedBounds, axisBounds) : axisBounds;
+        }
+        continue;
+      }
 
       if (statement.kind !== "Scope") {
         const ownBounds = boundsBySourceId.get(statement.id) ?? null;
@@ -95,7 +163,8 @@ export function scopeWorldBounds(
 ): WorldBounds | null {
   const scope = scopeOverlay.scopesById.get(scopeId);
   if (!scope) return null;
-  let merged: WorldBounds | null = null;
+  // A pgfplots axis draws its box, ticks and tick labels itself.
+  let merged: WorldBounds | null = boundsBySourceId.get(scopeId) ?? null;
   for (const childId of scope.childStatementIds) {
     const bounds = boundsBySourceId.get(childId)
       ?? (scopeOverlay.scopesById.has(childId) ? scopeWorldBounds(scopeOverlay, childId, boundsBySourceId) : null);

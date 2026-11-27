@@ -20,7 +20,7 @@ describe("glyph outlines are defined once and placed by reference", () => {
   it("defines a repeated glyph once in a picture, at any size", async () => {
     await loadAllTexGlyphOutlines();
     const svg = (await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}
-\node {AAAA AAA};
+\node {AAAA AAA AAAA AAA};
 \node[font=\small] at (0,-1) {AAA};
 \node[font=\Large] at (0,-2) {A};
 \end{tikzpicture}`)).svg.svg;
@@ -32,7 +32,9 @@ describe("glyph outlines are defined once and placed by reference", () => {
     // One definition per distinct outline, however often it is used.
     expect(new Set(defs.map(match => match[2])).size).toBe(defs.length);
     const usedByA = new Set(uses.map(use => /href="#([^"]*)"/u.exec(use[0])?.[1]));
-    expect(usedByA.size).toBeLessThanOrEqual(2);
+    // One outline per optical size: \normalsize lmroman10, \small lmroman9,
+    // \Large lmroman12 (tulmr.fd).
+    expect(usedByA.size).toBeLessThanOrEqual(3);
     expectStandalone(svg);
     // Far smaller than repeating the outline at each use.
     const outline = defs.find(match => match[1] === [...usedByA][0])?.[2] ?? "";

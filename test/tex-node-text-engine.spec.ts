@@ -94,8 +94,9 @@ describe("native TeX node text engine", () => {
     );
 
     expect(twentyPoint?.cacheKey).not.toBe(tenPoint?.cacheKey);
+    // tulmr.fd: <15-> lmroman17-regular.
     expect(twentyPointPayload?.body).toContain(
-      'data-tex-font="lmroman10-regular"'
+      'data-tex-font="lmroman17-regular"'
     );
     expect(twentyPointPayload?.body).toContain("scale(2)");
   });

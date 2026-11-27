@@ -552,10 +552,54 @@ editor's text engine has the font. Found on the way:
   editor; tikz.code.tex says on 3pt off 2pt / on 3pt off 6pt. Fixed.
 - **K4 — Text at 8–9 pt** (e.g. `label style={font=\small}`) is set by
   LuaLaTeX in LMRoman9/LMRoman8 with their own metrics; the editor's text
-  engine has only lmroman10/12/17 and scales lmroman10, so such labels are
-  up to 0.6 pt wide off (description-styles, axis-font-thick). Math at
-  8 pt (CMR8) is right. Not a pgfplots rule; recorded as the cause of
-  those two fixtures' text findings.
+  engine scaled lmroman10, so such labels were up to 0.6 pt wide off
+  (description-styles, axis-font-thick). Math at 8 pt (CMR8) was right.
+  Not a pgfplots rule. **FIXED (2026-11-27)**: the default (TU, fontspec-less)
+  text profile now follows tulmr.fd/tulmss.fd/tulmtt.fd with NFSS's
+  half-open size ranges (`<8.5-9.5>` = 8.5 ≤ size < 9.5) and substitutions,
+  checked against LuaLaTeX's `\fontname` for every size command × 19
+  family/series/shape combinations in the 10/11/12pt article classes:
+
+  | size (pt) | rm m/n | rm bx/n | rm it | rm sl | sf m/n, sl, it | tt m/n |
+  |---|---|---|---|---|---|---|
+  | 5 | lmroman5 | lmroman5-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 6 | lmroman6 | lmroman6-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 7 | lmroman7 | lmroman7-bold | lmroman7-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 8 | lmroman8 | lmroman8-bold | lmroman8-italic | lmromanslant8 | lmsans8 | lmmono8 |
+  | 9 | lmroman9 | lmroman9-bold | lmroman9-italic | lmromanslant9 | lmsans9 | lmmono9 |
+  | 10, 10.95 | lmroman10 | lmroman10-bold | lmroman10-italic | lmromanslant10 | lmsans10 | lmmono10 |
+  | 12, 14.4 | lmroman12 | lmroman12-bold | lmroman12-italic | lmromanslant12 | lmsans12 | lmmono12 |
+  | 17.28, 20.74, 24.88 | lmroman17 | lmroman12-bold | lmroman12-italic | lmromanslant17 | lmsans17 | lmmono12 |
+
+  At every size: rm bx/it lmroman10-bolditalic, rm bx/sl lmromanslant10-bold,
+  rm m/sc and sf m/sc lmromancaps10, rm bx/sc = rm bx/n of that size (bx/sc
+  is undeclared; NFSS falls back to the n shape), sf bold (any shape)
+  lmsans10-bold/-boldoblique, tt bold lmmonolt10-bold/-boldoblique, tt it
+  lmmono10-italic, tt sl lmmonoslant10, tt sc lmmonocaps10. Class sizes:
+  10pt `\tiny`…`\Huge` = 5, 7, 8, 9, 10, 12, 14.4, 17.28, 20.74, 24.88;
+  11pt = 6, 8, 9, 10, 10.95, 12, 14.4, 17.28, 20.74, 24.88; 12pt = 6, 8,
+  10, 10.95, 12, 14.4, 17.28, 20.74, 24.88, 24.88. Range edges: 15pt is
+  already lmroman17 but still lmsans12 (tulmss `<11-15.5>`).
+  Two neighbouring findings on the way: (a) interword glue of a
+  natural-width TikZ node is the font's space and extra space
+  (`a: b` gets fontdimen 7 after the colon), not `.3333em`/`.5em`: TikZ
+  sets `\spaceskip.3333em \xspaceskip.5em` only inside the minipage of a
+  `text width` node (tikz.code.tex `\tikz@text@action`); (b) Latin Modern
+  Mono is loaded without TeX ligatures (tulmtt.fd has no
+  `\UnicodeFontTeXLigatures`): `--` stays two hyphens, `` ` ``/`'` stay
+  the ASCII grave/straight quote. Verified by
+  `test/tex-lm-optical-text-oracle.spec.ts` (fixture from
+  `scripts/capture-lm-optical-text-oracle.mjs`): 570 selections, 192
+  distinct (face, size) pairs × 197 strings = 37,824 `\wd/\ht/\dp` boxes,
+  max error 0.0002 pt at a 0.005 pt tolerance; the only exclusion is the
+  width of 4 accented strings in italic and small-caps faces, whose pair
+  kerns with non-ASCII letters the generated tables do not carry (an
+  existing generator limit, see the spec). description-styles and
+  axis-font-thick now pass both tiers with no KNOWN entry; E17 `heights`
+  (`\Large`), `entryopts` and `font` (`\small` legend) pass. `font` also
+  needed the legend matrix's `mid` from the ambient font: an empty text
+  box with `text height`/`text depth` (the legend matrix) keeps `mid` at
+  .5ex of the surrounding font (2.155 pt), as K1.
 - **K5 — Oracle `map` probe at large magnitudes.** With limits ≈ 1e4
   (scaled-ticks: y ∈ [10100, 32900]) the `axis cs` probe points are 0.16 pt
   off the oracle's own `rel axis cs` rectangle, while the plotted data in
@@ -803,7 +847,9 @@ first time after the rules below were fixed on the discovery set. Max error
 over the passing cases: layout (legend node anchors, bbox) **0.0077 pt**,
 paths **0.0078 pt**, glyphs **0.0080 pt**. The five failures: `\Large` and
 `\small` legend text (K4: LuaLaTeX uses LMRoman12/LMRoman9, the editor's
-text engine scales lmroman10; 0.14–0.37 pt), `rounded corners` on the legend
+text engine scales lmroman10; 0.14–0.37 pt; **fixed with K4, 2026-11-27**:
+discovery set 29/29, fresh set 16/18 with only the two below failing),
+`rounded corners` on the legend
 (a TikZ node-path start-point difference, not a legend rule), and
 `nodes={text width=…}` multi-line entries (OPEN, below).
 
@@ -1059,9 +1105,9 @@ limits, ticks, tick labels follow the map, descriptions stay where they
 are. CONFIRMED (fixture dir-reverse, both directions reversed, with an
 `axis cs` node; exact).
 
-Not done: `axis equal`, `axis equal image`, `unit vector ratio(*)`, `scale
-mode`, `unit rescale keep size`, H4 (`enlargelimits={abs=<dimen>}`)
-exactness.
+Done 2026-11-27: `axis equal`, `axis equal image`, `unit vector ratio(*)`,
+`unit rescale keep size` (section AA). Not done: `scale mode` other than
+its default, H4 (`enlargelimits={abs=<dimen>}`) exactness.
 
 ## T. Tick variants
 
@@ -1108,9 +1154,45 @@ label nodes. CONFIRMED on the fixture (exact).
 `std` precision 2 rounds). The editor matches; the repeated labels are
 pgfplots' behaviour, not a bug. CONFIRMED (fixture, exact).
 
-Not done: `xticklabel={…}` custom code, `xticklabel shift`, `scaled x
-ticks=base 10:e|real|manual`, `xtick scale label code`, `minor xtick` with
-`xtick distance`, `xticklabels` with fewer entries than ticks beyond I4.
+**T6 — Scaled tick variants** (2026-11-27). Experiment E23
+(`e23-cases.ts`, discovery 16 cases, fresh set `b` 6 cases;
+`e23-scaled.mts` prints `\tick`, labels and glyphs). Manual
+tickoptions.tex `scaled ticks`.
+- `scaled ticks=true` (initial) is J1; `false` none; `scaled x ticks`/`scaled
+  y ticks` act on one direction (`scaled ticks` sets both).
+- `scale ticks above exponent` / `below exponent`: scaled when e > above or
+  e < below; the documented initial values are not stored as key values
+  (`\pgfkeysvalueof` reads `\pgfkeys@relax`); measured they are **3 and −1**
+  (J1's e ≥ 4 / e ≤ −2; `above=1` scales limits of magnitude 10^2, `above=2`
+  does not; `below=0` scales 10^−1; `below=−3` leaves 10^−3 unscaled).
+- `base 10:e`: labels print **t·10^e** and the scale label is
+  `$\cdot 10^{-e}$` — the opposite sign of the manual's "divide every tick
+  by 10^e" (base 10:3 on x ∈ [2·10^4, 6·10^4] prints 2·10^7 … with
+  `·10^{−3}`; on y ∈ [5·10^−4, 2·10^−3] prints 0.5 … 2). Applied regardless
+  of magnitude; `base 10:0` draws no scale label.
+- `real:num`: labels t/num, scale label `$\cdot \pgfmathprintnumber{num}$`
+  (3.1415 → `·3.14`).
+- `manual:{label}{code}`: labels print the code's `\pgfmathresult` for
+  `#1` = t; the label as given; an empty label draws no scale label. The
+  editor reads the documented form `\pgfmathparse{<expression>}` only and
+  reports other code as an unreadable value.
+- `\tick` (and the harness' tick value) is the printed value in every mode
+  (J4). `xtick scale label code/.code` is reported as unsupported.
+- `xticklabels` and log axes disable scaling (manual).
+VERIFIED: discovery 16 cases pass both tiers except (a) the A7a
+`right of origin` noise (4 cases, 0.051 pt) and (b) `manual` around 65535
+with a range of 2.4: TeX's own tick values come out as 65534.98, 65535.48
+… (limits stored with N2 precision at range/|value| ≈ 4·10^−5), so its
+labels read −2·10^−2, 0.48, …; not emulated. Fresh set: 4/6 clean; `b-real`
+and `b-manual` differ only by TeX's tick-value noise (5.9999, 999.9998 →
+the manual label −2·10^−4). Fixtures scaled-ticks-base10, -real, -manual,
+-one-axis, -exponent pass both tiers (the two with |x| ≈ 10^4 carry the K5
+`map` probe entry, like scaled-ticks).
+
+Not done: `xticklabel={…}` custom code, `xticklabel shift`, `minor xtick`
+with `xtick distance`, `xticklabels` with fewer entries than ticks beyond
+I4, `yminorticks=false` (T1 OPEN), `axis line shift`, `separate axis lines`
+(B4 of the 2026-11-27 task).
 
 ## V. Tables (and how the axis body is read)
 
@@ -1376,3 +1458,85 @@ point (bars: at the bar's end, with the bar's shift; `west` for xbar;
 explicit symbolic`), in the plot colour, `every node near coord` applied;
 painted after the plot. OBSERVED (E19 `nodes-near*`), fixture
 bars-nodes-near (glyphs 0.005 pt).
+
+---
+
+## AA. Axis equal and unit vector ratios (2026-11-27)
+
+Experiment E22: `e22-cases.ts` (random two-point data rectangles under nine
+ratio settings × fourteen extras: `enlargelimits=false|0.3`, `enlarge x
+limits=false`, explicit limits on one or both sides, `scale only axis`,
+`width`/`height`, `scale=0.8`, every 17th case loglog; seed 0 = discovery,
+160 cases; `E22_SEED=1` = fresh validation, 140 cases), checked with
+`check-cases.mts ./e22-cases.ts`; `e22-axis-equal.mts` prints limits and
+boxes; `e22-ticks.mts`, `e22-short.mts` probe AA2. Sources: manual
+scaling.tex (`axis equal`, `axis equal image`, `unit vector ratio`, `unit
+rescale keep size`, `scale mode`).
+
+**AA1 — Rule.** `axis equal` = `unit vector ratio=1 1 1, unit rescale keep
+size=true`; `axis equal image` = the same with `false`; `unit vector
+ratio*` implies `false`; the initial `unit rescale keep size` is `unless
+limits declared` (manual). With limits L after H1/H2 and the A2 box W×H
+(before `scale`), r = rx/ry:
+```
+s  = min(W / (r Δx), H / Δy)        e_x = r s,  e_y = s
+```
+The direction that already fits keeps its limits and box length. The
+other needs range length/e: if it may change its limits (`true`: always;
+`unless limits declared`: unless both its limits are given; `false`:
+never), its range grows to length/e — about the centre, or away from the
+one given limit (`xmin=` given: only xmax moves) — and the box keeps W×H;
+otherwise its box shrinks to Δ·e. `scale` multiplies the result (A4);
+`scale only axis` changes only W, H (A2). Log directions use the internal
+coordinate (ln). Found on the way: a degenerate (single-value) range on a
+log direction widens to [v − 1, v + 1] internally (a factor e each way),
+not ±20 % (H2 is for linear directions). VERIFIED: discovery 154
+non-empty cases (124 clean), fresh 135 (113 clean): every limit and box
+within the comparison's tolerances except the cases explained below; worst passing layout error
+0.047 pt on fixtures (tier-1 tolerance), paths ≤ 0.008 pt.
+
+Residuals (not this rule): the `right of origin` projection noise of A7a
+(0.050–0.056 pt, 8 + 6 cases); marks on a limit with `enlargelimits=false`
+extend the editor's bounding box by the mark (1.8 pt) where TeX's does not
+— the same without any ratio (E22 edge case `e62`), a separate OPEN item;
+`xmin=-1`/`ymin=0` on log axes (ignored with a diagnostic by the editor,
+TeX does something else; 4 + 1 cases); two loglog cases with tick
+marks 0.021–0.022 pt off (log noise, Q); axes whose every point lies outside
+given limits (TeX treats them as empty axes, H3/Surprise 10; excluded, 6 +
+5 cases).
+
+**AA2 — Ticks of a ratio-shortened direction.** When AA1 shortens a
+direction's box below a fifth of its A2 length (threshold between 0.193
+and 0.215 on the discovery sweep), TeX keeps automatic ticks that a
+normal axis with the same limits and length drops (E22c `e22-short`: the
+same limits and box without a ratio give the ordinary list): ticks up to
+half a step beyond the upper limit (included at ≤ 0.495 step, dropped at
+≥ 0.585 step), and, when the lower limit was enlarged (`enlargelimits`
+on that side, limit not given), every tick from the list start
+trunc(listBase/step) − 1, below the lower limit; with
+`enlargelimits=false` the lower side is filtered as usual. Their marks and
+labels are drawn outside the box and extend the bounding box. OBSERVED:
+discovery 56/57 shortened cases match (42 clean, 14 with harness or A7a
+noise only; before the rule 24 failed), fresh sweep 45/46. Misses:
+discovery `s0-155` (`ratio*` with all four limits given, a 1.8 pt taller
+TeX bounding box, not analysed) and fresh `s1-35`: x [2.965, 5.305] on 20 pt of 135) drops the
+tick 1.965 steps below the lower limit that the rule keeps — the lower
+reach is not exactly "from the list start" (included up to 1.91 steps
+below elsewhere). **OPEN** for that bound and for why the threshold is a
+fifth. Overlapping labels of these ticks confuse the harness' glyph-to-label
+assignment (`tick-label-text`, `textbox-text`; positions and glyphs match).
+
+Fixtures: axis-equal, axis-equal-image, axis-equal-declared (keep size
+true overrides all four declared limits), axis-equal-log,
+unit-vector-ratio-limits (one declared limit), unit-vector-ratio-star
+(`enlargelimits=0.3`, `scale=0.8`), axis-equal-image-short (AA2): both
+tiers pass at design tolerances (tier 1 ≤ 0.047 pt, paths ≤ 0.008 pt,
+glyphs ≤ 0.003 pt); axis-equal-image-short has KNOWN harness
+label-text entries only.
+
+Editing: the ratio's unit vectors are not reported as authored `x=`/`y=`,
+so resize writes `width`/`height` as for any axis. With keep size (`axis
+equal`, the default `unless limits declared`) the box follows the drag
+exactly; under `axis equal image`/`ratio*` the shortened direction's box
+stays Δ·e, so a drag of that edge changes the target but not the edge
+(the other direction follows).

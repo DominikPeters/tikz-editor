@@ -306,7 +306,12 @@ describe("headless Beamer frame renderer", () => {
     expect(tikz.model.parts.some((part) =>
       part.markup.includes('data-tex-font="lmsans10-oblique"')
     )).toBe(true);
-    expect(tikz.bounds.width).toBeCloseTo(263.119339, 6);
+    // Editor snapshot. The node's interword glue is now the font's space
+    // (natural-width nodes are \hbox'es; TikZ's \spaceskip=.3333em applies
+    // to `text width` nodes only): its text matches LuaLaTeX's \hbox to
+    // 0.0001pt (251.00682pt at 10.95pt). The picture as a whole is 270.4037pt
+    // wide in LuaLaTeX; that 7.3pt gap predates this change.
+    expect(tikz.bounds.width).toBeCloseTo(263.111127, 6);
     expect(tikz.bounds.height).toBeCloseTo(84.222295, 6);
     expect(result.diagnostics).toEqual([]);
   }, 20_000);

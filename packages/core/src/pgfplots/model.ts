@@ -51,7 +51,11 @@ export type AxisDirectionModel = {
   tickAlign: "inside" | "outside" | "center";
   tickPos: "both" | "lower" | "upper";
   tickLabelPos: "default" | "lower" | "upper";
-  scaledTicks: boolean;
+  /** `scaled x ticks` (manual tickoptions.tex, initially true; behaviour J1, T6). */
+  scaledTicks: ScaledTicksSpec;
+  /** `scale ticks above exponent` / `below exponent` (initially 3 / -1; J1, T6). */
+  scaleTicksAbove: number;
+  scaleTicksBelow: number;
   label?: { text: string; span: Span };
   labelShift: number;
   /** `max space between ticks`, `try min ticks` (behaviour I1). */
@@ -90,6 +94,15 @@ export type AxisDirectionModel = {
   symbolic?: string[];
 };
 
+/** `scaled x ticks=true|false|base 10:e|real:num|manual:{label}{code}`. */
+export type ScaledTicksSpec =
+  | { kind: "auto" }
+  | { kind: "none" }
+  | { kind: "base10"; exponent: number }
+  | { kind: "real"; divisor: number }
+  /** `code` is `\pgfmathparse{<expression in #1>}`, kept as the expression. */
+  | { kind: "manual"; label: string; expression: string };
+
 /** One direction of `error bars/…` (manual errorbars.tex, behaviour X2). */
 export type ErrorBarDirection = {
   dir: "none" | "plus" | "minus" | "both";
@@ -114,6 +127,15 @@ export type AxisModel = {
   height?: number;
   scaleOnlyAxis: boolean;
   scale: number;
+  /**
+   * `unit vector ratio=rx ry` (`axis equal`: 1 1): |e_x| / |e_y| = rx / ry,
+   * through `scale mode=scale uniformly` (behaviour AA). Absent: no ratio.
+   */
+  unitVectorRatio?: { x: number; y: number };
+  /** `unit rescale keep size` (initially `unless limits declared`). */
+  unitRescaleKeepSize: "true" | "false" | "unless limits declared";
+  /** Set by the evaluator when x/y `unit` came from the ratio, not from `x=`/`y=`. */
+  unitsFromRatio?: boolean;
   x: AxisDirectionModel;
   y: AxisDirectionModel;
   majorTickLength: number;
@@ -150,7 +172,7 @@ export type AxisModel = {
 
 /** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
 /** `keep`: an `\addlegendentry{}` keeps its pair even when empty (behaviour Z8); empty `\legend` items do not. */
-export type LegendEntryText = { text: string; options: string; span: Span; keep?: boolean };
+export type LegendEntryText = { text: string; options: string; span: Span; /** Where the entry text is written, for canvas text editing (editing only). */ textSpan?: Span; keep?: boolean };
 
 export type LegendModel = {
   /** `legend entries={…}`: used only when the axis has no legend command (manual). */
@@ -265,7 +287,9 @@ function direction(): AxisDirectionModel {
     tickAlign: "inside",
     tickPos: "both",
     tickLabelPos: "default",
-    scaledTicks: true,
+    scaledTicks: { kind: "auto" },
+    scaleTicksAbove: 3,
+    scaleTicksBelow: -1,
     labelShift: 0,
     maxSpaceBetweenTicks: 35,
     tryMinTicks: 4,
@@ -419,6 +443,42 @@ function defineAxisKey(names: string | string[], handler: KeyHandler): void {
 defineAxisKey("width", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.width = n; return true; });
 defineAxisKey("height", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.height = n; return true; });
 defineAxisKey("scale only axis", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.scaleOnlyAxis = b; return true; });
+// Manual scaling.tex: `axis equal` is `unit vector ratio=1 1 1, unit rescale
+// keep size=true`; `axis equal image` the same with `false`; the starred
+// ratio implies `false`. Trailing ratios of 1 may be omitted; an empty
+// value disables the ratio. For 2D axes only rx and ry count.
+function readUnitVectorRatio(value: string | null): { x: number; y: number } | null | undefined {
+  const text = stripBraces(value ?? "").trim();
+  if (text === "") return undefined;
+  const parts: number[] = [];
+  for (const part of text.split(/\s+/u)) {
+    const n = readPgfNumber(part);
+    if (n === null || !(n > 0)) return null;
+    parts.push(n);
+  }
+  const [x = 1, y = 1] = parts;
+  return { x, y };
+}
+defineAxisKey(["axis equal", "axis equal image"], (ctx, v, use) => {
+  const b = readBoolean(v);
+  if (b === null) return false;
+  if (b) { ctx.model.unitVectorRatio = { x: 1, y: 1 }; ctx.model.unitRescaleKeepSize = use.key === "axis equal" ? "true" : "false"; }
+  else delete ctx.model.unitVectorRatio;
+  return true;
+});
+defineAxisKey(["unit vector ratio", "unit vector ratio*"], (ctx, v, use) => {
+  const ratio = readUnitVectorRatio(v);
+  if (ratio === null) return false;
+  if (ratio) ctx.model.unitVectorRatio = ratio; else delete ctx.model.unitVectorRatio;
+  if (use.key === "unit vector ratio*") ctx.model.unitRescaleKeepSize = "false";
+  return true;
+});
+defineAxisKey("unit rescale keep size", (ctx, v) => {
+  const text = v === null ? "true" : stripBraces(v).trim();
+  if (text !== "true" && text !== "false" && text !== "unless limits declared") return false;
+  ctx.model.unitRescaleKeepSize = text;
+  return true;
+});
 defineAxisKey("scale", (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; ctx.model.scale = n; return true; });
 defineAxisKey("at", (ctx, v) => { if (v === null) return false; ctx.model.at = stripBraces(v); return true; });
 defineAxisKey("anchor", (ctx, v) => { if (v === null) return false; ctx.model.anchor = stripBraces(v); return true; });
@@ -616,6 +676,8 @@ defineAxisKey("tick pos", forAxes("xy", (d, v) => setTickPos(d, "", v)));
 defineAxisKey("tickpos", forAxes("xy", (d, v) => setTickPos(d, "", v)));
 defineAxisKey("ticklabel pos", forAxes("xy", (d, v) => setTickLabelPos(d, "", v)));
 defineAxisKey("scaled ticks", forAxes("xy", (d, v) => setScaledTicks(d, v)));
+defineAxisKey("scale ticks above exponent", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.scaleTicksAbove = n; return true; }));
+defineAxisKey("scale ticks below exponent", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.scaleTicksBelow = n; return true; }));
 defineAxisKey("label shift", forAxes("xy", (d, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; d.labelShift = n; return true; }));
 defineAxisKey("max space between ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; d.maxSpaceBetweenTicks = n; return true; }));
 defineAxisKey("try min ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.tryMinTicks = Math.round(n); return true; }));
@@ -645,7 +707,18 @@ defineAxisKey(["reverse legend", "legend reversed"], (ctx, v) => { const b = rea
 defineAxisKey(["transpose legend", "legend transposed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.transpose = b; return true; });
 defineAxisKey("legend to name", (ctx, v) => { const name = stripBraces(v ?? ""); if (name === "") delete ctx.model.legend.toName; else ctx.model.legend.toName = name; return true; });
 defineAxisKey("legend entries", (ctx, v, use) => {
-  ctx.model.legend.entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  const entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  // Editing: where each item's text is written, when the value is the one in the document (the evaluator checks it).
+  const origin = use.origin;
+  const base = origin.kind === "kv" && origin.valueSpan && v !== null && v === origin.valueRaw ? origin.valueSpan.from : null;
+  let cursor = 0;
+  ctx.model.legend.entries = entries.map((entry) => {
+    if (base === null || v === null || entry.text.length === 0) return entry;
+    const at = v.indexOf(entry.text, cursor);
+    if (at < 0) return entry;
+    cursor = at + entry.text.length;
+    return { ...entry, textSpan: { from: base + at, to: base + at + entry.text.length } };
+  });
   return true;
 });
 
@@ -694,10 +767,58 @@ function setTickLabelPos(d: AxisDirectionModel, letter: string, v: string | null
   return true;
 }
 
+/** Splits `{a}{b}` (two balanced groups, whitespace between) into their contents. */
+function twoGroups(text: string): [string, string] | null {
+  const groups: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && /\s/u.test(text[i] ?? "")) i += 1;
+    if (i >= text.length) break;
+    if (text[i] !== "{") return null;
+    let depth = 0;
+    const start = i;
+    for (; i < text.length; i += 1) {
+      if (text[i] === "{") depth += 1;
+      else if (text[i] === "}") { depth -= 1; if (depth === 0) break; }
+    }
+    if (depth !== 0) return null;
+    groups.push(text.slice(start + 1, i));
+    i += 1;
+  }
+  return groups.length === 2 ? [groups[0] ?? "", groups[1] ?? ""] : null;
+}
+
 function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
   const text = stripBraces(v ?? "true");
-  if (text === "true") { d.scaledTicks = true; return true; }
-  if (text === "false") { d.scaledTicks = false; return true; }
+  if (text === "true") { d.scaledTicks = { kind: "auto" }; return true; }
+  if (text === "false") { d.scaledTicks = { kind: "none" }; return true; }
+  const colon = text.indexOf(":");
+  if (colon < 0) return false;
+  const mode = text.slice(0, colon).trim();
+  const arg = text.slice(colon + 1).trim();
+  if (mode === "base 10") {
+    const e = readPgfNumber(arg);
+    if (e === null || !Number.isInteger(e)) return false;
+    d.scaledTicks = { kind: "base10", exponent: e };
+    return true;
+  }
+  if (mode === "real") {
+    const n = readPgfNumber(arg);
+    if (n === null || n === 0) return false;
+    d.scaledTicks = { kind: "real", divisor: n };
+    return true;
+  }
+  if (mode === "manual") {
+    const groups = twoGroups(arg);
+    if (!groups) return false;
+    // The documented form only: code that assigns \pgfmathresult with \pgfmathparse.
+    const code = /^\\pgfmathparse\s*\{([\s\S]*)\}\s*%?\s*$/u.exec(groups[1].trim());
+    if (!code) return false;
+    const expression = code[1] ?? "";
+    if (!evaluatePgfMathExpression(expression.replaceAll("#1", "(1)"), { mode: "float" }).ok) return false;
+    d.scaledTicks = { kind: "manual", label: groups[0], expression };
+    return true;
+  }
   return false;
 }
 
@@ -743,6 +864,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     environment: input.axis.environment,
     scaleOnlyAxis: false,
     scale: 1,
+    unitRescaleKeepSize: "unless limits declared",
     x: direction(),
     y: direction(),
     majorTickLength: 0.15 * PT_PER_CM,

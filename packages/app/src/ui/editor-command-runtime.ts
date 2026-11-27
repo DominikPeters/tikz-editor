@@ -286,6 +286,12 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     };
   };
 
+  // pgfplots insert templates: an axis appended to the picture (core `insertPgfplotsTemplate`).
+  const pgfplotsTemplateBinding = (template: "function" | "data" | "bar"): CommandBinding => ({
+    enabled: snapshot.parseResult != null,
+    run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "insertPgfplotsTemplate", template } }); }
+  });
+
   const runSvgExport = () => {
     if (!snapshot.svg) {
       return;
@@ -890,6 +896,9 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     },
     [APP_MENU_COMMAND_IDS.INSERT_NODE]: insertBinding("addNode"),
     [APP_MENU_COMMAND_IDS.INSERT_MATRIX]: insertBinding("addMatrix"),
+    [APP_MENU_COMMAND_IDS.INSERT_FUNCTION_PLOT]: pgfplotsTemplateBinding("function"),
+    [APP_MENU_COMMAND_IDS.INSERT_DATA_PLOT]: pgfplotsTemplateBinding("data"),
+    [APP_MENU_COMMAND_IDS.INSERT_BAR_CHART]: pgfplotsTemplateBinding("bar"),
     [APP_MENU_COMMAND_IDS.INSERT_SHAPE]: insertBinding("addShape"),
     [APP_MENU_COMMAND_IDS.INSERT_PATH]: insertBinding("addPath"),
     [APP_MENU_COMMAND_IDS.INSERT_FREEHAND]: insertBinding("addFreehand"),

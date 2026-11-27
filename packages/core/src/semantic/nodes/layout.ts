@@ -242,13 +242,14 @@ export function resolveNodeLayout(
   // box) has no line box: height and depth 0. `text height`/`text depth`
   // then replace those zeros (pgfplots' empty legend entries, behaviour Z8).
   if (normalizedText.trim().length === 0) {
-    // `mid` stays .5ex above the baseline (pgfmoduleshapes.code.tex), also for an empty box.
-    const midAboveBase = midLineY - baseLineY;
     textLines = [""];
     textNaturalWidth = 0;
     textNaturalHeight = 0;
     baseLineY = 0;
-    midLineY = textHeightOverride == null && textDepthOverride == null ? 0 : midAboveBase;
+    // An empty text box whose \ht/\dp are set (`text height`/`text depth`,
+    // e.g. the pgfplots legend matrix): `mid` is the baseline raised by .5ex
+    // of the ambient font (pgfmoduleshapes.code.tex), not the node font's plain metrics.
+    midLineY = textHeightOverride == null && textDepthOverride == null ? 0 : 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
   }
 
   const resolvedMinWidth = Math.max(minWidth, minSize ?? minWidth);

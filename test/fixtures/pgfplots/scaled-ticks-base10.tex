@@ -1,0 +1,6 @@
+% scaled ticks=base 10:3 prints t*10^3 with the scale label 10^{-3} (behaviour T6; the manual says divide).
+\begin{tikzpicture}
+\begin{axis}[scale only axis,width=200pt,height=150pt,scaled ticks=base 10:3]
+  \addplot coordinates {(20000,0.0005) (40000,0.0010) (60000,0.0020)};
+\end{axis}
+\end{tikzpicture}

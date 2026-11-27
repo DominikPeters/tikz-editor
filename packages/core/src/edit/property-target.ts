@@ -1,6 +1,6 @@
 import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
-import type { Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
+import type { AddPlotStatement, AxisStatement, Span, Statement, PathStatement, PathItem, NodeItem, PicOperationItem, ChildOperationItem } from "../ast/types.js";
 import type { ParseTikzResult } from "../parser/index.js";
 import { parseStatementsFromBodyWithMapping, type ForeachStatementBodyParseResult } from "../foreach/snippet-parse.js";
 import { parseTikzForEdit, type EditParseOptions } from "./parse-options.js";
@@ -19,6 +19,7 @@ import { resolveMatrixCellEditTarget, resolveMatrixMode } from "../semantic/node
 import { incrementProfilingCounter } from "../profiling.js";
 import { findPathStatementById } from "./statement-find.js";
 import { axisBodyStatements, nestedStatements, walkPathItems } from "../ast/walk.js";
+import { parseAxisDescriptionId } from "../pgfplots/edit-ids.js";
 import { ForeachSnippetParseCache } from "../foreach/snippet-parse-cache.js";
 
 // Every foreach-template target reparses its loop's body, and the canvas
@@ -75,14 +76,19 @@ export type PropertyTargetKind =
   | "to-operation"
   | "edge-operation"
   | "coordinate-operation"
-  | "svg-operation";
+  | "svg-operation"
+  /** A pgfplots axis (`axis:N`), or one of its descriptions (`axis:N:xlabel`, …), whose keys live in the axis options. */
+  | "pgfplots-axis"
+  /** An `\addplot` of an axis (`axis:N:plot:M`). */
+  | "pgfplots-plot";
 
 export const TIKZPICTURE_GLOBAL_TARGET_ID = "__tikzpicture__";
 export const STYLE_SOURCE_TARGET_PREFIX = "__style_source__:";
 export const FOREACH_TEMPLATE_TARGET_PREFIX = "__foreach_template__:";
 export const PIC_TEMPLATE_TARGET_PREFIX = "__pic_template__:";
 
-export type PropertyTargetOptionsFormat = "bracketed" | "bare" | "braced";
+/** `plus-bracketed`: a new list is written as `+[…]` (an `\addplot` without options keeps its cycle list, behaviour G2). */
+export type PropertyTargetOptionsFormat = "bracketed" | "bare" | "braced" | "plus-bracketed";
 
 export type PropertyTarget = {
   id: string;
@@ -722,8 +728,11 @@ function findTargetInStatements(statements: Statement[], source: string, element
       }
     }
 
-    // The axis itself is no property target yet; the TikZ statements in it are.
     if (statement.kind === "Axis") {
+      const axisTarget = makePgfplotsTarget(statement, source, elementId);
+      if (axisTarget) {
+        return axisTarget;
+      }
       const nested = findTargetInStatements(axisBodyStatements(statement), source, elementId);
       if (nested) {
         return nested;
@@ -1500,6 +1509,38 @@ function resolveTreeChildNodeSpanInfo(
     ...(textSpan === undefined ? {} : { textSpan }),
     insertOffset,
     fallbackUsed
+  };
+}
+
+function makePgfplotsTarget(axis: AxisStatement, source: string, elementId: string): PropertyTarget | null {
+  const description = parseAxisDescriptionId(elementId);
+  if (elementId === axis.id || description?.axisId === axis.id) {
+    return {
+      id: elementId,
+      kind: "pgfplots-axis",
+      span: axis.span,
+      ...(axis.options === undefined ? {} : { options: axis.options }),
+      ...(axis.optionsSpan === undefined ? {} : { optionsSpan: axis.optionsSpan }),
+      optionsFormat: "bracketed",
+      insertOffset: axis.beginSpan.to,
+      ownerSourceId: axis.id
+    };
+  }
+  const plot = axis.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === elementId);
+  if (!plot) {
+    return null;
+  }
+  void source;
+  return {
+    id: plot.id,
+    kind: "pgfplots-plot",
+    span: plot.span,
+    ...(plot.options === undefined ? {} : { options: plot.options }),
+    ...(plot.optionsSpan === undefined ? {} : { optionsSpan: plot.optionsSpan }),
+    // G2: `\addplot[opts]` drops the cycle list, so a plot without options gains `+[…]`.
+    optionsFormat: plot.options || plot.increment ? "bracketed" : "plus-bracketed",
+    insertOffset: plot.incrementSpan?.to ?? plot.commandSpan.to,
+    ownerSourceId: axis.id
   };
 }
 

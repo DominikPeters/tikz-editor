@@ -240,8 +240,37 @@ export type SceneClipPath = {
 
 export type ScenePathShapeHint = "rectangle" | "circle" | "ellipse";
 
+/**
+ * Editing geometry of a pgfplots axis, carried by the axis box path so the
+ * editor can place handles and invert the size model without re-evaluating.
+ * Local coordinates are pt in the frame the axis is written in; `frame` maps
+ * them to world.
+ */
+export type PgfplotsAxisEditInfo = {
+  axisId: string;
+  frame: { a: number; b: number; c: number; d: number; e: number; f: number };
+  box: { x0: number; y0: number; x1: number; y1: number };
+  bbox: { minX: number; minY: number; maxX: number; maxY: number };
+  /** `current axis` anchors (local). */
+  anchors: Record<string, { x: number; y: number }>;
+  /** The `anchor=` the axis is placed by. */
+  anchor: string;
+  map: { origin: { x: number; y: number }; xUnit: { x: number; y: number }; yUnit: { x: number; y: number } };
+  limits: { xmin: number; xmax: number; ymin: number; ymax: number };
+  /** Size model inputs (behaviour A2–A4), pt. */
+  size: { width?: number; height?: number; scaleOnlyAxis: boolean; scale: number; xUnit?: number; yUnit?: number };
+  /** The drawn legend: its node box with outer sep (local) and the anchor it is placed by. */
+  legend?: { bbox: { minX: number; minY: number; maxX: number; maxY: number }; anchor: string };
+  /** Whether bare coordinates in the axis map linearly to the canvas (point editing). */
+  linear: boolean;
+  /** The enclosing frame's x/y vectors (canvas pt per unit), how a unitless `at` is read. */
+  parentBasis: { x: { x: number; y: number }; y: { x: number; y: number } };
+};
+
 export type ScenePath = {
   kind: "Path";
+  /** On the box path of a pgfplots axis. */
+  pgfplotsAxis?: PgfplotsAxisEditInfo;
   id: string;
   runtimeId: string;
   layer: string;

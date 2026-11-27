@@ -19,6 +19,7 @@ import {
   type TransformInspectorMutationContext
 } from "@tikz-editor/core/edit/property-write-builders";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
+import { buildPgfplotsInspectorDescriptor } from "@tikz-editor/core/edit/pgfplots/inspector";
 import { buildStylesCascadeModel } from "@tikz-editor/core/edit/styles-cascade";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import type { SceneElement } from "@tikz-editor/core/semantic/types";
@@ -323,6 +324,13 @@ export function useInspectorModel(args: {
         return buildScopeInspectorDescriptor(snapshot.source, sourceId, parseOptions);
       }
 
+      if (sourceId.startsWith("axis:")) {
+        const pgfplotsDescriptor = buildPgfplotsInspectorDescriptor(snapshot.source, sourceId, snapshot.scene?.elements ?? [], parseOptions);
+        if (pgfplotsDescriptor) {
+          return pgfplotsDescriptor;
+        }
+      }
+
       const element = selectedElement;
       if (!element) {
         return null;
@@ -338,7 +346,7 @@ export function useInspectorModel(args: {
         resolveTarget
       );
     });
-  }, [getInspectorDescriptor, parseOptions, selectedElementBySourceId, selectedSourceIds, snapshot.editHandles, snapshot.source]);
+  }, [getInspectorDescriptor, parseOptions, selectedElementBySourceId, selectedSourceIds, snapshot.editHandles, snapshot.scene, snapshot.source]);
 
   const descriptors = useMemo(() => {
     return descriptorEntries.filter((entry): entry is InspectorDescriptor => entry != null);

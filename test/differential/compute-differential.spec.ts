@@ -30,7 +30,7 @@ const DOCUMENT_SETS: FuzzDocument[][] = [
   [longDeck(fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex"), 12)],
   [longFigure(fixture("differential/node-graph.tex"), 12)],
   // pgfplots axes: one fragment each, named, with embedded TikZ (design/pgfplots.md 4.3).
-  [fixture("differential/pgfplots-axis.tex")]
+  [fixture("differential/pgfplots-axis.tex"), fixture("differential/pgfplots-axis-cache.tex")]
 ];
 
 // Shortcuts the default budget must reach; without them a clean run means little.
@@ -108,7 +108,9 @@ describe("compute differential fuzzing", () => {
 describe("compute differential fuzzing on pgfplots axes", () => {
   it("matches a cold render after every request, warm caches across axis edits", async () => {
     const documents = DOCUMENT_SETS[DOCUMENT_SETS.length - 1] ?? [];
-    for (const seed of [SEED * 1000 + 700, SEED * 1000 + 701, SEED * 1000 + 702]) {
+    // Plot data is cached by content across evaluations (pgfplots/eval-cache.ts): the second
+    // document reuses macros in expressions so stale keys would show here.
+    for (const seed of [SEED * 1000 + 700, SEED * 1000 + 701, SEED * 1000 + 702, SEED * 1000 + 703]) {
       const ops = await generateOps(documents, seed, STEPS);
       const result = await runOps(documents, ops);
       if (result.failure) {

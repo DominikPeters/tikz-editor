@@ -27,7 +27,7 @@ const names = readdirSync(dir).filter((f) => f.endsWith(".tex")).map((f) => f.sl
 
 const TOLERANCES = { colour: 0.002 };
 
-const LM_OPTICAL = "text at 8/9pt: TeX uses LMRoman9/8 (own metrics); the editor's text engine has only lmroman10/12/17 and scales lmroman10";
+const OVERLAP_LABELS = "ticks past the limits of a ratio-shortened direction (behaviour AA2) have overlapping labels; the harness gives each text box glyphs of its neighbours (positions and glyphs match)";
 const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zero-width TeX box (\\pgfsys@hbox); the editor draws the mark as a path, with no box";
 const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
 const CANVAS_PROBES = "the picture's TikZ transformation reaches the axis as a canvas transformation (behaviour Z1); the harness' Tier 1 node probes are read in the axis' untransformed frame (node anchors do not include a low-level canvas transformation), so Tier 1 positions and the texts found in their quads are not comparable; Tier 2 (painted output) is";
@@ -37,6 +37,10 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   "picture-xscale-rotate": {
     tier1: Object.fromEntries(["rect", "map", "tick-label", "tick-label-text", "description", "description-text"].map((code) => [code, CANVAS_PROBES])),
     tier2: { "textbox-text": "rotated canvas: the harness assigns the ylabel glyph to the axis' nesting-0 box instead of the label box (glyph-to-box assignment uses axis-aligned probes)" }
+  },
+  "axis-equal-image-short": {
+    tier1: { "tick-label-text": OVERLAP_LABELS },
+    tier2: { "textbox-text": OVERLAP_LABELS }
   },
   "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
@@ -48,22 +52,17 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   "function-trig-rad": {
     tier1: { "axis-anchor": "`right of origin` is 0.054pt off the box edge in the oracle (behaviour A7a: projection noise, 0.042pt on the first 28 fixtures; the y part, 0.02pt, is the limit noise N2)" }
   },
+  ...Object.fromEntries(["scaled-ticks-base10", "scaled-ticks-one-axis"].map((name) => [name, {
+    tier1: { map: "the oracle's axis cs probe at |x| ~ 1e4 is 0.2pt off its own rectangle (TeX fixed point, behaviour N2/K5); plot geometry matches in Tier 2" }
+  }])),
   "scaled-ticks": {
     tier1: { map: "the oracle's axis cs probe at |y| ~ 1e4 is 0.16pt off its own rectangle (TeX fixed point, behaviour N2); plot geometry matches in Tier 2" }
-  },
-  "description-styles": {
-    tier1: { description: LM_OPTICAL },
-    tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }
   },
   "log-basis-two": {
     tier1: Object.fromEntries(["bbox", "limits", "map", "axis-anchor"].map((code) => [code, "TeX stores log2(64) as 6.00073 (fixed-point ln of the basis), 0.024pt at the box edge; not emulated (behaviour Q1)"]))
   },
   "log-small-range": {
     tier1: { "axis-anchor": "the origin anchor (data 1) lies 97pt outside the box; TeX's stored xmin ln 2 = 0.69305 (exact 0.693147) moves its extrapolation by 0.021pt (behaviour Q5)" }
-  },
-  "axis-font-thick": {
-    tier1: { description: LM_OPTICAL },
-    tier2: { "glyph-font": LM_OPTICAL, "glyph-position": LM_OPTICAL, "textbox-position": LM_OPTICAL, "textbox-size": LM_OPTICAL }
   }
 };
 

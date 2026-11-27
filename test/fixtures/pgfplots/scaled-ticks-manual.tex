@@ -1,0 +1,6 @@
+% scaled y ticks=manual:{label}{\pgfmathparse{...}}: labels f(t), the label as given (behaviour T6).
+\begin{tikzpicture}
+\begin{axis}[scale only axis,width=200pt,height=150pt,scaled y ticks=manual:{$\times 0.5$}{\pgfmathparse{#1*2}}]
+  \addplot coordinates {(0,100) (3,900) (6,400)};
+\end{axis}
+\end{tikzpicture}

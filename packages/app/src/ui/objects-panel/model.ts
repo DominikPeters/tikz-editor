@@ -1,4 +1,4 @@
-import type { AxisStatement, NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { AddPlotStatement, AxisStatement, NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
 import { nestedStatements } from "@tikz-editor/core/ast/walk";
 import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
@@ -78,11 +78,14 @@ function buildNode(
     return null;
   }
 
-  // A pgfplots axis is a container like a scope; its children are the TikZ statements in it.
+  // A pgfplots axis is a container like a scope; its children are its plots, then the TikZ statements in it.
   const children = statement.kind !== "Path"
-    ? (nestedStatements(statement) ?? [])
-        .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
-        .filter((node): node is ObjectsPanelNode => node != null)
+    ? [
+        ...(statement.kind === "Axis" ? buildPlotNodes(statement, selectedIds, byId) : []),
+        ...(nestedStatements(statement) ?? [])
+          .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
+          .filter((node): node is ObjectsPanelNode => node != null)
+      ]
     : [];
   const ref = analysisView.statementSnapshot.byId.get(statement.id);
   if (!ref) {
@@ -117,6 +120,43 @@ function buildNode(
   };
   byId.set(node.id, node);
   return node;
+}
+
+const PLOT_INPUT_LABELS: Record<AddPlotStatement["input"]["kind"], string> = {
+  coordinates: "Coordinates",
+  expression: "Function",
+  parametric: "Parametric",
+  table: "Table",
+  other: "Plot"
+};
+
+/** The plots of an axis, labelled by input form and legend entry (`Function: $x^2$`). */
+function buildPlotNodes(axis: AxisStatement, selectedIds: ReadonlySet<string>, byId: Map<string, ObjectsPanelNode>): ObjectsPanelNode[] {
+  const plots = axis.body.filter((item): item is AddPlotStatement => item.kind === "AddPlot");
+  return plots.map((plot, index) => {
+    const next = axis.body[axis.body.indexOf(plot) + 1];
+    const legend = next?.kind === "AddLegendEntry" ? next.text.trim() : "";
+    const input = plot.input.kind === "expression" ? `${PLOT_INPUT_LABELS.expression} ${plot.input.expression.trim()}` : PLOT_INPUT_LABELS[plot.input.kind];
+    const label = legend.length > 0 ? `${input} \u2014 ${legend}` : input;
+    const node: ObjectsPanelNode = {
+      id: plot.id,
+      writeTargetId: plot.id,
+      title: label,
+      label,
+      explicitName: null,
+      parentKey: `${axis.id}:plots`,
+      index,
+      hidden: false,
+      selected: selectedIds.has(plot.id),
+      canRename: false,
+      canToggleVisibility: false,
+      canDragReorder: false,
+      childCount: 0,
+      children: []
+    };
+    byId.set(node.id, node);
+    return node;
+  });
 }
 
 function deriveStatementLabel(statement: PathStatement | ScopeStatement | AxisStatement, elements: readonly SceneElement[]): string {

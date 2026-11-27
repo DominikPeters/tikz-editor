@@ -1,7 +1,7 @@
 import { requireArrayValue } from "@tikz-editor/core/utils/collections";
 import type { EditGeometrySession } from "@tikz-editor/core/edit/geometry-session";
 import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { clientPoint, px, pt, worldVector } from "@tikz-editor/core/coords/index";
+import { clientPoint, px, pt, worldPoint, worldVector } from "@tikz-editor/core/coords/index";
 import { buildSnapContext, type SnapGuideInput, type SnapLine, type SnapSettingsPatch } from "@tikz-editor/core/edit/snapping";
 import type { Span } from "@tikz-editor/core/ast/types";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
@@ -607,6 +607,27 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
   const tryInsertPathWorldPoint = useCallback(
     (event: ReactMouseEvent<SVGElement>, sourceId: string): boolean => {
       if (!svgResult || snapshot.source !== source) return false;
+
+      // A pgfplots coordinates plot: insert a data point on the segment between two of its points.
+      if (/^axis:\d+:plot:\d+$/u.test(sourceId)) {
+        const world = clientToWorldPoint(clientPointFromEvent(event), interactionSvgRef.current, svgResult.viewBox);
+        if (!world) return false;
+        const points = snapshot.editHandles.filter((handle) => handle.sourceRef.sourceId === sourceId)
+          .sort((a, b) => a.sourceRef.sourceSpan.from - b.sourceRef.sourceSpan.from);
+        let best: { index: number; distance: number; point: WorldPoint } | null = null;
+        for (let index = 0; index + 1 < points.length; index += 1) {
+          const a = points[index]?.world; const b = points[index + 1]?.world;
+          if (!a || !b) continue;
+          const dx = b.x - a.x; const dy = b.y - a.y;
+          const t = Math.max(0, Math.min(1, ((world.x - a.x) * dx + (world.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+          const point = worldPoint(pt(a.x + t * dx), pt(a.y + t * dy));
+          const distance = Math.hypot(world.x - point.x, world.y - point.y);
+          if (!best || distance < best.distance) best = { index, distance, point };
+        }
+        if (!best || best.distance > 12 / canvasTransform.scale) return false;
+        applyActionWithFeedback({ kind: "insertPathPoint", elementId: sourceId, segmentIndex: best.index, point: world });
+        return true;
+      }
 
       const resolved = resolveEligibleExplicitPath(
         source,

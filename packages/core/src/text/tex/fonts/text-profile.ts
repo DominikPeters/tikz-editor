@@ -133,34 +133,33 @@ export function classicComputerModernFontIdForState(
   return "cmr10";
 }
 
+/**
+ * Optical size of a TU Latin Modern Roman face at `atPt`, from LaTeX's
+ * tulmr.fd. NFSS size ranges are half-open: `<8.5-9.5>` covers
+ * 8.5 <= size < 9.5. Checked against LuaLaTeX's `\fontname` for every size
+ * command of the 10/11/12pt classes and at the range boundaries
+ * (design/pgfplots-behaviour.md K4).
+ */
+export function lmRomanOpticalSize(atPt: number): 5 | 6 | 7 | 8 | 9 | 10 | 12 | 17 {
+  return atPt < 5.5 ? 5 : atPt < 6.5 ? 6 : atPt < 7.5 ? 7 : atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15 ? 12 : 17;
+}
+
+/**
+ * LuaLaTeX's default text font (TU encoding, Latin Modern) for a font state,
+ * following tulmr.fd, tulmss.fd and tulmtt.fd with NFSS's substitutions.
+ */
 export function luaLatexDefaultFontIdForState(
   state: SimpleTexFontState,
   atPt = texLength(10)
 ): DefaultComputerModernTextFont {
-  if (state.shape === "small-caps" && state.series === "bold") {
-    if (state.family === "typewriter") {
-      return "lmmonolt10-bold";
-    }
-    if (state.family === "sans") {
-      return "lmsans10-bold";
-    }
-    if (atPt <= 5) {
-      return "lmroman5-bold";
-    }
-    if (atPt <= 7) {
-      return "lmroman7-bold";
-    }
-    return "lmroman10-bold";
-  }
-  if (state.shape === "small-caps") {
-    return state.family === "typewriter" ? "lmmonocaps10-regular" : "lmromancaps10-regular";
-  }
   if (state.family === "typewriter") {
-    if (state.series === "bold" && (state.shape === "italic" || state.shape === "slanted")) {
-      return "lmmonolt10-boldoblique";
-    }
+    // tulmtt.fd: bold (b, and bx by ssub) is lmmonolt10 at every size; the
+    // undeclared bold small-caps shape falls back to the series' n shape.
     if (state.series === "bold") {
-      return "lmmonolt10-bold";
+      return state.shape === "italic" || state.shape === "slanted" ? "lmmonolt10-boldoblique" : "lmmonolt10-bold";
+    }
+    if (state.shape === "small-caps") {
+      return "lmmonocaps10-regular";
     }
     if (state.shape === "italic") {
       return "lmmono10-italic";
@@ -168,53 +167,44 @@ export function luaLatexDefaultFontIdForState(
     if (state.shape === "slanted") {
       return "lmmonoslant10-regular";
     }
-    // NFSS optical-size intervals from LaTeX's tulmtt.fd.
     return atPt < 8.5 ? "lmmono8-regular" : atPt < 9.5 ? "lmmono9-regular" : atPt < 11 ? "lmmono10-regular" : "lmmono12-regular";
   }
   if (state.family === "sans") {
-    if (state.series === "bold" && state.shape === "italic") {
-      return "lmsans10-boldoblique";
-    }
-    if (state.series === "bold" && state.shape === "slanted") {
-      return "lmsans10-boldoblique";
-    }
+    // tulmss.fd: bold is lmsans10 at every size; m/sc substitutes lmr/m/sc;
+    // bx/sc is undeclared and falls back to bx/n.
     if (state.series === "bold") {
-      return "lmsans10-bold";
+      return state.shape === "italic" || state.shape === "slanted" ? "lmsans10-boldoblique" : "lmsans10-bold";
     }
-    // Optical-size intervals from LaTeX's tulmss.fd.
+    if (state.shape === "small-caps") {
+      return "lmromancaps10-regular";
+    }
     const size = atPt < 8.5 ? 8 : atPt < 9.5 ? 9 : atPt < 11 ? 10 : atPt < 15.5 ? 12 : 17;
     const shape = state.shape === "italic" || state.shape === "slanted" ? "oblique" : "regular";
     return `lmsans${size}-${shape}`;
   }
-  if (state.series === "bold" && state.shape === "italic") {
-    return "lmroman10-bolditalic";
-  }
-  if (state.series === "bold" && state.shape === "slanted") {
-    return "lmromanslant10-bold";
-  }
+  // Roman, the document default: tulmr.fd.
+  const size = lmRomanOpticalSize(atPt);
   if (state.series === "bold") {
-    if (atPt <= 5) {
-      return "lmroman5-bold";
+    if (state.shape === "italic") {
+      return "lmroman10-bolditalic";
     }
-    if (atPt <= 7) {
-      return "lmroman7-bold";
+    if (state.shape === "slanted") {
+      return "lmromanslant10-bold";
     }
-    return "lmroman10-bold";
+    // bx/n has no 17pt design (<11-> is lmroman12-bold); bx/sc is
+    // undeclared and falls back to bx/n at the same size.
+    return `lmroman${size === 17 ? 12 : size}-bold`;
+  }
+  if (state.shape === "small-caps") {
+    return "lmromancaps10-regular";
   }
   if (state.shape === "italic") {
-    if (atPt <= 7) {
-      return "lmroman7-italic";
-    }
-    return "lmroman10-italic";
+    const italic = size === 5 || size === 6 ? 7 : size === 17 ? 12 : size;
+    return `lmroman${italic}-italic`;
   }
   if (state.shape === "slanted") {
-    return atPt <= 8 ? "lmromanslant8-regular" : "lmromanslant10-regular";
+    const slant = size === 5 || size === 6 || size === 7 ? 8 : size;
+    return `lmromanslant${slant}-regular`;
   }
-  if (atPt <= 5) {
-    return "lmroman5-regular";
-  }
-  if (atPt <= 7) {
-    return "lmroman7-regular";
-  }
-  return "lmroman10-regular";
+  return `lmroman${size}-regular`;
 }

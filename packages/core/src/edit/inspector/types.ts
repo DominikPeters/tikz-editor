@@ -336,7 +336,7 @@ export type InspectorSection = {
 };
 
 export type InspectorDescriptor = {
-  elementKind: "path" | "circle" | "ellipse" | "text" | "scope";
+  elementKind: "path" | "circle" | "ellipse" | "text" | "scope" | "axis" | "plot";
   elementId: string;
   writeTargetId: string | null;
   readOnlyReason?: string;
