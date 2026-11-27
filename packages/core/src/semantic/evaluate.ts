@@ -1482,6 +1482,17 @@ function evaluateStatement(
     return [];
   }
 
+  const axisCommand = /^\\(addplot3?|addlegendentry|addlegendentryexpanded|addlegendimage|legend|pgfplotsextra)(?![A-Za-z@])/u.exec(statement.raw);
+  if (axisCommand) {
+    diagnostics.push({
+      severity: "warning",
+      code: "pgfplots-command-outside-axis",
+      message: `\`\\${axisCommand[1] ?? "addplot"}\` is only defined inside an axis environment (\`\\begin{axis}…\\end{axis}\`); TeX stops with an undefined control sequence here, and the editor draws nothing for it.`,
+      span: statement.span
+    });
+    return [];
+  }
+
   markFeature(featureUsage, "unknown_statement", "unsupported");
   diagnostics.push({
     severity: "warning",
@@ -1927,9 +1938,11 @@ function applyPgfMathStatement(
     return;
   }
 
+  // `\pgfmathtruncatemacro` stores the result truncated towards zero (pgfmathcalc.code.tex: `\pgfmathsetcount`).
+  const truncated = statement.commandRaw === "\\pgfmathtruncatemacro" ? String(Math.trunc(Number.parseFloat(evaluated.text))) : null;
   writeContextMacroBinding(context, target, {
     kind: "text",
-    value: evaluated.text,
+    value: truncated !== null && truncated !== "NaN" ? truncated : evaluated.text,
     provenance: []
   });
 }

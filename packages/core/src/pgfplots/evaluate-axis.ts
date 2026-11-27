@@ -9,7 +9,7 @@
  * the host as `evaluateStatement`), installs the axis coordinate systems
  * and the data map for embedded TikZ, and registers the axis as a node.
  */
-import type { AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
+import type { AddPlotStatement, AxisBodyItem, AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
 import type { FeatureId } from "../capabilities/feature-ids.js";
 import { worldBounds, worldPoint, worldVector, type WorldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
@@ -180,14 +180,41 @@ const NUMBER_FORMAT_PREFIX = "/pgf/number format/";
 /** Evaluates one axis; returns its scene elements in paint order. */
 export function evaluateAxisStatement(source: AxisStatement, context: SemanticContext, host: AxisHost): SceneElement[] {
   const { diagnostics, markFeature } = host;
-  const parent = currentFrame(context);
+  const outer = currentFrame(context);
+  // Macro definitions in the body (`\pgfmathsetmacro`, `\def`) take effect in
+  // order for the plots after them; embedded TikZ is evaluated at `\end{axis}`
+  // and sees the final values (behaviour V0, experiment E16).
+  const parent = childFrame(outer, {});
+  const plotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
+  pushFrame(context, parent);
+  try {
+    for (const item of source.body) {
+      if (isAxisDefinition(item)) host.evaluateStatement(item);
+      else if (item.kind === "AddPlot") plotBindings.set(item, parent.macroBindings.fork());
+    }
+  } finally {
+    popFrame(context);
+  }
   // Option values may use macros (`width=\figwidth`), expanded as TikZ options are.
-  const expand = (list: OptionListAst): OptionListAst => expandOptionListMacros([list], parent.macroBindings, context.macroTraceCollector ?? undefined)[0] ?? list;
+  const expandWith = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => expandOptionListMacros([list], bindings, context.macroTraceCollector ?? undefined)[0] ?? list;
+  const expand = (list: OptionListAst): OptionListAst => expandWith(list, outer.macroBindings);
+  const expandedPlotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const axis: AxisStatement = {
     ...source,
     ...(source.options ? { options: expand(source.options) } : {}),
-    body: source.body.map((item) => (item.kind === "AddPlot" && item.options ? { ...item, options: expand(item.options) } : item))
+    body: source.body.map((item) => {
+      if (item.kind !== "AddPlot") return item;
+      const bindings = plotBindings.get(item) ?? parent.macroBindings;
+      const expanded: AddPlotStatement = {
+        ...item,
+        ...(item.options ? { options: expandWith(item.options, bindings) } : {}),
+        ...(item.extraOptions ? { extraOptions: item.extraOptions.map((extra) => ({ ...extra, options: expandWith(extra.options, bindings) })) } : {})
+      };
+      expandedPlotBindings.set(expanded, bindings);
+      return expanded;
+    })
   };
+  const bindingsOf = (statement: AddPlotStatement) => expandedPlotBindings.get(statement) ?? parent.macroBindings;
   const settings = readPgfplotsSettings(context).map(expand);
   const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));
   markFeature("pgfplots_axis", "supported");
@@ -243,7 +270,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const plot = resolvePlotModel(model, statement, index);
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings));
+    const bindings = bindingsOf(statement);
+    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, bindings));
     const input = statement.input.kind;
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
@@ -528,6 +556,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         continue;
       }
       if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend" || item.kind === "PgfplotsExtra" || item.kind === "PgfplotsSet") continue;
+      // Applied in order before the plots were read (above); `\label` only names the plot for `\ref`.
+      if (isAxisDefinition(item) || isLabelCommand(item)) continue;
       const nested = host.evaluateStatement(item);
       content.push(...nested.map((element) => ({ ...element, clipChain: element.clipChain && element.clipChain.length > 0 ? element.clipChain : [...contentClip] })));
     }
@@ -563,6 +593,16 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   list.push(evaluation);
   axisEvaluations.set(context, list);
   return elements;
+}
+
+/** Body statements that only define macros: applied in body order, before the plots read their data. */
+function isAxisDefinition(item: AxisBodyItem): item is Statement {
+  return item.kind === "MacroDefinition" || item.kind === "MacroAlias" || item.kind === "MacroCommandDefinition" || item.kind === "PgfMath";
+}
+
+/** `\label{…}` after a plot: names it for `\ref` in the text; nothing to draw. */
+function isLabelCommand(item: AxisBodyItem): boolean {
+  return item.kind === "UnknownStatement" && !item.environment && /^\\label\s*\{/u.test(item.raw);
 }
 
 /** World bounds of an element: path vertices and control points outset by half the line width when stroked, node boxes. */

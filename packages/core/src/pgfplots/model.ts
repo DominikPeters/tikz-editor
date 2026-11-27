@@ -483,6 +483,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     lists.push(parseOptionListRaw(`[${entry}]`));
   }
   if (statement.options) lists.push(statement.options);
+  for (const extra of statement.extraOptions ?? []) lists.push(extra.options);
   if (statement.legacyPlot?.options) lists.push(statement.legacyPlot.options);
   lists.push(...(styles.get("every axis plot post") ?? []));
   // `every mark` is a TikZ style: it accumulates through definitions, and is read at the end.

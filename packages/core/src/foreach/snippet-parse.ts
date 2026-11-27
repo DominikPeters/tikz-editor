@@ -1,5 +1,5 @@
 import { isObjectRecord } from "../utils/records.js";
-import type { PathItem, Span, Statement } from "../ast/types.js";
+import type { AxisBodyItem, PathItem, Span, Statement } from "../ast/types.js";
 import { parseTikz, type ParseTikzResult } from "../parser/index.js";
 import { isWrappedBySingleBracePair } from "../utils/braces.js";
 
@@ -42,6 +42,28 @@ export function parseStatementsFromBodyWithMapping(
   const hasParseError = parseResult.diagnostics.some((diagnostic) => diagnostic.severity === "error");
   return {
     parseResult,
+    hasParseError,
+    sourceMapper: {
+      mapSpan: (span) => mapSyntheticSpanToOriginal(span, prepared),
+      mapOffset: (offset) => mapSyntheticOffsetToOriginal(offset, prepared)
+    }
+  };
+}
+
+/** A loop body inside a pgfplots axis: parsed as axis body items (`\addplot` and TikZ statements). */
+export type AxisLoopBodyParseResult = {
+  items: AxisBodyItem[];
+  hasParseError: boolean;
+  sourceMapper: ForeachSnippetSourceMapper;
+};
+
+export function parseAxisBodyFromBodyWithMapping(bodyRaw: string, bodySpan: Span): AxisLoopBodyParseResult {
+  const prepared = prepareForeachBodySnippet(bodyRaw, bodySpan, "\\begin{tikzpicture}\\begin{axis}\n", "\n\\end{axis}\\end{tikzpicture}");
+  const parseResult = parseTikz(prepared.syntheticSource, { recover: true });
+  const axis = parseResult.figure.body.find((statement) => statement.kind === "Axis");
+  const hasParseError = !axis || parseResult.diagnostics.some((diagnostic) => diagnostic.severity === "error");
+  return {
+    items: axis?.kind === "Axis" ? axis.body : [],
     hasParseError,
     sourceMapper: {
       mapSpan: (span) => mapSyntheticSpanToOriginal(span, prepared),
@@ -126,7 +148,12 @@ type PreparedPathFragmentSnippet = {
   originalContentTo: number;
 };
 
-function prepareForeachBodySnippet(bodyRaw: string, bodySpan: Span): PreparedForeachBodySnippet {
+function prepareForeachBodySnippet(
+  bodyRaw: string,
+  bodySpan: Span,
+  syntheticPrefix = "\\begin{tikzpicture}\n",
+  syntheticSuffix = "\n\\end{tikzpicture}"
+): PreparedForeachBodySnippet {
   const leftTrimmed = bodyRaw.trimStart();
   const leftTrim = bodyRaw.length - leftTrimmed.length;
   const rightTrimmed = leftTrimmed.trimEnd();
@@ -146,8 +173,6 @@ function prepareForeachBodySnippet(bodyRaw: string, bodySpan: Span): PreparedFor
   const content = contentLeftTrimmed.trimEnd();
   const contentRightTrim = contentLeftTrimmed.length - content.length;
 
-  const syntheticPrefix = "\\begin{tikzpicture}\n";
-  const syntheticSuffix = "\n\\end{tikzpicture}";
   return {
     syntheticSource: `${syntheticPrefix}${content}${syntheticSuffix}`,
     syntheticContentFrom: syntheticPrefix.length,

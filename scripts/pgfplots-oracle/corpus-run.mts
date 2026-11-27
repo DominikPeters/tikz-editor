@@ -4,9 +4,12 @@
  * and reports how many axes render without unsupported-key/plot
  * diagnostics, and the unsupported keys/features ranked by distinct paper.
  *
- *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts
+ *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-root] [--out file.json]
  *
- * Output: artifacts/pgfplots-corpus/editor-run.json and a summary on stdout.
+ * `corpus-root` is the directory holding `axes/` (default
+ * artifacts/pgfplots-corpus of this checkout; a worktree passes the main
+ * checkout's absolute path). Output: `<corpus-root>/editor-run.json` (or
+ * `--out`) and a summary on stdout.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -16,7 +19,12 @@ import { renderTikzToSvgAsync } from "../../packages/core/src/render/index.js";
 import { createTexNodeTextEngine } from "../../packages/core/src/text/tex-node-text-engine.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
-const corpus = join(root, "artifacts", "pgfplots-corpus", "axes");
+const args = process.argv.slice(2);
+const outIndex = args.indexOf("--out");
+const outFile = outIndex >= 0 ? args[outIndex + 1] : undefined;
+const positional = args.filter((arg, index) => !arg.startsWith("--") && (outIndex < 0 || index !== outIndex + 1));
+const corpusRoot = resolve(positional[0] ?? join(root, "artifacts", "pgfplots-corpus"));
+const corpus = join(corpusRoot, "axes");
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -42,6 +50,7 @@ function feature(code: string | undefined, message: string): string | null {
 const textEngine = await createTexNodeTextEngine();
 const files = walk(corpus).sort();
 let axes = 0; let clean = 0; let threw = 0; let parsed = 0; let noAxis = 0;
+const parseErrorFiles: string[] = [];
 const byFeature = new Map<string, Set<string>>();
 const occurrences = new Map<string, number>();
 const failures: Array<{ file: string; error: string }> = [];
@@ -60,7 +69,10 @@ for (const file of files) {
       const f = feature(d.code, d.message);
       if (f) features.add(f);
     }
-    if (result.parse.diagnostics.some((d) => d.severity === "error")) features.add("parse: error");
+    if (result.parse.diagnostics.some((d) => d.severity === "error")) {
+      features.add("parse: error");
+      parseErrorFiles.push(file.slice(corpus.length + 1));
+    }
     for (const f of features) {
       if (!byFeature.has(f)) byFeature.set(f, new Set());
       byFeature.get(f)?.add(paper);
@@ -74,7 +86,9 @@ for (const file of files) {
 }
 const papers = new Set(files.map((f) => f.slice(corpus.length + 1).split("/")[0]));
 const ranked = [...byFeature].map(([name, set]) => ({ name, papers: set.size, snippets: occurrences.get(name) ?? 0 })).sort((a, b) => b.papers - a.papers || b.snippets - a.snippets);
-writeFileSync(join(root, "artifacts", "pgfplots-corpus", "editor-run.json"), JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, ranked, failures }, null, 2));
+const parseErrorPapers = new Set(parseErrorFiles.map((f) => f.split("/")[0]));
+writeFileSync(outFile ? resolve(outFile) : join(corpusRoot, "editor-run.json"), JSON.stringify({ files: files.length, papers: papers.size, axes, clean, threw, parsed, noAxis, parseErrorFiles, ranked, failures }, null, 2));
 console.log(`snippets ${files.length} (papers ${papers.size}), axes ${axes}, rendered without unsupported diagnostics: ${clean}, threw: ${threw}, snippets with no axis evaluated: ${noAxis}`);
+console.log(`snippets with parse errors: ${parseErrorFiles.length} (papers ${parseErrorPapers.size})`);
 for (const row of ranked.slice(0, 40)) console.log(`${String(row.papers).padStart(4)} papers ${String(row.snippets).padStart(4)} snippets  ${row.name}`);
 for (const f of failures.slice(0, 5)) console.log("THREW", f.file, f.error);

@@ -91,7 +91,25 @@ axisCommand {
   AddLegendEntryStatement |
   AddLegendImageStatement |
   LegendStatement |
-  PgfplotsExtraStatement
+  PgfplotsExtraStatement |
+  PgfplotsInvokeForeachStatement |
+  AxisLabelStatement |
+  AxisFontEnvironment
+}
+
+// `\pgfplotsinvokeforeach{list}{body with #1}` (manual, utility commands).
+PgfplotsInvokeForeachStatement {
+  PgfplotsInvokeForeachCmd Comment* Group Comment* Group
+}
+
+// `\label{name}` after a plot (for `\ref` in the text): one argument, no `;`.
+AxisLabelStatement {
+  AxisLabelCmd Group
+}
+
+// `\begin{scriptsize}…\end{scriptsize}` (any font size environment) around axis items.
+AxisFontEnvironment {
+  BeginAxisFontEnv axisItem* EndAxisFontEnv
 }
 
 // `\addplot[options] <input> <trailing path>;`, `\addplot+` and `\addplot3`.
@@ -100,7 +118,7 @@ AddPlotStatement {
 }
 
 addPlotHead {
-  (AddPlotCmd | AddPlot3Cmd) AddPlotIncrement? Comment* (OptionList Comment*)? AddPlotLegacyPlot?
+  (AddPlotCmd | AddPlot3Cmd) AddPlotIncrement? Comment* (OptionList Comment*)* AddPlotLegacyPlot?
 }
 
 // The older `\addplot[style] plot[options] <input>`, which the manual still uses.
@@ -121,7 +139,9 @@ plotInput {
 
 PlotCoordinates { CoordinatesKw Comment* Group }
 
-PlotExpression { Group }
+// The expression is one raw token (pgfplots-tokens.ts): pgfmath text such as
+// `{(x<=40)*2}` or an unclosed `(` (which pgfmath accepts) is not TikZ syntax.
+PlotExpression { PlotExpressionData }
 
 PlotParametric { Coordinate }
 
@@ -164,7 +184,7 @@ UsePgfplotsLibraryStatement {
 }
 
 ForeachStatement {
-  ForeachCmd ForeachHeaderToken* InKw ForeachList ForeachBody
+  (ForeachCmd | PgfplotsForeachUngroupedCmd) ForeachHeaderToken* InKw ForeachList ForeachBody
 }
 
 ForeachBody {
@@ -492,13 +512,13 @@ FontSizeStatement {
 }
 
 PgfMathStatement {
-  PgfMathSetMacroCmd Group Group (!pgfMathSemicolon ";")? |
+  (PgfMathSetMacroCmd | PgfMathTruncateMacroCmd) (Group | CommandName) Group (!pgfMathSemicolon ";")? |
   PgfMathParseCmd Group (!pgfMathSemicolon ";")? |
   PgfMathSetSeedCmd Group (!pgfMathSemicolon ";")?
 }
 
 TikzSetStatement {
-  TikzSetCmd StylePayload
+  TikzSetCmd StylePayload (!pgfMathSemicolon ";")?
 }
 
 TikzStyleStatement {
@@ -741,7 +761,7 @@ GroupPart {
   ScopeStatement |
   PgfMathStatement |
   Group |
-  Coordinate |
+  GroupCoordinate |
   OptionList |
   GroupPathOperator |
   MatrixRowSepCmd |
@@ -851,8 +871,22 @@ Coordinate {
   "(" CoordPart* ")"
 }
 
+// A parenthesised run inside braces: besides coordinates, pgfmath
+// (`{(x<=40)*2}`) and math text (`{$I(X;L)$}`) put `;`, `<`, `>`, `?` there.
+GroupCoordinate[@name=Coordinate] {
+  "(" GroupCoordPart* ")"
+}
+
+GroupCoordPart[@name=CoordPart] {
+  GroupCoordinate | coordPartBase | ";" | "<" | ">" | "?" | "~" | "\"" | "`" | "@"
+}
+
   CoordPart {
   Coordinate |
+  coordPartBase
+}
+
+coordPartBase {
   OptionList |
   Group |
   GroupPathOperator |
@@ -1024,7 +1058,13 @@ TableKw { @specialize<Identifier, "table"> }
   PgfplotsSetCmd,
   PgfplotsExtraCmd,
   UsePgfplotsLibraryCmd,
+  PgfplotsInvokeForeachCmd,
+  PgfplotsForeachUngroupedCmd,
+  AxisLabelCmd,
+  BeginAxisFontEnv,
+  EndAxisFontEnv,
   TableData,
+  PlotExpressionData,
   insertSemicolon,
   insertPlotSemicolon
 }
@@ -1051,6 +1091,7 @@ TableKw { @specialize<Identifier, "table"> }
     DeclareRobustCommandCmd,
     DeclareMathOperatorCmd,
     PgfMathSetMacroCmd,
+    PgfMathTruncateMacroCmd,
     PgfMathParseCmd,
     PgfMathSetSeedCmd,
     EndTikz,
@@ -1134,6 +1175,7 @@ TableKw { @specialize<Identifier, "table"> }
   DeclareRobustCommandCmd { "\\DeclareRobustCommand" }
   DeclareMathOperatorCmd { "\\DeclareMathOperator" }
   PgfMathSetMacroCmd { "\\pgfmathsetmacro" }
+  PgfMathTruncateMacroCmd { "\\pgfmathtruncatemacro" }
   PgfMathParseCmd { "\\pgfmathparse" }
   PgfMathSetSeedCmd { "\\pgfmathsetseed" }
   PgfkeysCmd { "\\pgfkeys" }

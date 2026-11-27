@@ -5,11 +5,17 @@ import {
   AddLegendImageCmd,
   AddPlot3Cmd,
   AddPlotCmd,
+  AxisLabelCmd,
   BeginAxis,
+  BeginAxisFontEnv,
   EndAxis,
+  EndAxisFontEnv,
   LegendCmd,
   PgfplotsExtraCmd,
+  PgfplotsForeachUngroupedCmd,
+  PgfplotsInvokeForeachCmd,
   PgfplotsSetCmd,
+  PlotExpressionData,
   TableData,
   UsePgfplotsLibraryCmd,
   insertPlotSemicolon,
@@ -39,7 +45,15 @@ const COMMAND_TERMS: ReadonlyMap<string, number> = new Map([
   ["legend", LegendCmd],
   ["pgfplotsset", PgfplotsSetCmd],
   ["pgfplotsextra", PgfplotsExtraCmd],
-  ["usepgfplotslibrary", UsePgfplotsLibraryCmd]
+  ["usepgfplotslibrary", UsePgfplotsLibraryCmd],
+  ["pgfplotsinvokeforeach", PgfplotsInvokeForeachCmd],
+  ["pgfplotsforeachungrouped", PgfplotsForeachUngroupedCmd],
+  ["label", AxisLabelCmd]
+]);
+
+/** LaTeX's font size environments (`\begin{scriptsize}`), read as containers inside an axis body. */
+const FONT_SIZE_ENVIRONMENTS: ReadonlySet<string> = new Set([
+  "tiny", "scriptsize", "footnotesize", "small", "normalsize", "large", "Large", "LARGE", "huge", "Huge"
 ]);
 
 const BACKSLASH = 92;
@@ -60,7 +74,9 @@ const AXIS_COMMANDS: ReadonlySet<string> = new Set([
   "addlegendentryexpanded",
   "addlegendimage",
   "legend",
-  "pgfplotsextra"
+  "pgfplotsextra",
+  "pgfplotsinvokeforeach",
+  "pgfplotsforeachungrouped"
 ]);
 
 /** Commands that cannot continue an `\addplot`'s trailing path: one before them means its `;` is missing. */
@@ -78,6 +94,8 @@ export const pgfplotsTokens = new ExternalTokenizer(
     if (input.next === OPEN_BRACE) {
       if (stack.canShift(TableData)) {
         input.acceptToken(TableData, readBalancedBraces(input));
+      } else if (stack.canShift(PlotExpressionData)) {
+        input.acceptToken(PlotExpressionData, readBalancedBraces(input));
       }
       return;
     }
@@ -99,13 +117,20 @@ export const pgfplotsTokens = new ExternalTokenizer(
       return;
     }
     if (stack.canShift(insertSemicolon) && (name === "end"
-      ? AXIS_ENVIRONMENTS.has(readEnvironmentName(input, length)?.name ?? "")
+      ? isAxisOrFontEnvironment(readEnvironmentName(input, length)?.name ?? "")
       : AXIS_COMMANDS.has(name) && !stack.canShift(insertPlotSemicolon))) {
       input.acceptToken(insertSemicolon);
       return;
     }
     if (name === "begin" || name === "end") {
       const environment = readEnvironmentName(input, length);
+      if (environment && FONT_SIZE_ENVIRONMENTS.has(environment.name)) {
+        const term = name === "begin" ? BeginAxisFontEnv : EndAxisFontEnv;
+        if (stack.canShift(term)) {
+          input.acceptToken(term, environment.length);
+        }
+        return;
+      }
       if (!environment || !AXIS_ENVIRONMENTS.has(environment.name)) {
         return;
       }
@@ -143,6 +168,10 @@ export const pgfplotsTokens = new ExternalTokenizer(
   },
   { contextual: true }
 );
+
+function isAxisOrFontEnvironment(name: string): boolean {
+  return AXIS_ENVIRONMENTS.has(name) || FONT_SIZE_ENVIRONMENTS.has(name);
+}
 
 /** `{name}` after `\begin`/`\end` at `offset`, with optional space before the brace. */
 function readEnvironmentName(input: InputStream, offset: number): { name: string; length: number } | null {

@@ -5,6 +5,7 @@ import {
   addLegendImageId,
   addPlotId,
   axisStatementId,
+  foreachStatementId,
   legendStatementId,
   pgfplotsExtraId,
   pgfplotsLibraryStatementId,
@@ -17,6 +18,7 @@ import type {
   AxisBodyItem,
   AxisEnvironmentName,
   AxisStatement,
+  ForeachStatement,
   LegendStatement,
   PgfplotsExtraStatement,
   PgfplotsLibraryStatement,
@@ -30,6 +32,7 @@ import type {
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { readCoordinateList } from "../../pgfplots/coordinate-list.js";
 import { findFirstChildByName, forEachChild } from "../../syntax/cursor.js";
+import { mapUnknownStatement } from "../../transform/unknown.js";
 import { mapPathStatement } from "../paths/parse.js";
 
 const AXIS_ENVIRONMENTS: readonly AxisEnvironmentName[] = ["axis", "semilogxaxis", "semilogyaxis", "loglogaxis"];
@@ -60,12 +63,24 @@ export function mapAxisStatement(
   const counters = { plot: 0, legendEntry: 0, legendImage: 0, legend: 0, extra: 0 };
 
   const body: AxisBodyItem[] = [];
-  forEachChild(node, (child) => {
+  const visit = (child: SyntaxNode): void => {
     switch (child.type.name) {
       case "BeginAxis":
       case "EndAxis":
       case "OptionList":
       case "Comment":
+      case "BeginAxisFontEnv":
+      case "EndAxisFontEnv":
+        return;
+      // A font size environment changes the font of the text inside it; its items belong to the axis.
+      case "AxisFontEnvironment":
+        forEachChild(child, visit);
+        return;
+      case "AxisLabelStatement":
+        body.push(mapUnknownStatement(child, source, allocate(state)));
+        return;
+      case "PgfplotsInvokeForeachStatement":
+        body.push(mapInvokeForeachStatement(child, source, state));
         return;
       case "AddPlotStatement":
         body.push(mapAddPlotStatement(child, source, state, id, counters.plot++));
@@ -85,7 +100,8 @@ export function mapAxisStatement(
       default:
         body.push(...mapBodyItem(child));
     }
-  });
+  };
+  forEachChild(node, visit);
 
   return {
     kind: "Axis",
@@ -121,7 +137,11 @@ function mapAddPlotStatement(
 ): AddPlotStatement {
   const commandNode = findFirstChildByName(node, "AddPlotCmd") ?? findFirstChildByName(node, "AddPlot3Cmd");
   const incrementNode = findFirstChildByName(node, "AddPlotIncrement");
-  const optionsNode = findFirstChildByName(node, "OptionList");
+  const optionNodes: SyntaxNode[] = [];
+  forEachChild(node, (child) => {
+    if (child.type.name === "OptionList") optionNodes.push(child);
+  });
+  const [optionsNode = null, ...extraOptionNodes] = optionNodes;
   const trailingNode = findFirstChildByName(node, "AddPlotTrailingPath");
   const legacyNode = findFirstChildByName(node, "AddPlotLegacyPlot");
   const legacyKeyword = legacyNode ? findFirstChildByName(legacyNode, "PlotKw") : null;
@@ -144,6 +164,9 @@ function mapAddPlotStatement(
           optionsSpan: toSpan(optionsNode),
           options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from)
         }
+      : {}),
+    ...(extraOptionNodes.length > 0
+      ? { extraOptions: extraOptionNodes.map((extra) => ({ span: toSpan(extra), options: parseOptionListRaw(source.slice(extra.from, extra.to), extra.from) })) }
       : {}),
     ...(legacyNode
       ? {
@@ -181,7 +204,7 @@ function mapPlotInput(node: SyntaxNode, source: string): PlotInput {
   }
   const expression = findFirstChildByName(node, "PlotExpression");
   if (expression) {
-    const group = findFirstChildByName(expression, "Group");
+    const group = findFirstChildByName(expression, "PlotExpressionData") ?? findFirstChildByName(expression, "Group");
     const inner = group ? braceInner(group, source).span : toSpan(expression);
     return { kind: "expression", span: toSpan(expression), expression: source.slice(inner.from, inner.to), expressionSpan: inner };
   }
@@ -258,6 +281,32 @@ function mapTableSource(table: SyntaxNode, source: string): PlotTableSource {
     return { kind: "file", name: trimmedRaw, span: trimmed, braceSpan: toSpan(data) };
   }
   return { kind: "inline", raw, span: brace.span, braceSpan: toSpan(data), terminated: brace.terminated };
+}
+
+/**
+ * `\pgfplotsinvokeforeach{list}{body}`: a loop whose body names the element
+ * `#1` (manual, utility commands), mapped as a `\foreach` over `#1`.
+ */
+function mapInvokeForeachStatement(node: SyntaxNode, source: string, state: AxisMappingState): ForeachStatement {
+  const groups: SyntaxNode[] = [];
+  forEachChild(node, (child) => {
+    if (child.type.name === "Group") groups.push(child);
+  });
+  const [list, bodyNode] = groups;
+  const listRaw = list ? source.slice(braceInner(list, source).span.from, braceInner(list, source).span.to) : "";
+  return {
+    kind: "Foreach",
+    id: foreachStatementId(allocate(state)),
+    span: toSpan(node),
+    ...(list ? { headerSpan: toSpan(list) } : {}),
+    headerRaw: list ? source.slice(list.from, list.to) : "",
+    variablesRaw: "#1",
+    listRaw: list ? `{${listRaw}}` : "",
+    prefixRaw: list ? source.slice(list.from, list.to) : "",
+    bodyRaw: bodyNode ? source.slice(bodyNode.from, bodyNode.to) : "",
+    ...(bodyNode ? { bodySpan: toSpan(bodyNode) } : {}),
+    pgfplots: "invoke"
+  };
 }
 
 function mapAddLegendEntryStatement(node: SyntaxNode, source: string, axisId: string, index: number): AddLegendEntryStatement {
