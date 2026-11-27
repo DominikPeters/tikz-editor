@@ -609,3 +609,144 @@ editor's text engine has the font. Found on the way:
 - Minor tick rules beyond the observed cases (e.g. with `xtick distance`).
 - Number formatting edge cases (rounding ties) — follow PGF source.
 - `extra x ticks` (harness limitation).
+
+---
+
+## V. Tables (and how the axis body is read)
+
+Experiments E16 (`e16-syntax.mts`, axis-body syntax) and E17
+(`e17-tables.mts`, 44 table cases). Each case plots into fixed limits; the
+digest (`experiments/digest.ts`) gives the painted path in data units, so
+these are exact (discrete) observations. All are held by
+`test/pgfplots-tables.spec.ts` (the same inputs, expected paths copied from
+the TeX digests) and `test/pgfplots-parse.spec.ts`.
+
+**V0 — Reading the axis body.** OBSERVED (E16, one case each, exact):
+- `\addplot[a][b] {…}` applies `a` then `b`, as one list (also with `+`).
+- `\pgfmathsetmacro`, `\pgfmathtruncatemacro`, `\def` in the body take
+  effect in order for the plots after them (an expression or coordinate
+  sees the value current at its `\addplot`). Embedded TikZ (`\draw`,
+  `\node`) is executed at `\end{axis}` and sees the **final** value: two
+  `\draw (axis cs:\va,0)…` around a redefinition both use the last value.
+- `\foreach`, `\pgfplotsforeachungrouped`: each iteration's `\addplot` is a
+  plot of the axis (cycle list advances); its input (expression,
+  coordinates, inline table) sees the loop value, but its **options** and
+  any TikZ statement in the loop are evaluated after the loop and TeX stops
+  with "Undefined control sequence" (manual basic.reference.tex says so for
+  TikZ). `\pgfplotsinvokeforeach{list}{… #1 …}` substitutes `#1`
+  everywhere and works for both. The editor draws every iteration and warns
+  (`pgfplots-foreach-late-variable`) where TeX would stop.
+- A brace group `{ \addplot …; }` in the body is transparent; stray text
+  (`],` left after the options) draws nothing.
+- pgfmath accepts `<`, `<=`, `>`, `==`, `&&`, `and(…)` in expressions, and an
+  unclosed `(` at the end of an expression (`{0.4 + 1.1*(x-0.8 }`).
+- `[yshift=3pt]` after the input (trailing path) moves nothing that is
+  already drawn.
+
+**V1 — Header.** The first line that is neither skipped, empty nor a
+comment is a header iff one of its cells is not a number (`header=true`,
+initial); `header=false` makes it data, `header=has colnames` makes it
+names even when numeric (`x=3` then names the column called "3").
+Without a header, columns are named by their indices. CONFIRMED (manual
+pgfplotstable.tex `header`; E17 `no-header-default`, `header-false`,
+`has-colnames`).
+
+**V2 — Column selection.** `x`/`y` (name) beats `x index`/`y index`;
+initially `x index=0`, `y index=1`; `x expr`/`y expr` replace the value and
+may use `\thisrow{name}`, `\thisrowno{i}`, `\coordindex`, `\lineno`.
+CONFIRMED (manual axis-addplot.tex; E17 `names`, `index`, `name-over-index`,
+`x-expr-only`, `y-expr-columnx`).
+
+**V3 — Lines.** Rows end at newlines (`row sep=newline`) or at `\\`
+(`row sep=\\`; `row sep=crcr` is the same — undocumented but written by
+matlab2tikz, E17 `crcr`). In an **inline** table TeX has already removed
+each `%` comment *together with its end of line*, so `1 2 % c⏎3 4` is one
+row `1 2 3 4` and a line holding only `% c` vanishes (E17
+`trailing-percent`, `percent-line-empty`). The newline right after the
+opening brace makes an empty first line (manual `skip first n` example, E17
+`expr-lineno-skip`). `#` (and `comment chars`) start a comment to the end of
+the line; in a file `%` does too (`percent is letter=false`). `ignore
+chars` are removed, `white space chars` become spaces. OBSERVED (E17).
+
+**V4 — Unbounded and filtered coordinates.** A point with `nan`, `inf`,
+`-inf` (or a cell that is not a number) is dropped: with `unbounded
+coords=discard` (initial) the line connects its neighbours, with `jump` it
+is interrupted. Such points do not count for the limits. A point alone
+between two jumps paints nothing (its moveto is dropped; the Tier 2
+comparison ignores moveto-only subpaths too). CONFIRMED (manual
+2dplots.tex `unbounded coords`; E17 `nan-discard`, `nan-jump`,
+`nan-limits`).
+
+**V5 — Empty lines** are jumps (compat ≥ 1.4, `empty line=auto`);
+leading ones do nothing. CONFIRMED (E17 `empty-line`).
+
+**V6 — `\coordindex` and `\lineno`.** `\coordindex` counts data rows from
+0, including rows later discarded (nan), not comments, empty lines or the
+header. `\lineno` counts every line from the first (skipped lines, header,
+empty lines; in a file also comment lines), from 0. OBSERVED (E17
+`expr-coordindex`, `expr-lineno`, `coordindex-nan`, `expr-lineno-skip`).
+
+**V7 — `skip first n`** skips the first n lines counted as in V6 before the
+header is looked for. OBSERVED (E17 `skip-first`, `skip-first-brace`).
+
+**V8 — Separators.** `col sep=comma|semicolon|colon|tab|&` split at that
+character; cells are trimmed for number reading (`1, 2` reads); `col
+sep=&` turns on `trim cells`. CONFIRMED (E17 `comma`, `semicolon`,
+`colon`, `ampersand`).
+
+**V9 — A short row** (fewer cells than the selected column) keeps the
+value the column had in the previous row. OBSERVED (E17 `short-row`, one
+case; probably an artefact of TeX macro reuse, reproduced as measured).
+
+**V10 — Coordinate filters** (manual coordfiltering.tex): `each nth
+point=n` keeps `\coordindex` 0, n, 2n, … (as a plot option or a table
+option); `restrict expr to domain={e}{a:b}` sets x to ∓inf where e is
+outside [a, b] (inclusive) and switches `unbounded coords=jump`; the
+starred form sets x itself to a or b (not e); limits use only the
+surviving points. `skip coords between index={b}{e}` drops b ≤ i < e
+(documented, not measured). OBSERVED (E17 `each-nth*`, `restrict-expr*`).
+
+**V11 — `\pgfplotstableread[opts]{arg}\macro`.** The argument is inline
+data when it holds a row separator (newline, or `\\` with `row sep=\\`),
+otherwise a file name (manual `table/format=auto`); `\addplot table
+[x=…]{\macro}` then plots it. `\pgfplotstableset{k=v}` is
+`\pgfplotsset{table/k=v}` and applies to later tables. Cells: `+1`, `.5e1`,
+`2E0`, `1e-0` all read. OBSERVED (E17 `pgfplotstableread*`, `table-set`,
+`numbers`).
+
+**V12 — Files.** `\addplot table {name}` reads `name` as written, relative
+to the main document (manual `search path`, initially `.`). The editor
+reads it through the document resolver (`readTextFile`); see
+`design/pgfplots.md` open question on file-backed tables. Not measured
+(the harness has no file fixture).
+
+Performance (not a rule): a 20,000-row inline table (x y) evaluates in
+~45 ms warm (whole axis), table reading ~20 ms; with `x expr`/`y expr`
+compiled once per plot.
+
+## Y. Document lengths
+
+Experiment E18 (`e18-lengths.mts`, 11 cases) and direct LuaLaTeX runs.
+
+**Y1 — Class values.** LuaLaTeX (TeX Live 2023) after `\begin{document}`:
+article 10pt letter `\textwidth` = `\linewidth` = `\columnwidth` = 345pt,
+`\textheight` 550pt; 11pt 360 / 541.40024; 12pt 390 / 548.5; `a4paper`
+textheight 598 / 595.80026 / 592; `twocolumn` textwidth 469 (letter) or
+452 (a4), columnwidth (textwidth − 10)/2; standalone: article's widths,
+`\textheight` = `\maxdimen`; amsart 360 / 584; beamer 307.28987 /
+269.14662. Paper: letter 614.295 × 794.96999, a4 597.50787 × 845.04684.
+Classes not installed here (IEEEtran, revtex, llncs, elsarticle) are not
+known; the editor assumes article 10pt for them and for a bare picture and
+says so (`pgfplots-assumed-document-length`, a warning: the diagnostics
+model has no info level).
+
+**Y2 — Use in axis options.** `width=0.5\textwidth`, `0.48\linewidth`,
+`{0.9\columnwidth}`, `\textwidth/2.3`, `0.5*\columnwidth`, a register set
+with `\newlength`/`\setlength` in the preamble, a `\def` macro, and
+`0.2\textheight` all give the box predicted by A2 from the TeX value of the
+length. VERIFIED on E18 (10 cases): max error **0.0035 pt**.
+
+**Y3 — `\axisdefaultwidth` is a macro, not a length.** It holds `240pt`
+(A1), so `0.8\axisdefaultwidth` is the text `0.8240pt` and pgfplots stops
+("Plot width 0.824pt is too small"); `1\axisdefaultwidth` is 1240pt (E18
+`axisdefault-text`, box 1240.0028pt). The editor substitutes it as text.
