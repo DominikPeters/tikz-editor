@@ -870,9 +870,9 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "partial",
     semantic: "partial",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["pgfplots_axis"],
-    notes: "Linear `axis`: size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on 28 oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name; legends and `axis lines` are not drawn."
+    notes: "Linear `axis`: size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on 28 oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name; legends and `axis lines` are not drawn. Editing: selectable as one object; move writes `at=`, resize writes `width`/`height` (inverse size model), inspector sections (size, limits, labels, grid, axis lines, modes, tick distance, legend position), insert templates (test/pgfplots-editing.spec.ts)."
   },
   pgfplots_ticks: {
     parser: "not-applicable",
@@ -886,9 +886,9 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "not-applicable",
     semantic: "partial",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["pgfplots_axis_descriptions"],
-    notes: "`xlabel`, `ylabel`, `title` placed per behaviour E1-E3 as nodes through the TikZ node pipeline, with label/title styles, `label shift`, fonts; the picture bounding box per F1."
+    notes: "`xlabel`, `ylabel`, `title` placed per behaviour E1-E3 as nodes through the TikZ node pipeline, with label/title styles, `label shift`, fonts; the picture bounding box per F1. Editing: labels and title are sub-selections, edited in place on the canvas (text spans into `xlabel=` and friends)."
   },
   pgfplots_axis_coordinates: {
     parser: "not-applicable",
@@ -910,9 +910,9 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "partial",
     semantic: "partial",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["pgfplots_addplot_coordinates"],
-    notes: "`\\addplot coordinates` draws sharp lines and marks with the default cycle list, `\\addplot+`/`\\addplot[...]` semantics, line options, `only marks`, `mark`, `mark size`, `mark options`. Symbolic coordinates and error bars are not drawn."
+    notes: "`\\addplot coordinates` draws sharp lines and marks with the default cycle list, `\\addplot+`/`\\addplot[...]` semantics, line options, `only marks`, `mark`, `mark size`, `mark options`. Symbolic coordinates and error bars are not drawn. Editing: point handles rewrite one `(x,y)` in data units; plots are sub-selections with an inspector, deletable and reorderable with their legend entry."
   },
   pgfplots_addplot_expression: {
     parser: "partial",
@@ -950,17 +950,17 @@ export const capabilityMatrix: CapabilityMatrix = {
     parser: "partial",
     semantic: "partial",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["pgfplots_legend"],
-    notes: "Legends from `\\addlegendentry[opts]`, `\\legend`, `legend entries`, `\\addlegendimage`, laid out as PGF's matrix with the documented `every axis legend` style: `legend pos`, `legend style` (at, anchor, draw, fill, font, nodes, cells, column/row sep, every even column), `legend columns` (incl. -1), `legend cell align`, `legend plot pos`, `reverse legend`, `transpose legend`, `line legend`, `area legend`, `empty legend`, `legend image post style`, `forget plot` (behaviour L). Bar legends, `legend image code/.code` and `legend to name`/`\\ref` are diagnosed."
+    notes: "Legends from `\\addlegendentry[opts]`, `\\legend`, `legend entries`, `\\addlegendimage`, laid out as PGF's matrix with the documented `every axis legend` style: `legend pos`, `legend style` (at, anchor, draw, fill, font, nodes, cells, column/row sep, every even column), `legend columns` (incl. -1), `legend cell align`, `legend plot pos`, `reverse legend`, `transpose legend`, `line legend`, `area legend`, `empty legend`, `legend image post style`, `forget plot` (behaviour L). Bar legends, `legend image code/.code` and `legend to name`/`\\ref` are diagnosed. Editing: the legend is a sub-selection; dragging writes `legend style={at=...,anchor=...}` or snaps to `legend pos`; entry texts edit in place."
   },
   pgfplots_plot_styles: {
     parser: "partial",
     semantic: "partial",
     svg: "partial",
-    edit: "none",
+    edit: "partial",
     fixtures: ["pgfplots_plot_styles"],
-    notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). `cycle multi list` is not supported."
+    notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). `cycle multi list` is not supported. Editing: the plot inspector writes colour, line width and style, mark, mark size, only marks, no markers, smooth (`\\addplot+[...]` keeps the cycle list)."
   },
   pgfplots_bars: {
     parser: "partial",
