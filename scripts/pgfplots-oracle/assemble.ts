@@ -98,6 +98,8 @@ export function assembleTier1(records: ProbeRecord[]): { tier1: Tier1; page?: Ca
       axis.limits = { xmin: Number(xmin), xmax: Number(xmax), ymin: Number(ymin), ymax: Number(ymax) };
     } else if (kind === "TICK") {
       const [, axisId = "?", letter = "?", index = "", value = ""] = fields;
+      // On a symbolic axis \tick is the name (`low`): no numeric tick record, as before harness version 4.
+      if (!Number.isFinite(Number(value)) || value.trim() === "") continue;
       const key = `${axisId}|${letter}`;
       let ticks = tickValues.get(key);
       if (!ticks) { ticks = new Map(); tickValues.set(key, ticks); }
