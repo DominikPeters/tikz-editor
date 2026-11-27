@@ -125,13 +125,26 @@ function direction(): AxisDirectionModel {
   };
 }
 
-/** A pgfmath number (`xmin=-pi`, `xtick distance=0.5`). */
+/**
+ * A pgfmath number (`xmin=-pi`, `xtick distance=0.5`, `xmin=1e5`), finite.
+ * pgfplots parses its numeric options with the fpu (manual
+ * pgfplots.reference.axis-addplot.tex, "About the precision and number
+ * range"), so values beyond TeX's ±16384 are fine: float mode.
+ */
 export function readPgfNumber(raw: string): number | null {
+  const value = readPgfFloat(raw);
+  return value !== null && Number.isFinite(value) ? value : null;
+}
+
+/** Like `readPgfNumber`, but `inf`/`nan` (and fpu's results of errors such as 1/0) come back as ±Infinity/NaN. */
+export function readPgfFloat(raw: string): number | null {
   const text = stripBraces(raw);
   if (text.length === 0) return null;
   const direct = Number(text);
   if (Number.isFinite(direct) && /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/u.test(text)) return direct;
-  const result = evaluatePgfMathExpression(text);
+  if (/^[-+]?(?:inf|infty)$/iu.test(text)) return text.startsWith("-") ? -Infinity : Infinity;
+  if (/^[-+]?nan$/iu.test(text)) return Number.NaN;
+  const result = evaluatePgfMathExpression(text, { mode: "float" });
   return result.ok ? result.quantity.value : null;
 }
 
@@ -359,12 +372,13 @@ function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
  */
 export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
-  "every mark", "domain", "samples", "forget plot"
+  "every mark", "domain", "samples", "forget plot", "samples at", "variable", "trig format plots",
+  "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*"
 ]);
 
 /** Keys of a plot that this evaluator understands, beyond the TikZ path keys. */
 const PLOT_KEYS = new Set([
-  ...PLOT_LEVEL_KEYS, "mark repeat", "mark phase", "unbounded coords", "x filter/.code"
+  ...PLOT_LEVEL_KEYS, "mark repeat", "mark phase"
 ]);
 
 export type AxisModelInput = {
@@ -451,6 +465,18 @@ export type PlotModel = {
   onlyMarks: boolean;
   domain?: { from: number; to: number };
   samples?: number;
+  /** `samples at={…}` (a `\foreach` list); overrides domain and samples. Empty clears it. */
+  samplesAt?: string;
+  /** `variable=t` or `variable=\t` (initially x): the name without the backslash. */
+  variable: string;
+  /** `trig format plots` (initially default: the enclosing `trig format`). */
+  trigFormatPlots?: "deg" | "rad";
+  /** `unbounded coords` (initially discard; the non-starred restrict keys set jump). */
+  unboundedCoords: "discard" | "jump";
+  /** `restrict x to domain[*]=min:max` filters, in order (manual coordfiltering.tex). */
+  restrict: Array<{ axis: "x" | "y"; min: number; max: number; truncate: boolean }>;
+  /** `declare function`/`trig format` given to the plot: they apply to its expressions. */
+  pgfmathKeys: PgfplotsKeyUse[];
   forget: boolean;
   unsupported: Array<{ key: string; span: Span }>;
   invalid: Array<{ key: string; value: string; span: Span }>;
@@ -470,6 +496,10 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     mark: null,
     markKeys: [],
     onlyMarks: false,
+    variable: "x",
+    unboundedCoords: "discard",
+    restrict: [],
+    pgfmathKeys: [],
     forget: false,
     unsupported: [],
     invalid: []
@@ -508,9 +538,9 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "domain") {
-      const parts = stripBraces(value ?? "").split(":");
-      const from = readPgfNumber(parts[0] ?? "");
-      const to = readPgfNumber(parts[1] ?? "");
+      const parts = splitDomain(stripBraces(value ?? ""));
+      const from = parts ? readPgfNumber(parts[0]) : null;
+      const to = parts ? readPgfNumber(parts[1]) : null;
       if (from === null || to === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
       else plot.domain = { from, to };
       return;
@@ -522,6 +552,47 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "forget plot") { plot.forget = readBoolean(value) ?? true; return; }
+    if (key === "samples at") {
+      const text = stripBraces(value ?? "");
+      if (text === "") delete plot.samplesAt;
+      else plot.samplesAt = text;
+      return;
+    }
+    if (key === "variable") {
+      const name = stripBraces(value ?? "").replace(/^\\/u, "");
+      if (!/^[A-Za-z]+$/u.test(name)) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      else plot.variable = name;
+      return;
+    }
+    if (key === "trig format plots") {
+      const text = stripBraces(value ?? "");
+      if (text === "default") delete plot.trigFormatPlots;
+      else if (text === "deg" || text === "rad") plot.trigFormatPlots = text;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    if (key === "unbounded coords") {
+      const text = stripBraces(value ?? "");
+      if (text === "discard" || text === "jump") plot.unboundedCoords = text;
+      else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+      return;
+    }
+    const restrict = /^restrict ([xy]) to domain(\*?)$/u.exec(key);
+    if (restrict) {
+      const parts = splitDomain(stripBraces(value ?? ""));
+      const min = parts ? readPgfNumber(parts[0]) : null;
+      const max = parts ? readPgfNumber(parts[1]) : null;
+      if (min === null || max === null) { plot.invalid.push({ key, value: value ?? "", span: use.origin.span }); return; }
+      const truncate = restrict[2] === "*";
+      plot.restrict.push({ axis: restrict[1] === "y" ? "y" : "x", min, max, truncate });
+      // Manual coordfiltering.tex: the non-starred versions also set unbounded coords=jump.
+      if (!truncate) plot.unboundedCoords = "jump";
+      return;
+    }
+    if (key === "declare function" || key === "/pgf/declare function" || key === "trig format" || key === "/pgf/trig format") {
+      plot.pgfmathKeys.push({ ...use, key: key.replace(/^\/pgf\//u, "") });
+      return;
+    }
     if (PLOT_KEYS.has(key)) return;
     if (DOCUMENTED_PGFPLOTS_KEYS.has(key) && !TIKZ_ALSO.has(key)) {
       plot.unsupported.push({ key, span: use.origin.span });
@@ -535,6 +606,18 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     origin: entry
   })));
   return plot;
+}
+
+/** `a:b` at the top-level colon (`domain=-2*pi:{f(1:2)}` keeps the braced colon). */
+export function splitDomain(text: string): [string, string] | null {
+  let depth = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "{" || c === "(") depth += 1;
+    else if (c === "}" || c === ")") depth -= 1;
+    else if (c === ":" && depth === 0) return [text.slice(0, i).trim(), text.slice(i + 1).trim()];
+  }
+  return null;
 }
 
 /** Documented pgfplots keys that are also plain TikZ keys and mean the same on a plot path. */

@@ -45,7 +45,8 @@ import { expandOptionListMacros } from "../semantic/style/macro-options.js";
 import { resolveContextDelta } from "../semantic/style/resolve.js";
 import { applyMatrix, inverseMatrix, multiplyMatrix } from "../semantic/transform.js";
 import type { FeatureUsage, ResolvedStyle, SceneClipPath, SceneElement, ScenePath, ScenePathCommand } from "../semantic/types.js";
-import { collectPlotData, type PlotPoint } from "./data.js";
+import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
+import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
@@ -222,6 +223,10 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const axisScope = resolveStyle(context, parent, parent.style, axisTikz.length > 0 ? [keyUsesToOptionList(axisTikz)] : [], axis.id, axis.span);
   dedupeWarnings(diagnostics, axisScope.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: axis.optionsSpan ?? axis.beginSpan })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
   const axisFrame = childFrame(parent, { style: axisScope.style, transform: axisScope.transform });
+  // `declare function` and `trig format` given to the axis hold for everything in it.
+  const pgfmathScopeKeys = (uses: readonly PgfplotsKeyUse[]) => uses.filter((use) => /^(?:\/pgf\/)?(?:declare function|trig format)$/u.test(use.key)).map((use) => ({ ...use, key: use.key.replace(/^\/pgf\//u, "") }));
+  const axisPgfmath = pgfmathScopeKeys(model.tikzOptions);
+  if (axisPgfmath.length > 0) applyPgfMathScopeOptions(axisFrame.macroBindings, [keyUsesToOptionList(axisPgfmath)]);
   const frameTransform = axisScope.transform;
   const toWorld = (q: Point): WorldPoint => applyMatrix(frameTransform, p(q.x, q.y));
   const inverse = inverseMatrix(frameTransform) ?? frameTransform;
@@ -243,7 +248,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const plot = resolvePlotModel(model, statement, index);
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
-    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings));
+    const data = collectPlotData(statement, plot, context.source, (text) => expandMacroBindings(text, parent.macroBindings), plotMathEnvironment(axisFrame, plot));
     const input = statement.input.kind;
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
@@ -255,7 +260,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     if (statement.trailingPath) {
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: "Path operations after an `\\addplot` input (`\\closedcycle`, `node[pos=…]`) are not drawn yet.", span: statement.trailingPath.span });
     }
-    plots.push({ model: plot, points: data.points });
+    plots.push({ model: plot, points: filterPlotPoints(data.points, plot) });
   });
   for (const item of axis.body) {
     if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend") {
@@ -584,6 +589,20 @@ function elementBounds(element: SceneElement): Box | null {
   const w = (element.nodeVisualWidth ?? 0) / 2; const h = (element.nodeVisualHeight ?? 0) / 2;
   const c = element.nodeVisualCenter ?? element.position;
   return { minX: c.x - w, minY: c.y - h, maxX: c.x + w, maxY: c.y + h };
+}
+
+/** Functions and trig format for a plot's expressions: the axis scope, the plot's own `declare function`, then `trig format plots`. */
+function plotMathEnvironment(axisFrame: SemanticContextFrame, plot: PlotModel): PlotMathEnvironment {
+  let bindings = axisFrame.macroBindings;
+  if (plot.pgfmathKeys.length > 0) {
+    bindings = bindings.fork();
+    applyPgfMathScopeOptions(bindings, [keyUsesToOptionList(plot.pgfmathKeys)]);
+  }
+  const scope = readPgfMathScope(bindings);
+  return {
+    ...(scope.functions ? { functions: scope.functions } : {}),
+    trigFormat: plot.trigFormatPlots ?? scope.trigFormat ?? "deg"
+  };
 }
 
 function boxSizeOf(model: AxisModel, limits: { xmin: number; xmax: number; ymin: number; ymax: number }): { width: number; height: number } {

@@ -135,7 +135,7 @@ a b
     const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}
 \addplot coordinates {(a,1) (b,2)};
 \addplot table {data.dat};
-\addplot ({cos(x)},{sin(x)});
+\addplot ({cos(x)},{sin(x)},{x});
 \end{axis}\end{tikzpicture}`);
     expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(3);
     expect(result.scene.elements.some((e) => e.sourceRef.sourceId.includes(":plot:"))).toBe(false);
@@ -178,6 +178,41 @@ a b
   it("move on the axis is refused cleanly (moving axes is not implemented)", () => {
     const source = PREAMBLE + String.raw`\begin{tikzpicture}\begin{axis}\addplot coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`;
     expect(() => applyEditAction(source, [], { kind: "moveElement", elementId: "axis:0", delta: { x: 1, y: 0 } } as never)).not.toThrow();
+  });
+});
+
+describe("pgfplots function plots (behaviour M)", () => {
+  const plotPoints = (body: string) => {
+    const result = evaluate(String.raw`\begin{tikzpicture}${body}\end{tikzpicture}`);
+    const axis = getAxisEvaluations(result.scene)[0];
+    const paths = result.scene.elements.filter((e) => e.kind === "Path" && e.sourceRef.sourceId.includes(":plot:") && e.id.endsWith("line"));
+    const toData = (p: { x: number; y: number }) => axis ? { x: (p.x - axis.layout.map.origin.x) / axis.layout.map.xUnit.x, y: (p.y - axis.layout.map.origin.y) / axis.layout.map.yUnit.y } : p;
+    return { result, axis, paths: paths.map((path) => (path.kind === "Path" ? path.commands.flatMap((c) => (c.kind === "M" || c.kind === "L" ? [{ kind: c.kind, ...toData(c.to) }] : [])) : [])) };
+  };
+
+  it("M1/M2: samples equally spaced over the domain, both ends included; float mode, no TeX dimension limit", () => {
+    const { result, axis, paths } = plotPoints(String.raw`\begin{axis}\addplot[domain=0:1e5, samples=3] {x^2};\end{axis}`);
+    expect(result.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(paths[0]?.map((p) => p.x)).toEqual([0, 50000, 100000].map((v) => expect.closeTo(v, 3)));
+    expect(axis?.layout.limits.ymax).toBeCloseTo(1.1e10, -3);
+  });
+
+  it("M3: variable, samples at, trig format plots, parametric, declare function and macros", () => {
+    const { paths } = plotPoints(String.raw`\pgfmathsetmacro{\k}{2}\begin{axis}[declare function={f(\a)=\a+1;}]
+\addplot[samples at={0,1,...,3}] {f(x)*\k};
+\addplot[variable=t, domain=0:pi, samples=3, trig format plots=rad] ({cos(t)},{sin(t)});
+\end{axis}`);
+    expect(paths[0]?.map((p) => [p.x, p.y])).toEqual([[0, 2], [1, 4], [2, 6], [3, 8]].map(([x, y]) => [expect.closeTo(x ?? 0, 6), expect.closeTo(y ?? 0, 6)]));
+    expect(paths[1]?.map((p) => [p.x, p.y])).toEqual([[1, 0], [0, 1], [-1, 0]].map(([x, y]) => [expect.closeTo(x ?? 0, 6), expect.closeTo(y ?? 0, 6)]));
+  });
+
+  it("M4: unbounded samples are discarded (initial) or interrupt the line (jump); restrict y to domain jumps", () => {
+    const discard = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5] {1/x};\end{axis}`).paths[0];
+    expect(discard?.map((p) => p.kind).join("")).toBe("MLLL");
+    const jump = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5, unbounded coords=jump] {1/x};\end{axis}`).paths[0];
+    expect(jump?.map((p) => p.kind).join("")).toBe("MLML");
+    const restricted = plotPoints(String.raw`\begin{axis}\addplot[domain=-2:2, samples=5, restrict y to domain=0:1.5] {x};\end{axis}`).paths[0];
+    expect(restricted?.map((p) => [p.kind, p.x])).toEqual([["M", expect.closeTo(0, 6)], ["L", expect.closeTo(1, 6)]]);
   });
 });
 

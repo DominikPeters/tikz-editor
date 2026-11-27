@@ -609,3 +609,58 @@ editor's text engine has the font. Found on the way:
 - Minor tick rules beyond the observed cases (e.g. with `xtick distance`).
 - Number formatting edge cases (rounding ties) — follow PGF source.
 - `extra x ticks` (harness limitation).
+
+---
+
+## M. Function plots (2026-11-27)
+
+Experiment `e16-functions.mts` (sets `a` discovery, `b` fresh): one
+expression plot per axis with explicit, exactly representable limits and
+`clip=false`; the ideal points are computed with the editor's float pgfmath
+(`compilePgfMathExpression`, mode `float`) and mapped through the axis box
+*as painted* (Tier 2 box stroke), which cancels the PDF pt→bp scale (N3).
+Raw data `artifacts/pgfplots-experiments/e16-functions/functions-{a,b}.tsv`.
+
+**M1 — Float evaluation everywhere.** pgfplots evaluates plot expressions,
+`domain` bounds, `samples at` entries, coordinates with math and numeric
+options (`xmin=1e5`) with the fpu (manual axis-addplot.tex, "About the
+precision and number range": "\addplot expression uses a floating point
+unit"; `plot coordinates/math parser` initially true). No TeX dimension
+limit applies: an axis with `domain=0:1e5` and `{x^2}` (y up to 1e10)
+compiles. Implemented: `readPgfNumber`/`readPgfFloat` (model.ts) and
+expression sampling (data.ts) evaluate in `mode: "float"`. CONFIRMED (a-big,
+a-exp, b-huge: values to 4e6 match to ≤ 0.0011 pt).
+
+**M2 — Sample positions.** `samples=N` (initially 25) equally spaced values
+over `domain=a:b` (initially −5:5), both ends included: x_i = a + i(b−a)/(N−1);
+`a > b` samples downwards (b-rev). `samples at={…}` is a `\foreach` list
+(dots allowed) and overrides `domain`/`samples` (manual). The last point is
+exactly b (no accumulated rounding: with `lua backend` the positions are
+doubles). VERIFIED: vertex count and positions of all 44 cases (22 + 22
+fresh), max point error **0.0035 pt** (set a), **0.0034 pt** (set b).
+
+**M3 — Variables, trig format, functions.** `x` and `\x` are the same
+sample (manual "Remarks"); `variable=t` (or `\t`) renames both. `trig
+format plots=rad` switches trigonometry to radians for plot expressions
+only (initially `default`: the enclosing `/pgf/trig format`). Functions from
+`declare function` (axis option, `\pgfplotsset`, `\tikzset`, plot option)
+and macros defined before the axis (`\def`, `\pgfmathsetmacro`) reach the
+expressions. Parametric `({x expr},{y expr})` samples both with the same
+variable. VERIFIED (a-sinrad, a-var, a-param, a-decl, a-pi; fresh b-rad,
+b-param, b-decl, b-ellipse), same tolerance as M2.
+
+**M4 — Unbounded samples.** A sample whose value is `nan` or ±`inf` in the
+fpu (`1/0`, `ln` of a negative number) is handled by `unbounded coords`
+(initially `discard`, manual 2dplots.tex): the point is dropped and the
+line joins its neighbours; with `jump` the path is split there (a new
+`moveto`). `restrict x/y to domain=min:max` maps values outside to ∓inf
+and sets `unbounded coords=jump`; the starred variant clamps instead
+(manual coordfiltering.tex). VERIFIED on subpath structure: a-recip (4
+points, one path), a-recipjump (2+2), fresh b-recip (8), b-recipjump
+(4+4), b-lnneg (6 of 11 kept). `restrict … to domain` is implemented from
+the manual, not swept.
+
+**M5 — Curve tolerance.** Measured float-vs-TeX difference on 44 varied
+expressions: ≤ 0.0035 pt, the size of the LuaLaTeX/pdfLaTeX path noise
+floor (0.00245 pt, harness README). The comparison's `curvePt` = 0.02 pt
+therefore stands; no loosening.
