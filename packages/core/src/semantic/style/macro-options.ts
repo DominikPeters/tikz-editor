@@ -1,6 +1,7 @@
 import type { MacroBinding, MacroExpansionTraceEvent } from "../../macros/index.js";
 import { DEFAULT_MACRO_EXPANSION_MAX_DEPTH, expandMacroBindings } from "../../macros/index.js";
 import type { OptionEntry, OptionListAst } from "../../options/types.js";
+import { isPgfMathDeclareFunctionKey } from "../pgfmath/scope.js";
 
 export function expandOptionListMacros(
   optionLists: OptionListAst[],
@@ -31,6 +32,11 @@ function expandOptionEntryMacro(
   trace: MacroExpansionTraceEvent[] | undefined
 ): OptionEntry {
   if (entry.kind === "kv") {
+    // `declare function` is a `.code` key: TeX stores the body unexpanded,
+    // and its parameters (`\x`) must not pick up outer bindings.
+    if (isPgfMathDeclareFunctionKey(entry.key)) {
+      return entry;
+    }
     const valueRaw = expandMacroBindings(entry.valueRaw, macroBindings, {
       maxDepth: DEFAULT_MACRO_EXPANSION_MAX_DEPTH,
       ...(trace === undefined ? {} : { trace: trace })

@@ -116,8 +116,9 @@ import { inferRequiredTikzLibraries } from "./required-tikz-libraries.js";
 import { inferRequiredPackages } from "./required-packages.js";
 import { parseBooleanishNormalized } from "../utils/booleanish.js";
 import { stripWrappingBraces } from "../utils/braces.js";
-import { evaluatePgfMathExpression, formatPgfMathNumber } from "./pgfmath/evaluator.js";
-import { withPgfMathRuntime } from "./pgfmath/runtime.js";
+import { evaluatePgfMathExpression, evaluatePgfMathText, type PgfMathTextMeasurer } from "./pgfmath/evaluator.js";
+import { withPgfMathRuntime, type PgfMathRuntime } from "./pgfmath/runtime.js";
+import { applyPgfMathScopeOptions, readPgfMathScope } from "./pgfmath/scope.js";
 import {
   PGF_NUMBER_FORMAT_STATE_BINDING,
   collectPgfNumberFormatKeys,
@@ -287,7 +288,7 @@ export function createSemanticEvaluationRun(
     defineCurrentPage(context, opts.currentPage);
   }
   const expanded = withPgfMathRuntime(
-    { rng: context.mathRandom },
+    pgfMathRuntimeFor(context),
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
   );
   const prePictureContextStatements = expanded.figureBody.filter((statement) =>
@@ -310,7 +311,7 @@ export function createSemanticEvaluationRun(
     const contextStatement = remapPrePictureContextStatement(statement, expanded.statementSourceMaps.get(statement));
     withDependencySource(context, statement.id, () =>
       withPgfMathRuntime(
-        { rng: context.mathRandom },
+        pgfMathRuntimeFor(context),
         () => evaluateStatement(contextStatement, context, diagnostics, featureUsage, expanded.statementMacroAttribution)
       )
     );
@@ -398,6 +399,7 @@ export function createSemanticEvaluationRun(
       treeDeferredEdgeFromParentPath: rootMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: rootMeta.treeDeferredEdgeFromParentMacro
     });
+    applyPgfMathScopeToCurrentFrame(context, rootDelta.expandedOptionLists, diagnostics, figureSourceRef.sourceSpan ?? figure.span, featureUsage);
     pushStyleDiagnostics(diagnostics, rootDelta.diagnostics, "Figure option issue", figureSourceRef.sourceSpan ?? figure.span);
   }
 
@@ -473,7 +475,7 @@ export function evaluateSemanticStatementByIndex(
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
     withPgfMathRuntime(
-      { rng: run.context.mathRandom },
+      pgfMathRuntimeFor(run.context),
       () => {
         if (scopeStep === "leave") { popFrame(run.context); return []; }
         if (overlayVisibility === "removed") return [];
@@ -1177,6 +1179,7 @@ function evaluateStatement(
       treeDeferredEdgeFromParentPath: frameMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: frameMeta.treeDeferredEdgeFromParentMacro
     }, { shareNamedPaths: true });
+    applyPgfMathScopeToCurrentFrame(context, resolved.expandedOptionLists, diagnostics, statement.span, featureUsage);
     const previousTraceCollector = context.macroTraceCollector;
     const statementMacroTrace: MacroExpansionTraceEvent[] = [];
     context.macroTraceCollector = statementMacroTrace;
@@ -1353,6 +1356,7 @@ function evaluateStatement(
       treeDeferredEdgeFromParentPath: frameMeta.treeDeferredEdgeFromParentPath,
       treeDeferredEdgeFromParentMacro: frameMeta.treeDeferredEdgeFromParentMacro
     });
+    applyPgfMathScopeToCurrentFrame(context, resolved.expandedOptionLists, diagnostics, statement.span, featureUsage);
     pushStyleDiagnostics(diagnostics, resolved.diagnostics, "Scope option issue", statement.span);
     pushStyleDiagnostics(diagnostics, backgroundDiagnostics, "Scope background option issue", statement.span);
     if (enterScopeOnly) return [];
@@ -1696,6 +1700,7 @@ function evaluatePicCodeBody(
   const picOrigin = makePicOriginFrame(item, resolvedCode);
   context.picEvaluationStack.push(recursionKey);
   pushFrame(context, picFrame);
+  applyPgfMathScopeToCurrentFrame(context, resolvedPicStyle.expandedOptionLists, diagnostics, item.span, featureUsage);
   try {
     context.currentPoint = placement;
     context.pathStartPoint = placement;
@@ -1703,7 +1708,7 @@ function evaluatePicCodeBody(
       elements.push(
         ...withDependencySource(context, item.id, () =>
           withPgfMathRuntime(
-            { rng: context.mathRandom },
+            pgfMathRuntimeFor(context),
             () => evaluateStatement(statement, context, diagnostics, featureUsage, statementMacroAttribution)
           )
         )
@@ -1870,7 +1875,7 @@ function applyPgfMathStatement(
     if (containsPgfMathRandomToken(expanded)) {
       markFeature(featureUsage, "pgfmath_random_functions", "supported");
     }
-    const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
+    const evaluated = evaluatePgfMathText(expanded, { rng: context.mathRandom });
     if (evaluated.ok === false) {
       diagnostics.push({
         severity: "warning",
@@ -1882,7 +1887,7 @@ function applyPgfMathStatement(
     }
     writeContextMacroBinding(context, "\\pgfmathresult", {
       kind: "text",
-      value: formatPgfMathNumber(evaluated.quantity.value),
+      value: evaluated.text,
       provenance: []
     });
     return;
@@ -1911,7 +1916,7 @@ function applyPgfMathStatement(
   if (containsPgfMathRandomToken(expanded)) {
     markFeature(featureUsage, "pgfmath_random_functions", "supported");
   }
-  const evaluated = evaluatePgfMathExpression(expanded, { rng: context.mathRandom });
+  const evaluated = evaluatePgfMathText(expanded, { rng: context.mathRandom });
   if (evaluated.ok === false) {
     diagnostics.push({
       severity: "warning",
@@ -1924,9 +1929,67 @@ function applyPgfMathStatement(
 
   writeContextMacroBinding(context, target, {
     kind: "text",
-    value: formatPgfMathNumber(evaluated.quantity.value),
+    value: evaluated.text,
     provenance: []
   });
+}
+
+/** The pgfmath runtime of a picture: its RNG, the current frame's pgfmath scope, text measuring. */
+function pgfMathRuntimeFor(context: SemanticContext): PgfMathRuntime {
+  const measureText = pgfMathTextMeasurer(context);
+  return {
+    rng: context.mathRandom,
+    scope: () => readPgfMathScope(currentFrame(context).macroBindings),
+    ...(measureText ? { measureText } : {})
+  };
+}
+
+/** `width("...")` etc.: TeX boxes the text in the current font. */
+function pgfMathTextMeasurer(context: SemanticContext): PgfMathTextMeasurer | undefined {
+  const engine = context.textEngine;
+  if (!engine) {
+    return undefined;
+  }
+  return (text) => {
+    const style = currentFrame(context).style;
+    const metrics = engine.measure({
+      text,
+      textWidthPt: null,
+      fontStyle: style.fontStyle,
+      fontWeight: style.fontWeight,
+      fontFamily: style.fontFamily,
+      fontSizePt: style.fontSize
+    });
+    if (!metrics) {
+      return null;
+    }
+    // Node text metrics put the baseline at `baselineY` from the box centre.
+    return {
+      width: metrics.width,
+      height: metrics.height / 2 - metrics.baselineY,
+      depth: metrics.height / 2 + metrics.baselineY
+    };
+  };
+}
+
+/** Apply `declare function` and `trig format` from a frame's options to that frame. */
+function applyPgfMathScopeToCurrentFrame(
+  context: SemanticContext,
+  optionLists: readonly OptionListAst[],
+  diagnostics: Diagnostic[],
+  span: { from: number; to: number },
+  featureUsage: FeatureUsage | undefined
+): void {
+  if (optionLists.length === 0) {
+    return;
+  }
+  const outcome = applyPgfMathScopeOptions(currentFrame(context).macroBindings, optionLists);
+  if (outcome.applied && featureUsage) {
+    markFeature(featureUsage, "pgfmath_declare_function", "supported");
+  }
+  for (const issue of outcome.diagnostics) {
+    diagnostics.push({ severity: "warning", code: issue.code, message: issue.message, span });
+  }
 }
 
 function describeUnsupportedStatement(raw: string): string {
@@ -2261,6 +2324,7 @@ function applyOptionListsToCurrentFrame(
   }
 
   const frameMeta = resolveFrameMeta(frame, resolved.expandedOptionLists, sourceRef);
+  applyPgfMathScopeToCurrentFrame(context, resolved.expandedOptionLists, diagnostics, span, featureUsage);
   frame.namePrefix = frameMeta.namePrefix;
   frame.nameSuffix = frameMeta.nameSuffix;
   frame.nodeLayerMode = frameMeta.nodeLayerMode;

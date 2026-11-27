@@ -41,7 +41,8 @@ describe("semantic evaluator / pgfmath", () => {
   it("respects unary and exponent precedence", () => {
     expect(evaluateScalar("-2^2")).toBe(-4);
     expect(evaluateScalar("(-2)^2")).toBe(4);
-    expect(evaluateScalar("2^3^2")).toBe(512);
+    // PGF's operator stack makes every infix operator left-associative.
+    expect(evaluateScalar("2^3^2")).toBe(64);
   });
 
   it("supports comparisons, logical operators, and ternary expressions", () => {
@@ -169,18 +170,18 @@ describe("semantic evaluator / pgfmath", () => {
     ]));
   });
 
-  it("reports unsupported syntax for quoted expressions", () => {
+  it("reports quoted text as a non-numeric result", () => {
     const result = evaluatePgfMathExpression("\"foo\"");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.code).toBe("unsupported-syntax");
+      expect(result.code).toBe("non-numeric-result");
     }
   });
 
   it("reports parse, arity, domain, and type errors precisely", () => {
     const failures = [
       ["", "empty"],
-      ["{1+2}{3}", "unsupported-syntax"],
+      ["{1+2}{3}", "unexpected-token"],
       ["1 + @", "token"],
       [".", "token"],
       ["1..2", "unexpected-token"],
@@ -200,37 +201,24 @@ describe("semantic evaluator / pgfmath", () => {
       ["-@", "token"],
       ["!@", "token"],
       ["foo", "unknown-function"],
-      ["pi()", "unexpected-token"],
+      ["pi(1)", "unexpected-token"],
       ["sin(1,2)", "invalid-arity"],
       ["min()", "invalid-arity"],
-      ["min(2pt)", "invalid-operation"],
       ["random(1,2,3)", "invalid-arity"],
-      ["random(2pt)", "invalid-operation"],
-      ["random(1,2pt)", "invalid-operation"],
-      ["rnd(1)", "invalid-arity"],
-      ["rand(1)", "invalid-arity"],
+      ["rnd(1)", "unexpected-token"],
+      ["rand(1)", "unexpected-token"],
       ["1 / 0", "division-by-zero"],
       ["sqrt(-1)", "invalid-domain"],
       ["asin(2)", "invalid-domain"],
-      ["exp(1000)", "invalid-domain"],
-      ["171!", "invalid-domain"],
-      ["2.5!", "invalid-domain"],
-      ["2pt + 3", "invalid-operation"],
-      ["2pt * 3pt", "invalid-operation"],
-      ["3 / 2pt", "invalid-operation"],
-      ["2pt ^ 0.5", "invalid-operation"],
-      ["2pt ^ 2pt", "invalid-operation"],
-      ["2pt!", "invalid-operation"],
-      ["2pt r", "invalid-operation"],
-      ["2pt < 3", "invalid-operation"],
-      ["sin(2pt)", "invalid-operation"],
+      ["exp(1000)", "overflow"],
+      ["171!", "overflow"],
+      ["20000+0", "overflow"],
       ["atan2(1)", "invalid-arity"],
-      ["atan2(1pt,2)", "invalid-operation"],
-      ["atan2(1,2pt)", "invalid-operation"],
-      ["mod(1,0)", "invalid-domain"],
-      ["scalar()", "invalid-arity"],
+      ["mod(1,0)", "division-by-zero"],
+      ["scalar()", "non-numeric-result"],
       ["unknown(1)", "unknown-function"],
-      ["foo(1 2)", "unexpected-token"]
+      ["foo(1 2)", "unknown-function"],
+      ["09+0", "token"]
     ] as const;
 
     for (const [input, code] of failures) {

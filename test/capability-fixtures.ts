@@ -74,6 +74,12 @@ export const capabilityFixtures: Record<string, string> = {
   \node at (0,0) {\pgfmathprintnumber{\v}};
   \node at (0,1) {\pgfmathprintnumber[sci,precision=2]{0.00123}};
 \end{tikzpicture}`,
+  pgfmath_declare_function: String.raw`\begin{tikzpicture}[declare function={f(\x)=\x*\x;}]
+  \draw plot[domain=0:2,samples=5] (\x,{f(\x)});
+  \begin{scope}[trig format=rad]
+    \node at (0,1) {\pgfmathparse{sin(pi/2)}\pgfmathresult};
+  \end{scope}
+\end{tikzpicture}`,
   option_styles: String.raw`\begin{tikzpicture}
   \draw[red,fill=blue,line width=1pt] (0,0) -- (1,0);
 \end{tikzpicture}`,

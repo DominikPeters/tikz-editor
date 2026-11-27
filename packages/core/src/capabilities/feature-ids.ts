@@ -10,6 +10,7 @@ export const FEATURE_IDS = [
   "pgfmath_seed_commands",
   "pgfmath_random_functions",
   "pgfmath_number_printing", // \pgfmathprintnumber[to] in node text and the /pgf/number format/ keys.
+  "pgfmath_declare_function", // declare function and trig format, scoped like TeX groups.
   "options_structured",
   "transform_cm", // Affine matrices and their xslant/yslant shorthands.
   "path_shading",

@@ -81,6 +81,15 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["pgfmath_number_printing"]
   },
+  pgfmath_declare_function: {
+    parser: "none",
+    semantic: "partial",
+    svg: "stable",
+    edit: "none",
+    fixtures: ["pgfmath_declare_function"],
+    notes:
+      "declare function and trig format=deg|rad apply to pgfmath expressions in the picture, scope, path or pic that sets them. trig format does not yet change polar coordinates or angle keys such as rotate, and a \\foreach variable still replaces a parameter of the same name."
+  },
   options_structured: {
     parser: "stable",
     semantic: "stable",

@@ -161,6 +161,12 @@ export const NON_STYLE_OPTION_KEYS = new Set([
   "nodes",
   "name prefix",
   "name suffix",
+  // pgfmath scope keys, applied to the frame by `applyPgfMathScopeOptions`.
+  "declare function",
+  "/pgf/declare function",
+  "/tikz/declare function",
+  "trig format",
+  "/pgf/trig format",
   "level",
   "level distance",
   "sibling distance",
