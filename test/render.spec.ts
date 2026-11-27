@@ -1114,7 +1114,7 @@ World};
     expect(result.svg.svg).toContain('data-lineleading="7pt"');
     expect(readLineboxTranslateYs(result.svg.svg)).toEqual([
       expect.closeTo(0, 6),
-      expect.closeTo(19.283935, 6),
+      expect.closeTo(19.33, 6),
     ]);
   });
 
@@ -1795,7 +1795,7 @@ World};
 
     expect(foreachPaths).toHaveLength(20);
     expect(foreachPaths.filter((path) => path.style.fillOpacity === 0.07)).toHaveLength(10);
-    expect(foreachPaths.filter((path) => path.style.dashArray?.join(",") === "4,2")).toHaveLength(10);
+    expect(foreachPaths.filter((path) => path.style.dashArray?.join(",") === "3,2")).toHaveLength(10);
     expect(result.svg.svg).toContain("stroke-dasharray");
   });
 
@@ -1816,7 +1816,7 @@ World};
 
     expect(macroPaths).toHaveLength(1);
     expect(macroPaths[0]?.style.stroke).toBe("#0072bd");
-    expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("4,2");
+    expect(macroPaths[0]?.style.dashArray?.join(",")).toBe("3,2");
   });
 
   it("expands user-defined text macros before native TeX rendering in async mode", async () => {

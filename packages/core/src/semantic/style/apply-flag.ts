@@ -186,11 +186,12 @@ export function applyFlagEntry(
   if (key === "dashed") {
     return { style: { ...style, dashArray: [3, 3] }, transform, diagnostics: [] };
   }
+  // tikz.code.tex: densely dashed = on 3pt off 2pt, loosely dashed = on 3pt off 6pt.
   if (key === "densely dashed") {
-    return { style: { ...style, dashArray: [4, 2] }, transform, diagnostics: [] };
+    return { style: { ...style, dashArray: [3, 2] }, transform, diagnostics: [] };
   }
   if (key === "loosely dashed") {
-    return { style: { ...style, dashArray: [6, 4] }, transform, diagnostics: [] };
+    return { style: { ...style, dashArray: [3, 6] }, transform, diagnostics: [] };
   }
   if (key === "dotted") {
     return { style: { ...style, dashArray: [style.lineWidth, 2] }, transform, diagnostics: [] };

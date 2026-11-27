@@ -52,7 +52,8 @@ describe("positioned nodes", () => {
     expect(duplicated.kind).toBe("success");
     if (duplicated.kind !== "success") return;
     const copy = evaluate(duplicated.newSource).editHandles.filter(handle => handle.kind === "node-position" && handle.sourceRef.sourceId === "path:2")[0];
-    expect([copy.world.x, copy.world.y].map(Math.round)).toEqual([before.x + 10, before.y - 30].map(Math.round));
+    // Written with two decimals of a cm (0.28pt), so compare within that, not by rounding to whole pt.
+    expect(Math.hypot(copy.world.x - (before.x + 10), copy.world.y - (before.y - 30))).toBeLessThan(0.3);
 
     const aligned = applyEditAction(source, handles, { kind: "alignElements", elementIds: ["path:0", "path:1"], mode: "top" });
     expect(aligned.kind).toBe("success");

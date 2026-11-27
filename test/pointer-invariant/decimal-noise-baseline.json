@@ -6,7 +6,7 @@
     },
     "alignElements": {
       "gross": 0,
-      "excessDigits": 108
+      "excessDigits": 112
     },
     "appendToPath": {
       "gross": 0,
@@ -14,7 +14,7 @@
     },
     "convertNodePositionToAbsolute": {
       "gross": 0,
-      "excessDigits": 8
+      "excessDigits": 6
     },
     "duplicateElements": {
       "gross": 0,
@@ -46,7 +46,7 @@
     },
     "moveHandle": {
       "gross": 1,
-      "excessDigits": 56
+      "excessDigits": 53
     },
     "movePathAttachedNode": {
       "gross": 0,
@@ -62,7 +62,7 @@
     },
     "positionNodeRelativeTo": {
       "gross": 0,
-      "excessDigits": 4
+      "excessDigits": 3
     },
     "repeatElements": {
       "gross": 1,

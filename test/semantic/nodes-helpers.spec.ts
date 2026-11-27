@@ -358,8 +358,10 @@ describe("semantic node helper coverage", () => {
       undefined,
       { ...style, fontSize: 20 }
     );
+    // inner sep .3333em is the ambient font's em, not the node font's
+    // (LuaLaTeX: \node[font=\Huge]{x} has inner sep 3.333pt; pgfplots behaviour K1).
     expect(largeFont.naturalWidth - largeFont.textBlockWidth)
-      .toBeCloseTo(2 * 0.3333 * 20, 6);
+      .toBeCloseTo(2 * 0.3333 * 10, 6);
     const circle = adjustNodeLayoutForShape(wrapped, "circle");
     const ellipse = adjustNodeLayoutForShape(wrapped, "ellipse");
     expect(circle.visualWidth).toBeCloseTo(circle.visualHeight);

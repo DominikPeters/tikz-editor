@@ -22,6 +22,7 @@ import {
   type TextSourceRange
 } from "../../text/source-map.js";
 import { parseLength } from "../coords/parse-length.js";
+import { DEFAULT_TEXT_FONT_SIZE } from "../style/constants.js";
 import type { ResolvedStyle } from "../types.js";
 import type { NodeLayout, NodeShape } from "./types.js";
 import { normalizeOptionValue } from "./utils.js";
@@ -54,8 +55,10 @@ export function resolveNodeLayout(
   const fontSize = style.fontSize;
   const charWidth = fontSize * 0.7;
   const lineHeight = fontSize * 1.05;
+  // `font=` acts inside the node's text box only (\tikz@textfont), so `em` in
+  // inner sep and friends is the ambient font's, not the node font's.
   const parseNodeLength = (raw: string): number | null =>
-    parseLength(raw, "pt", { unitFactors: { em: style.fontContext?.fontSize ?? fontSize } });
+    parseLength(raw, "pt", { unitFactors: { em: style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE } });
 
   const defaultInner = requireDefined(parseNodeLength(".3333em"), "Expected an internal layout value");
   let innerXSep = defaultInner;
@@ -212,7 +215,9 @@ export function resolveNodeLayout(
     textNaturalWidth = measuredText.width;
     textNaturalHeight = measuredText.height;
     baseLineY = measuredText.baselineY;
-    midLineY = measuredText.midLineY;
+    // PGF's `mid` anchor is the baseline raised by .5ex, evaluated outside the
+    // text box (pgfmoduleshapes.code.tex), i.e. in the ambient font (cmr10: ex = 0.430554 em).
+    midLineY = measuredText.baselineY + 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
     textRenderInfo = {
       mode: "tex",
       cacheKey: measuredText.cacheKey,

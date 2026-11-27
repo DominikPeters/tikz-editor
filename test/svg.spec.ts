@@ -817,7 +817,7 @@ describe("svg emitter", () => {
     const emitted = emitSvg(semantic.scene);
 
     expect(emitted.svg).toContain('font-style="italic"');
-    expect(emitted.svg).toContain('font-size="9.9626"');
+    expect(emitted.svg).toContain('font-size="10"');
     expect(emitted.svg).toMatch(/<text[^>]*transform="matrix\(3 0 0 3 /);
   });
 
@@ -940,8 +940,8 @@ describe("svg emitter", () => {
     const semantic = evaluateTikzFigure(parsed.figure, source);
     const emitted = emitSvg(semantic.scene);
 
-    expect(emitted.svg).toContain('font-size="7.9701"');
-    expect(emitted.svg).toContain('font-size="14.3462"');
+    expect(emitted.svg).toContain('font-size="8"');
+    expect(emitted.svg).toContain('font-size="14.4"');
     expect(emitted.svg).toContain('font-style="italic"');
   });
 

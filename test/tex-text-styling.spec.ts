@@ -46,7 +46,7 @@ describe("native TeX text styling", () => {
     const tokens = simpleTexInlineNodesToTokens(ir.nodes as readonly SimpleTexInlineNode[]);
     const text = tokens.filter((token) => token.kind === "text");
     expect(text[0]?.fontState.sizePt).toBeUndefined();
-    expect(text[1]?.fontState.sizePt).toBeCloseTo(9.96264 * 0.9, 5);
+    expect(text[1]?.fontState.sizePt).toBeCloseTo(10 * 0.9, 5);
     expect(text[2]?.fontState.sizePt).toBeUndefined();
     expect(text[3]?.fontState.sizePt).toBeCloseTo(7, 5);
   });
@@ -127,7 +127,7 @@ describe("native TeX text styling", () => {
   it("only promotes a leading size declaration to the node style", () => {
     expect(normalizeNodeTextFontSize(String.raw`{\small lead {\Large nested}}`, 10)).toEqual({
       text: String.raw`{\small lead {\Large nested}}`,
-      fontSizePt: 9.96264 * 0.9,
+      fontSizePt: 10 * 0.9,
     });
     expect(normalizeNodeTextFontSize(String.raw`lead {\small nested}`, 10)).toEqual({
       text: "lead {\\small nested}",

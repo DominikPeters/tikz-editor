@@ -2202,7 +2202,7 @@ describe("semantic evaluator / nodes and shapes", () => {
       if (center?.kind === "Text" && base?.kind === "Text" && mid?.kind === "Text") {
         expect(base.position.y).toBeGreaterThan(mid.position.y);
         expect(mid.position.y).toBeGreaterThan(center.position.y);
-        expect(base.style.fontSize).toBeCloseTo(9.96264, 3);
+        expect(base.style.fontSize).toBeCloseTo(10, 3);
         expectLinearTransform(base.transform, { a: 3, b: 0, c: 0, d: 3 });
       }
     });

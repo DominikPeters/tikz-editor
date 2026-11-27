@@ -129,10 +129,10 @@ export function dashStylePresetFromStyle(dashArray: number[] | null, lineWidth: 
   if (closeEnough(first, 3) && closeEnough(second, 3)) {
     return "dashed";
   }
-  if (closeEnough(first, 4) && closeEnough(second, 2)) {
+  if (closeEnough(first, 3) && closeEnough(second, 2)) {
     return "densely dashed";
   }
-  if (closeEnough(first, 6) && closeEnough(second, 4)) {
+  if (closeEnough(first, 3) && closeEnough(second, 6)) {
     return "loosely dashed";
   }
   if (closeEnough(first, lineWidth) && closeEnough(second, 2)) {

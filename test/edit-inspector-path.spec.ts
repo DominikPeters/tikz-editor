@@ -1128,8 +1128,8 @@ describe("getInspectorDescriptor – path controls", () => {
     expect(dashStylePresetFromStyle(null, 1)).toBe("solid");
     expect(dashStylePresetFromStyle([], 1)).toBe("solid");
     expect(dashStylePresetFromStyle([3, 3], 1)).toBe("dashed");
-    expect(dashStylePresetFromStyle([4, 2], 1)).toBe("densely dashed");
-    expect(dashStylePresetFromStyle([6, 4], 1)).toBe("loosely dashed");
+    expect(dashStylePresetFromStyle([3, 2], 1)).toBe("densely dashed");
+    expect(dashStylePresetFromStyle([3, 6], 1)).toBe("loosely dashed");
     expect(dashStylePresetFromStyle([1, 2], 1)).toBe("dotted");
     expect(dashStylePresetFromStyle([1, 1], 1)).toBe("densely dotted");
     expect(dashStylePresetFromStyle([1, 4], 1)).toBe("loosely dotted");

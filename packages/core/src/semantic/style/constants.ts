@@ -424,7 +424,7 @@ export const NON_STYLE_OPTION_FLAGS = new Set([
 ]);
 
 export { PT_PER_CM };
-export const DEFAULT_TEXT_FONT_SIZE = 9.96264;
+export const DEFAULT_TEXT_FONT_SIZE = 10;
 export const FONT_SIZE_COMMAND_FACTORS: Record<string, number> = {
   "\\tiny": 0.5,
   "\\scriptsize": 0.7,
