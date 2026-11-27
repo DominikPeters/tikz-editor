@@ -10,7 +10,7 @@
  * transforms); text boxes from the node geometry the evaluator probed (axis
  * labels) or from the text element and the engine's metrics.
  */
-import { renderTikzToSvgAsync } from "../../packages/core/src/render/index.js";
+import { renderTikzToSvgAsync, type RenderTikzOptions } from "../../packages/core/src/render/index.js";
 import { renderPathWithArrows } from "../../packages/core/src/svg/arrows/render.js";
 import { getAxisEvaluations, type AxisEvaluation } from "../../packages/core/src/pgfplots/evaluate-axis.js";
 import { normalizeColor } from "../../packages/core/src/semantic/style/colors.js";
@@ -40,9 +40,17 @@ export type AdaptedPicture = {
 
 /** Renders a fixture body with the editor and converts the result. */
 export async function renderObservedPicture(body: string): Promise<AdaptedPicture> {
+  return renderObservedSource(ORACLE_PREAMBLE + body);
+}
+
+/**
+ * Renders a complete source (a whole document, as in the corpus) with the
+ * editor and converts the result. `options` are passed to the renderer
+ * (e.g. a graphics resolver for table files).
+ */
+export async function renderObservedSource(source: string, options: Omit<RenderTikzOptions, "textEngine" | "parse"> = {}): Promise<AdaptedPicture> {
   const textEngine = await engine();
-  const source = ORACLE_PREAMBLE + body;
-  const result = await renderTikzToSvgAsync(source, { textEngine, parse: { includeContextDefinitions: true } });
+  const result = await renderTikzToSvgAsync(source, { ...options, textEngine, parse: { includeContextDefinitions: true } });
   const scene = result.semantic.scene;
   const axes = getAxisEvaluations(scene);
   const bounds = scene.bounds;
@@ -50,9 +58,12 @@ export async function renderObservedPicture(body: string): Promise<AdaptedPictur
   const texts = scene.elements.filter((element): element is SceneText => element.kind === "Text").map((element) => textGeometry(element, textEngine));
   const textByElement = new Map(texts.map((t) => [t.element, t]));
   const tier1: Tier1 = { boundingBox: bbox, axes: axes.map((axis, index) => adaptAxis(axis, index, texts)) };
-  const axisBoxes = axes.map((axis): Box => {
-    const corners = [[axis.layout.bbox.minX, axis.layout.bbox.minY], [axis.layout.bbox.maxX, axis.layout.bbox.maxY]].map(([x = 0, y = 0]) => applyMatrix(axis.frameTransform, { x, y } as never));
-    return { minX: Math.min(...corners.map((c) => c.x)), minY: Math.min(...corners.map((c) => c.y)), maxX: Math.max(...corners.map((c) => c.x)), maxY: Math.max(...corners.map((c) => c.y)) };
+  // Each axis is typeset as a box of its own (LuaTeX sees it at nesting 0), spanning its bounding box (F1),
+  // in the axis frame (a picture transformation acts on it as a canvas transformation, behaviour Z1).
+  const axisBoxes = axes.map((axis): TextBox => {
+    const m = axis.frameTransform;
+    const o = applyMatrix(m, { x: axis.layout.bbox.minX, y: axis.layout.bbox.minY } as never);
+    return { type: "textbox", tag: 0, nesting: 0, origin: { x: o.x, y: o.y }, xAxis: { x: m.a, y: m.b }, yAxis: { x: m.c, y: m.d }, width: axis.layout.bbox.maxX - axis.layout.bbox.minX, height: axis.layout.bbox.maxY - axis.layout.bbox.minY, depth: 0, glyphs: [], text: "" };
   });
   // Legends: the entry nodes are typeset inside the matrix node's text box (nesting 2), with the
   // box height/depth TikZ gives them (`text depth=0.15em`); the matrix box itself is a nesting-1 box.
@@ -61,12 +72,14 @@ export async function renderObservedPicture(body: string): Promise<AdaptedPictur
   for (const axis of axes) for (const record of axis.labels) {
     if (record.role === "legend" && record.textBox) {
       const tb = record.textBox;
-      const o = applyMatrix(axis.frameTransform, { x: tb.origin.x, y: tb.origin.y } as never);
-      legendBoxes.push({ type: "textbox", tag: 0, nesting: 1, origin: { x: o.x, y: o.y }, xAxis: { x: 1, y: 0 }, yAxis: { x: 0, y: 1 }, width: tb.width, height: tb.height, depth: tb.depth, glyphs: [], text: "" });
+      const m = axis.frameTransform;
+      const o = applyMatrix(m, { x: tb.origin.x, y: tb.origin.y } as never);
+      legendBoxes.push({ type: "textbox", tag: 0, nesting: 1, origin: { x: o.x, y: o.y }, xAxis: { x: m.a, y: m.b }, yAxis: { x: m.c, y: m.d }, width: tb.width, height: tb.height, depth: tb.depth, glyphs: [], text: "" });
     }
     if (record.role === "legend-entry" && record.probe) {
       const probe = record.probe;
-      const text = texts.find((t) => Math.hypot(t.origin.x - probe.textOrigin.x, t.origin.y - probe.textOrigin.y) < 1e-6);
+      const origin = canvasPoint(axis, probe.textOrigin);
+      const text = texts.find((t) => Math.hypot(t.origin.x - origin.x, t.origin.y - origin.y) < 1e-6);
       if (text) boxOverrides.set(text.element, { nesting: 2, height: probe.textHeight, depth: probe.textDepth });
     }
   }
@@ -91,13 +104,17 @@ type TextGeometry = {
   text: string;
 };
 
-const CMSY: Record<number, string> = { 0: "−", 1: "·", 2: "×", 3: "∗", 6: "±", 20: "≤", 21: "≥", 33: "→", 48: "′", 49: "∞", 106: "|" };
+const CMSY: Record<number, string> = { 0: "−", 1: "·", 2: "×", 3: "∗", 6: "±", 20: "≤", 21: "≥", 33: "→", 48: "′", 49: "∞", 106: "|", 107: "∥" };
 const CMMI_EXTRA: Record<number, string> = { 58: ".", 59: ",", 60: "<", 61: "/", 62: ">" };
+// Greek slots of cmmi (11-39) and cmr (0-10), as the PDF's ToUnicode maps them (compared after NFKC).
+const CMMI_GREEK = "αβγδϵζηθικλμνξπρστυϕχψωεϑϖϱςφ";
+const CMR_GREEK = "ΓΔΘΛΞΠΣΥΦΨΩ";
 
 function unicodeOf(font: string, code: number): string {
   if (font.startsWith("lm")) return String.fromCodePoint(code).normalize("NFKC");
   if (font.startsWith("cmsy")) return CMSY[code] ?? "\uFFFD";
-  if (font.startsWith("cmmi")) return CMMI_EXTRA[code] ?? (code >= 65 && code <= 122 ? String.fromCharCode(code) : "\uFFFD");
+  if (font.startsWith("cmmi")) return (CMMI_EXTRA[code] ?? (code >= 11 && code <= 39 ? [...CMMI_GREEK][code - 11] : undefined) ?? (code >= 65 && code <= 122 ? String.fromCharCode(code) : "\uFFFD")).normalize("NFKC");
+  if (font.startsWith("cmr") && code <= 10) return [...CMR_GREEK][code] ?? "\uFFFD";
   if (code >= 32 && code < 127) return String.fromCharCode(code);
   return "\uFFFD";
 }
@@ -165,15 +182,18 @@ function textGeometry(element: SceneText, textEngine: NodeTextEngine): TextGeome
   }
   const height = blockHeight / 2 - baselineY;
   const depth = blockHeight - height;
-  const linear = element.transform ? { a: element.transform.a, b: element.transform.b, c: element.transform.c, d: element.transform.d }
-    : element.rotation ? (() => { const r = (element.rotation * Math.PI) / 180; return { a: Math.cos(r), b: Math.sin(r), c: -Math.sin(r), d: Math.cos(r) }; })()
-      : { a: 1, b: 0, c: 0, d: 1 };
-  const center = element.position;
+  const rot = element.rotation ? (() => { const r = (element.rotation * Math.PI) / 180; return { a: Math.cos(r), b: Math.sin(r), c: -Math.sin(r), d: Math.cos(r) }; })() : { a: 1, b: 0, c: 0, d: 1 };
+  const m = element.transform ?? { a: 1, b: 0, c: 0, d: 1 };
+  // The node's rotation, then its transform.
+  const linear = { a: m.a * rot.a + m.c * rot.b, b: m.b * rot.a + m.d * rot.b, c: m.a * rot.c + m.c * rot.d, d: m.b * rot.c + m.d * rot.d };
+  // A text element's transform maps the positioned node (TikZ `transform shape`, or an axis' canvas transformation).
+  const center = element.transform ? applyMatrix(element.transform, element.position) : element.position;
   const toWorld = (lx: number, ly: number): Point => ({ x: center.x + linear.a * lx + linear.c * ly, y: center.y + linear.b * lx + linear.d * ly });
+  const glyphScale = Math.sqrt(Math.abs(linear.a * linear.d - linear.b * linear.c));
   // Payload: x from the block's left, y down from the block's top; the block is centred on the node.
   const glyphs = glyphsLocal.map((g): GlyphPosition => {
     const w = toWorld(g.x - width / 2, blockHeight / 2 - g.y);
-    return { unicode: unicodeOf(g.font, g.code), x: w.x, y: w.y, font: pdfFontName(g.font), size: g.size, math: g.math };
+    return { unicode: unicodeOf(g.font, g.code), x: w.x, y: w.y, font: pdfFontName(g.font), size: g.size * glyphScale, math: g.math };
   });
   return {
     element,
@@ -187,6 +207,13 @@ function textGeometry(element: SceneText, textEngine: NodeTextEngine): TextGeome
 
 // ---------------------------------------------------------------------------
 // Tier 1
+
+/** A label probe point (untransformed axis frame) in the picture: through the axis' canvas transformation, if any (behaviour Z1). */
+function canvasPoint(axis: AxisEvaluation, q: { x: number; y: number }): Point {
+  if (!axis.canvas) return { x: q.x, y: q.y };
+  const r = applyMatrix(axis.canvas, { x: q.x, y: q.y } as never);
+  return { x: r.x, y: r.y };
+}
 
 const LABEL_ANCHORS = ["center", "north", "south", "east", "west", "north east", "north west", "south east", "south west", "base", "base west", "base east", "mid"];
 
@@ -203,8 +230,9 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     if (!record?.probe) return undefined;
     const probe = record.probe;
     const anchors: Record<string, Point> = {};
-    for (const name of LABEL_ANCHORS) { const a = probe.anchor(name); anchors[name] = { x: a.x, y: a.y }; }
-    const text = texts.find((t) => Math.hypot(t.origin.x - probe.textOrigin.x, t.origin.y - probe.textOrigin.y) < 1e-6)?.text;
+    for (const name of LABEL_ANCHORS) anchors[name] = canvasPoint(axis, probe.anchor(name));
+    const origin = canvasPoint(axis, probe.textOrigin);
+    const text = texts.find((t) => Math.hypot(t.origin.x - origin.x, t.origin.y - origin.y) < 1e-6)?.text;
     return { anchors, ...(text === undefined ? {} : { text }) };
   };
   const ticks = (letter: "x" | "y"): OracleTick[] => {
@@ -239,7 +267,7 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     if (record.role !== "legend-entry" || !record.probe || !record.cell) return [];
     const probe = record.probe;
     const anchors: Record<string, Point> = {};
-    for (const name of LABEL_ANCHORS) { const a = probe.anchor(name); anchors[name] = { x: a.x, y: a.y }; }
+    for (const name of LABEL_ANCHORS) anchors[name] = canvasPoint(axis, probe.anchor(name));
     return [{ row: record.cell.row, column: record.cell.column, node: { anchors } }];
   }).sort((a, b) => a.row - b.row || a.column - b.column);
   return {
@@ -266,6 +294,25 @@ function paintOf(color: string | null, alpha: number): Paint | undefined {
   if (!normalized.startsWith("#")) return { space: "DeviceRGB", components: [0, 0, 0], alpha };
   const rgb = hexToRgb(normalized);
   return { space: "DeviceRGB", components: [rgb.r / 255, rgb.g / 255, rgb.b / 255], alpha };
+}
+
+/** Maps segments through an element's transform (TikZ `transform shape` paths, an axis' canvas transformation). */
+function transformSegments(segments: PathSegment[], m: { a: number; b: number; c: number; d: number; e: number; f: number } | undefined): PathSegment[] {
+  if (!m) return segments;
+  const f = (x: number, y: number) => ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f });
+  return segments.map((s): PathSegment => {
+    if (s.op === "Z") return s;
+    if (s.op === "C") { const a = f(s.x1, s.y1); const b = f(s.x2, s.y2); const c = f(s.x, s.y); return { op: "C", x1: a.x, y1: a.y, x2: b.x, y2: b.y, x: c.x, y: c.y }; }
+    const q = f(s.x, s.y);
+    return { op: s.op, x: q.x, y: q.y };
+  });
+}
+
+/** Line widths and dashes scale with the transform's area factor (as a PDF `cm` scales them). */
+function scaledStroke(attrs: ReturnType<typeof strokeAttributes>, m: { a: number; b: number; c: number; d: number } | undefined): ReturnType<typeof strokeAttributes> {
+  if (!m) return attrs;
+  const k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+  return { ...attrs, lineWidth: (attrs.lineWidth ?? 0) * k, ...(attrs.dash ? { dash: { array: attrs.dash.array.map((v) => v * k), phase: attrs.dash.phase * k } } : {}) };
 }
 
 function commandsToSegments(commands: readonly ScenePathCommand[]): PathSegment[] {
@@ -363,13 +410,10 @@ function strokeAttributes(style: ResolvedStyle): Pick<PathPrimitive, "lineWidth"
   };
 }
 
-function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<SceneElement, TextGeometry>, axisBoxes: readonly Box[], axisClips: readonly SceneClipPath[], extraBoxes: readonly TextBox[] = [], boxOverrides: ReadonlyMap<SceneElement, { nesting: number; height: number; depth: number }> = new Map()): Tier2 {
+function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<SceneElement, TextGeometry>, axisBoxes: readonly TextBox[], axisClips: readonly SceneClipPath[], extraBoxes: readonly TextBox[] = [], boxOverrides: ReadonlyMap<SceneElement, { nesting: number; height: number; depth: number }> = new Map()): Tier2 {
   const primitives: Tier2Primitive[] = [];
   // Each axis is typeset as a box of its own (LuaTeX sees it at nesting 0), spanning its bounding box (F1).
-  const textBoxes: TextBox[] = axisBoxes.map((box, index): TextBox => ({
-    type: "textbox", tag: index + 1, nesting: 0, origin: { x: box.minX, y: box.minY }, xAxis: { x: 1, y: 0 }, yAxis: { x: 0, y: 1 },
-    width: box.maxX - box.minX, height: box.maxY - box.minY, depth: 0, glyphs: [], text: ""
-  }));
+  const textBoxes: TextBox[] = axisBoxes.map((box, index): TextBox => ({ ...box, tag: index + 1 }));
   let activeClips: readonly SceneClipPath[] = [];
   const seenClips = new Set<string>();
   let clipBox: Box | undefined;
@@ -394,26 +438,26 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
       // Arrow tips are built at SVG emission: the shaft is shortened and each
       // tip is its own painted path, as PGF paints them (stroke, then the tip).
       const rendered = renderPathWithArrows(element);
-      const shaft = commandsToSegments(rendered.shaftCommands);
+      const shaft = transformSegments(commandsToSegments(rendered.shaftCommands), element.transform);
       const stroke = element.style.stroke && element.style.stroke !== "none" ? paintOf(element.style.stroke, element.style.strokeOpacity) : undefined;
-      if (stroke && shaft.length > 0) primitives.push({ type: "path", order: order(), operation: "stroke", segments: shaft, paint: stroke, ...strokeAttributes(element.style), ...clipState });
+      if (stroke && shaft.length > 0) primitives.push({ type: "path", order: order(), operation: "stroke", segments: shaft, paint: stroke, ...scaledStroke(strokeAttributes(element.style), element.transform), ...clipState });
       for (const tip of rendered.tipPaths) {
-        const segments = commandsToSegments(tip.commands);
+        const segments = transformSegments(commandsToSegments(tip.commands), element.transform);
         const fill = tip.fill && tip.fill !== "none" ? paintOf(tip.fill, element.style.strokeOpacity) : undefined;
         const tipStroke = tip.stroke && tip.stroke !== "none" && tip.strokeWidth > 0 ? paintOf(tip.stroke, element.style.strokeOpacity) : undefined;
         if (fill) primitives.push({ type: "path", order: order(), operation: "fill", fillRule: "nonzero", segments, paint: fill, ...clipState });
-        if (tipStroke) primitives.push({ type: "path", order: order(), operation: "stroke", segments, paint: tipStroke, ...strokeAttributes({ ...element.style, lineWidth: tip.strokeWidth, lineCap: tip.lineCap, lineJoin: tip.lineJoin, dashArray: null }), ...clipState });
+        if (tipStroke) primitives.push({ type: "path", order: order(), operation: "stroke", segments, paint: tipStroke, ...scaledStroke(strokeAttributes({ ...element.style, lineWidth: tip.strokeWidth, lineCap: tip.lineCap, lineJoin: tip.lineJoin, dashArray: null }), element.transform), ...clipState });
       }
       continue;
     }
     if (element.kind === "Path" || element.kind === "Circle" || element.kind === "Ellipse") {
-      const segments = element.kind === "Path" ? commandsToSegments(element.commands)
+      const segments = element.kind === "Path" ? transformSegments(commandsToSegments(element.commands), element.transform)
         : ellipseSegments(element.center, element.kind === "Circle" ? element.radius : element.rx, element.kind === "Circle" ? element.radius : element.ry, element.kind === "Ellipse" ? element.rotation ?? 0 : 0, element.transform);
       if (segments.length === 0) continue;
       const fill = paintOf(element.style.fill, element.style.fillOpacity);
       const stroke = element.style.stroke && element.style.stroke !== "none" ? paintOf(element.style.stroke, element.style.strokeOpacity) : undefined;
       if (fill) primitives.push({ type: "path", order: order(), operation: "fill", fillRule: element.style.fillRule, segments, paint: fill, ...clipState });
-      if (stroke) primitives.push({ type: "path", order: order(), operation: "stroke", segments, paint: stroke, ...strokeAttributes(element.style), ...clipState });
+      if (stroke) primitives.push({ type: "path", order: order(), operation: "stroke", segments, paint: stroke, ...scaledStroke(strokeAttributes(element.style), element.transform), ...clipState });
     } else if (element.kind === "Text") {
       const geometry = texts.get(element);
       if (!geometry) continue;
