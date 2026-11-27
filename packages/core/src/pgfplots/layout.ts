@@ -16,7 +16,7 @@ export type Point = { x: number; y: number };
 export type Box = { minX: number; minY: number; maxX: number; maxY: number };
 export type Segment = { from: Point; to: Point };
 
-export type LabelRole = "xtick" | "ytick" | "xscale" | "yscale" | "xlabel" | "ylabel" | "title";
+export type LabelRole = "xtick" | "ytick" | "xscale" | "yscale" | "xlabel" | "ylabel" | "title" | "node near coord";
 
 export type LabelRequest = {
   role: LabelRole;

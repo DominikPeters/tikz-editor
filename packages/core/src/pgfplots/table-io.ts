@@ -4,7 +4,7 @@
  * through the document's resource resolver.
  */
 import type { PgfplotsTableReadStatement } from "../ast/types.js";
-import type { OptionEntry } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { readContextMacroBinding, writeContextMacroBinding, type SemanticContext } from "../semantic/context.js";
 import type { ReadTableMacro, TableFileRead } from "./data.js";
 import { stripBraces } from "./model.js";
@@ -17,9 +17,11 @@ const BINDING_PREFIX = "\\pgfplots table ";
  * with `row sep=\\`), otherwise a file name (manual pgfplotstable.tex,
  * `table/format`; E17 `pgfplotstableread*`).
  */
-export function recordPgfplotsTableRead(context: SemanticContext, statement: PgfplotsTableReadStatement): void {
+export function recordPgfplotsTableRead(context: SemanticContext, statement: PgfplotsTableReadStatement, settings: readonly OptionListAst[] = []): void {
   if (!statement.macroName) return;
-  const options = statement.options?.entries ?? [];
+  // The format keys in effect when the table is read (`\pgfplotstableset` before it), then its own options (V11).
+  const contextKeys = settings.flatMap((list) => list.entries).filter((entry) => entry.kind !== "unknown" && /^(?:\/pgfplots\/)?table\//u.test(entry.key.trim()));
+  const options = [...contextKeys, ...(statement.options?.entries ?? [])];
   let format = "auto";
   let backslashRows = false;
   for (const entry of options) {

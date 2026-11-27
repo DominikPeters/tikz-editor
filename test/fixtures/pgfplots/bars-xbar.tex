@@ -1,0 +1,9 @@
+% Three xbar plots with a 4pt gap, negative values from zero.
+% Behaviour U1-U4.
+\begin{tikzpicture}
+\begin{axis}[xbar=4pt, bar width=6pt]
+  \addplot coordinates {(2,1) (-1,2) (3,3)};
+  \addplot coordinates {(1,1) (2,2) (-2,3)};
+  \addplot coordinates {(3,1) (1,2) (2,3)};
+\end{axis}
+\end{tikzpicture}

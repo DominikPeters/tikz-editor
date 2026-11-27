@@ -55,7 +55,14 @@ Statement {
   PgfplotsSetStatement |
   UsePgfplotsLibraryStatement |
   PgfplotsTableReadStatement |
+  TexLengthStatement |
   UnknownStatement
+}
+
+// LaTeX length registers: `\newlength{\a}`, `\setlength{\a}{0.4\textwidth}`, `\addtolength`.
+TexLengthStatement {
+  NewLengthCmd (Group | CommandName) |
+  (SetLengthCmd | AddToLengthCmd) (Group | CommandName) Group
 }
 
 StyleDefinitionStatement {
@@ -1099,6 +1106,9 @@ TableKw { @specialize<Identifier, "table"> }
     DeclareMathOperatorCmd,
     PgfMathSetMacroCmd,
     PgfMathTruncateMacroCmd,
+    NewLengthCmd,
+    SetLengthCmd,
+    AddToLengthCmd,
     PgfMathParseCmd,
     PgfMathSetSeedCmd,
     EndTikz,
@@ -1183,6 +1193,9 @@ TableKw { @specialize<Identifier, "table"> }
   DeclareMathOperatorCmd { "\\DeclareMathOperator" }
   PgfMathSetMacroCmd { "\\pgfmathsetmacro" }
   PgfMathTruncateMacroCmd { "\\pgfmathtruncatemacro" }
+  NewLengthCmd { "\\newlength" }
+  SetLengthCmd { "\\setlength" }
+  AddToLengthCmd { "\\addtolength" }
   PgfMathParseCmd { "\\pgfmathparse" }
   PgfMathSetSeedCmd { "\\pgfmathsetseed" }
   PgfkeysCmd { "\\pgfkeys" }

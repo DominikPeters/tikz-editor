@@ -196,7 +196,9 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
       });
     }
   };
-  note(applyTableKeys(settings, io.tableKeys, false));
+  // A table read by \pgfplotstableread keeps the format it was read with; later format keys only select columns.
+  const macroSource = input.source.kind === "macro";
+  note(applyTableKeys(settings, macroSource ? io.tableKeys.filter((entry) => entry.kind !== "unknown" && /^(?:\/pgfplots\/)?table\/(?:x|y|meta)(?: |$)/u.test(entry.key.trim())) : io.tableKeys, false));
   let text: string;
   let offset: number;
   let inline: boolean;

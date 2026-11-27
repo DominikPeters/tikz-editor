@@ -51,6 +51,9 @@ import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayo
 import { computeLimits } from "./limits.js";
 import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { readPgfplotsTableFile, readPgfplotsTableMacro } from "./table-io.js";
+import { formatPgfNumber } from "../semantic/pgfmath/number-format.js";
+import { normalizeColor } from "../semantic/style/colors.js";
+import { barCorners, barGroups, barRects, stackPlots } from "./bars.js";
 import { documentClassLengths, scanLengthRegisters, substituteDocumentLengths, type DocumentLengthEnvironment } from "./document-lengths.js";
 import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
@@ -331,6 +334,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
   }
 
+  // U6: stacked plots carry their stacked values from here on (limits, drawing, marks).
+  const stacks = stackPlots(plots);
+  for (const [index, stacked] of stacks) {
+    const plot = plots[index];
+    if (plot) plot.points = stacked.points;
+  }
+  const groups = barGroups(plots.map((plot) => (plot.points ? plot.model : null)), model.bar?.sep, model.bar?.kind.endsWith("interval") ?? false);
+
   // Stage 3.
   const drawn = plots.flatMap((plot) => (plot.points && !plot.model.forget ? [plot.points] : plot.points ? [plot.points] : []));
   const limitsResult = computeLimits(model, drawn, boxSizeWithoutLimits(model));
@@ -410,7 +421,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     yscale: styleLists(model.styles, ["every tick label", "every y tick label", "every y tick scale label"]),
     xlabel: styleLists(model.styles, ["every axis label", "every axis x label"]),
     ylabel: styleLists(model.styles, ["every axis label", "every axis y label"]),
-    title: styleLists(model.styles, ["every axis title"])
+    title: styleLists(model.styles, ["every axis title"]),
+    "node near coord": []
   };
 
   // Plot styles (needed for marks in F1 and for emission).
@@ -438,6 +450,36 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
     return { style, primitives: primitives.flatMap((primitive) => (primitive.kind === "path" ? [primitive] : [])) };
   });
+
+  /**
+   * X3 - `nodes near coords`: a node per point, anchored `south` at the point
+   * (or at the bar's end, shifted with the bar) for vertical alignment, `west`
+   * for horizontal (xbar); `north`/`east` for negative values. The text is
+   * `$\pgfmathprintnumber{meta}$` (meta = y, x for xbar) or the symbolic meta
+   * as written, in the plot's colour, `every node near coord` applied
+   * (fixture bars-nodes-near).
+   */
+  const nodesNearCoords = (plotModel: PlotModel, points: readonly PlotPoint[], barTops: Point[] | null): SceneElement[] => {
+    const horizontal = plotModel.nodesNearCoordsAlign === "horizontal" || (plotModel.nodesNearCoordsAlign === "auto" && plotModel.bar?.kind.startsWith("x") === true);
+    const colorKeys = plotModel.pathKeys.filter((use) => use.key === "color" || (use.value === null && isColorName(use.key)));
+    const styles = [...(colorKeys.length > 0 ? [keyUsesToOptionList(colorKeys)] : []), ...(plotModel.nodeNearCoordKeys.length > 0 ? [keyUsesToOptionList(plotModel.nodeNearCoordKeys)] : [])];
+    const symbolic = plotModel.pointMeta === "explicit symbolic";
+    const out: SceneElement[] = [];
+    points.forEach((point, index) => {
+      if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+      const value = plotModel.bar?.kind.startsWith("x") ? point.x : point.y;
+      const metaValue = plotModel.pointMeta === "explicit" && point.meta !== undefined ? Number(point.meta) : value;
+      const meta = symbolic ? point.meta ?? "" : `$${formatPgfNumber(metaValue, numberFormat).tex}$`;
+      const template = plotModel.nodesNearCoords ?? "";
+      const text = template === "\\pgfmathprintnumber{\\pgfplotspointmeta}" ? meta : template.split("\\pgfplotspointmeta").join(symbolic ? meta : String(metaValue));
+      const at = barTops?.[index] ?? mapPoint(point.x, point.y);
+      const negative = value < 0;
+      const anchor = horizontal ? (negative ? "east" : "west") : (negative ? "north" : "south");
+      const request: LabelRequest = { role: "node near coord", text, styles, placement: `anchor=${anchor}`, at };
+      out.push(...evaluateLabel(request, at, true).elements);
+    });
+    return out;
+  };
 
   const insideBox = (q: Point, box: { x0: number; y0: number; x1: number; y1: number }) => {
     const eps = 1e-6 * Math.max(1, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0));
@@ -493,6 +535,18 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     return path;
   };
   const decorations: SceneElement[] = [];
+  // `axis background/.style={fill=white}`: the box, painted first (layer axis background, manual layers.tex).
+  const backgroundUses = flattenStyleEntries(styleLists(model.styles, ["axis background"]), model.styles);
+  if (backgroundUses.length > 0) {
+    const base: ResolvedStyle = { ...axisScope.style, stroke: null, fill: null, drawExplicit: false };
+    const background = resolveStyle(context, axisFrame, base, [keyUsesToOptionList(backgroundUses)], axis.id, axis.span).style;
+    if ((background.fill && background.fill !== "none") || (background.stroke && background.stroke !== "none")) {
+      decorations.push(axisPath("background", background, [
+        { kind: "M", to: toWorld({ x: x0, y: y0 }) }, { kind: "L", to: toWorld({ x: x1, y: y0 }) },
+        { kind: "L", to: toWorld({ x: x1, y: y1 }) }, { kind: "L", to: toWorld({ x: x0, y: y1 }) }, { kind: "Z" }
+      ]));
+    }
+  }
   const gridOrder: Array<["x" | "y", "minor" | "major"]> = [["x", "minor"], ["x", "major"], ["y", "minor"], ["y", "major"]];
   for (const [letter, kind] of gridOrder) {
     const segments = layout.grid[letter][kind];
@@ -545,6 +599,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   pushFrame(context, contentFrame);
   try {
     let plotIndex = 0;
+    let stackedContentIndex: number | null = null;
     for (const item of axis.body) {
       if (item.kind === "AddPlot") {
         const plot = plots[plotIndex];
@@ -553,7 +608,38 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
         plotIndex += 1;
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
-        if (!plot.model.onlyMarks) {
+        const bar = plot.model.bar;
+        let barTops: Point[] | null = null;
+        if (bar && !plot.model.onlyMarks) {
+          // U2: one path per plot, a closed rectangle per bar, filled and stroked as the plot style says.
+          const stack = stacks.get(plotIndex - 1);
+          const group = groups.get(plotIndex - 1);
+          const rects = barRects(plot.points, bar, {
+            mapX: (x) => mapPoint(x, 0).x, mapY: (y) => mapPoint(0, y).y,
+            unitX: layout.map.xUnit.x, unitY: layout.map.yUnit.y, limits: layout.limits
+          }, { ...(stack ? { base: stack.base } : {}), ...(group ? { group } : {}) });
+          barTops = rects.map((rect) => (rect.vertical ? { x: (rect.x0 + rect.x1) / 2, y: rect.y1 } : { x: rect.x1, y: (rect.y0 + rect.y1) / 2 }));
+          const commands: ScenePathCommand[] = rects.flatMap((rect): ScenePathCommand[] => {
+            const corners = barCorners(rect).map((corner) => toWorld(corner));
+            return [
+              { kind: "M", to: corners[0] ?? toWorld({ x: 0, y: 0 }) },
+              ...corners.slice(1).map((to): ScenePathCommand => ({ kind: "L", to })),
+              { kind: "Z" }
+            ];
+          });
+          if (commands.length > 0) {
+            const path = makePath(statement.id, "bars", style, axisFrame.styleChain, statement.span);
+            path.commands = commands;
+            path.clipChain = [...contentClip];
+            path.pictureSizeRelevant = false;
+            // U6: stacked plots are painted last plot first (E19 `stacked`).
+            if (plot.model.stack) {
+              const first: number = stackedContentIndex ?? content.length;
+              stackedContentIndex = first;
+              content.splice(first, 0, path);
+            } else content.push(path);
+          }
+        } else if (!plot.model.onlyMarks) {
           const commands: ScenePathCommand[] = [];
           let pen = false;
           for (const point of plot.points) {
@@ -590,6 +676,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
             n += 1;
           }
         }
+        if (plot.model.nodesNearCoords !== null) markElements.push(...nodesNearCoords(plot.model, plot.points, barTops));
         continue;
       }
       if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend" || item.kind === "PgfplotsExtra" || item.kind === "PgfplotsSet") continue;
@@ -645,6 +732,14 @@ function documentLengthEnvironment(context: SemanticContext, from: number): Docu
   const registers = scanLengthRegisters(context.source, from, lengths);
   const assumption = known.textwidth === undefined ? fromClass.assumption : undefined;
   return { lengths, registers, ...(assumption ? { assumption } : {}) };
+}
+
+function isColorName(name: string): boolean {
+  try {
+    return /^#[0-9a-f]{6}$/iu.test(normalizeColor(name));
+  } catch {
+    return false;
+  }
 }
 
 /** Body statements that only define macros: applied in body order, before the plots read their data. */

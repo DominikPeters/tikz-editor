@@ -202,6 +202,10 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
     return mapPgfplotsLibraryStatement(node, source, state);
   }
 
+  if (node.type.name === "TexLengthStatement") {
+    return mapUnknownStatement(node, source, allocateStatementIndex(state));
+  }
+
   if (node.type.name === "PgfplotsTableReadStatement") {
     return mapPgfplotsTableReadStatement(node, source, state);
   }

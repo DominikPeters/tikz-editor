@@ -91,7 +91,7 @@ import { evaluateTransformCoordinate } from "./coords/evaluate.js";
 import { parseLength } from "./coords/parse-length.js";
 import { evaluatePathStatement } from "./path/evaluate.js";
 import { recordPgfplotsTableRead } from "../pgfplots/table-io.js";
-import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
+import { evaluateAxisStatement, PGFPLOTS_SETTINGS_BINDING, readPgfplotsSettings, rememberAxisEvaluations } from "../pgfplots/evaluate-axis.js";
 import type { PlacementSegment } from "./path/types.js";
 import { tangentAtPlacementSegment, resolvePathAttachedNodeSloped } from "./path/path-attached.js";
 import { applyNameIntersectionsDirective, collectPathIntersectionDirectives, registerNamedPath } from "./path/intersections.js";
@@ -1454,7 +1454,7 @@ function evaluateStatement(
 
   if (statement.kind === "PgfplotsTableRead") {
     markFeature(featureUsage, "pgfplots_addplot_table", "supported");
-    recordPgfplotsTableRead(context, statement);
+    recordPgfplotsTableRead(context, statement, readPgfplotsSettings(context));
     return [];
   }
 
@@ -1486,6 +1486,12 @@ function evaluateStatement(
   if (
     applyStandaloneCommandStatement(statement.raw, context, diagnostics, statement.span, featureUsage)
   ) {
+    markFeature(featureUsage, "unknown_statement", "supported");
+    return [];
+  }
+
+  // Length registers: pgfplots axis options read them (pgfplots/document-lengths.ts); nothing to draw.
+  if (/^\\(?:newlength|setlength|addtolength)(?![A-Za-z@])/u.test(statement.raw)) {
     markFeature(featureUsage, "unknown_statement", "supported");
     return [];
   }
