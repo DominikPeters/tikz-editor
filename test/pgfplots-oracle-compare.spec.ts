@@ -28,7 +28,16 @@ const names = readdirSync(dir).filter((f) => f.endsWith(".tex")).map((f) => f.sl
 const TOLERANCES = { colour: 0.002 };
 
 const LM_OPTICAL = "text at 8/9pt: TeX uses LMRoman9/8 (own metrics); the editor's text engine has only lmroman10/12/17 and scales lmroman10";
+const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zero-width TeX box (\\pgfsys@hbox); the editor draws the mark as a path, with no box";
+const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
+  "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
+  "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
+  "symbolic-coords": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },
+  "symbolic-partial": {
+    tier1: { "tick-count": SYMBOLIC_TICK_PROBE },
+    tier2: { "textbox-text": "the labels at 1.5 and 2 (both `c`) overlap; the harness assigns both glyphs to one box (README: glyph-to-node assignment fails on overlapping labels); glyphs themselves match" }
+  },
   "legend-marks": {
     tier1: { "description-presence": "legends are not implemented (later phase); the evaluator warns" },
     tier2: { "path-missing": "legend box, images and marks", "glyph-missing": "legend entries", "textbox-missing": "legend entries" }

@@ -51,6 +51,8 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "bars-xbar": { tickPlacement: "the xbar style puts the y ticks outside (U5); labels shift by the tick length (D1)" },
   "bars-nodes-near": { tickPlacement: "the ybar style puts the x ticks outside (U5); labels shift by the tick length (D1)" },
   "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },
+  "symbolic-coords": { probes: "symbolic axes: map/rect probes off, tick probe replaced (harness)", map: "no map probe on a symbolic axis", tickPlacement: "no x tick probe", clip: "no rect probe" },
+  "symbolic-partial": { probes: "symbolic axes: map/rect probes off, tick probe replaced (harness)", map: "no map probe on a symbolic axis", tickPlacement: "no x tick probe", clip: "no rect probe" },
   "scope-shift": { singleAxis: "a path outside the axis grows the picture" },
   "two-axes": { singleAxis: "two axes" },
   "soa-at-anchor": { singleAxis: "a mark outside the axis grows the picture" },

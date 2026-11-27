@@ -37,6 +37,8 @@ export type PlotDataIo = {
   tableKeys: readonly OptionEntry[];
   readFile: (name: string) => TableFileRead;
   tableMacro: (name: string) => ReadTableMacro | null;
+  /** `symbolic x coords` / `symbolic y coords` of the axis (behaviour X1): a name reads as its position. */
+  symbolic?: { x?: readonly string[]; y?: readonly string[] };
 };
 
 export type PlotData =
@@ -59,7 +61,7 @@ export function collectPlotData(statement: AddPlotStatement, plot: PlotModel, so
   const input = statement.input;
   if (statement.dimension === 3) return { kind: "unsupported", reason: "\\addplot3 (3D plots)", span: statement.commandSpan };
   let raw: PlotData;
-  if (input.kind === "coordinates") raw = collectCoordinates(statement, expand);
+  if (input.kind === "coordinates") raw = collectCoordinates(statement, expand, io.symbolic ?? {});
   else if (input.kind === "table") raw = collectTable(input, source, plot, io, expand);
   else if (input.kind === "expression") raw = sampleExpression(expand(input.expression), plot, input.expressionSpan);
   else if (input.kind === "parametric") return { kind: "unsupported", reason: "parametric expression plots", span: input.span };
@@ -73,7 +75,14 @@ export function collectPlotData(statement: AddPlotStatement, plot: PlotModel, so
   return { ...raw, points: normalizeUnbounded(raw.points, plot.unboundedCoords) };
 }
 
-function collectCoordinates(statement: AddPlotStatement, expand: (text: string) => string): PlotData {
+/** X1: a symbolic coordinate is its position in the list; a name not in it is a TeX error. */
+function symbolicIndex(raw: string, names: readonly string[] | undefined): number | null {
+  if (!names) return null;
+  const at = names.indexOf(raw.trim().replace(/^\{([\s\S]*)\}$/u, "$1").trim());
+  return at >= 0 ? at : null;
+}
+
+function collectCoordinates(statement: AddPlotStatement, expand: (text: string) => string, symbolic: NonNullable<PlotDataIo["symbolic"]>): PlotData {
   const input = statement.input;
   if (input.kind !== "coordinates") throw new Error("coordinates expected");
   const points: PlotPoint[] = [];
@@ -82,10 +91,11 @@ function collectCoordinates(statement: AddPlotStatement, expand: (text: string) 
     if (!xRaw || !yRaw || point.components.length > 2) {
       return { kind: "unsupported", reason: "coordinates other than (x,y)", span: point.span };
     }
-    const x = readCoordinateNumber(expand(xRaw.raw));
-    const y = readCoordinateNumber(expand(yRaw.raw));
+    const x = symbolic.x ? symbolicIndex(expand(xRaw.raw), symbolic.x) : readCoordinateNumber(expand(xRaw.raw));
+    const y = symbolic.y ? symbolicIndex(expand(yRaw.raw), symbolic.y) : readCoordinateNumber(expand(yRaw.raw));
     if (x === null || y === null) {
-      return { kind: "unsupported", reason: `non-numeric coordinate \`(${xRaw.raw},${yRaw.raw})\` (symbolic coordinates)`, span: point.span };
+      const missing = (symbolic.x && x === null) || (symbolic.y && y === null);
+      return { kind: "unsupported", reason: missing ? `coordinate \`(${xRaw.raw},${yRaw.raw})\` outside the symbolic coordinate list (TeX stops: "the input coordinate has not been defined")` : `non-numeric coordinate \`(${xRaw.raw},${yRaw.raw})\` (symbolic coordinates without \`symbolic x coords\`)`, span: point.span };
     }
     const entry: PlotPoint = { x, y, jump: point.afterEmptyLine };
     if (point.meta) entry.meta = point.meta.raw;
@@ -267,6 +277,8 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
     if (typeof column !== "number") return `the table has no column \`${column.missing}\``;
     return (cells) => cells[column] ?? Number.NaN;
   };
+  const xColumn = settings.x.expr === undefined ? resolveColumn(settings.x, names) : null;
+  const yColumn = settings.y.expr === undefined ? resolveColumn(settings.y, names) : null;
   const getX = getter("x", settings.x);
   const getY = getter("y", settings.y);
   if (typeof getX === "string") return { kind: "unsupported", reason: getX, span: input.span };
@@ -294,6 +306,8 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
     }
     previous = cells;
     const point: PlotPoint = { x: getX(cells, coordindex, row.lineno), y: getY(cells, coordindex, row.lineno), jump: row.afterEmptyLine };
+    if (io.symbolic?.x && typeof xColumn === "number") point.x = symbolicIndex(row.cells[xColumn] ?? "", io.symbolic.x) ?? Number.NaN;
+    if (io.symbolic?.y && typeof yColumn === "number") point.y = symbolicIndex(row.cells[yColumn] ?? "", io.symbolic.y) ?? Number.NaN;
     if (typeof metaColumn === "number") {
       const meta = row.cells[metaColumn];
       if (meta !== undefined) point.meta = meta;

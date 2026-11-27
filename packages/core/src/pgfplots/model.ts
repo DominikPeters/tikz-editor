@@ -56,6 +56,26 @@ export type AxisDirectionModel = {
   tryMinTicks: number;
   /** `x=<length>`: the unit vector length (behaviour A3). */
   unit?: number;
+  /** `symbolic x coords={a,b,c}`: the names, mapped to 0, 1, 2 (behaviour X1). */
+  symbolic?: string[];
+};
+
+/** One direction of `error bars/…` (manual errorbars.tex, behaviour X2). */
+export type ErrorBarDirection = {
+  dir: "none" | "plus" | "minus" | "both";
+  mode: "explicit" | "explicit relative" | "fixed" | "fixed relative";
+  value: number;
+};
+
+export type ErrorBarsModel = {
+  x: ErrorBarDirection;
+  y: ErrorBarDirection;
+  /** `error mark` (initially `-`), null for `none`. */
+  mark: string | null;
+  /** `error mark options` (initially `rotate=90`), as written. */
+  markOptions: string;
+  /** `error bar style` keys, in order. */
+  barStyle: PgfplotsKeyUse[];
 };
 
 export type AxisModel = {
@@ -337,6 +357,10 @@ for (const kind of ["ybar", "xbar"] as const) {
     return true;
   });
 }
+// W3: `area style` = area cycle list, area legend, axis on top (manual 2dplots.tex). The
+// first entry of the area cycle list measured (E20 `closed-area-style`) equals the bar list's.
+defineAxisKey("area style", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; ctx.model.axisOnTop = true; return true; });
+defineAxisKey("area cycle list", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; return true; });
 defineAxisKey("bar cycle list", (ctx, v) => { if (v !== null) return false; ctx.model.cycleList = [...BAR_CYCLE_LIST]; return true; });
 defineAxisKey("bar shift auto", (ctx, v) => {
   const sep = v === null ? 2 : readLength(v);
@@ -360,6 +384,12 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`enlarge ${letter} limits`, (ctx, v) => { const e = readEnlarge(v); if (!e) return false; dir(ctx).enlarge = e; return true; });
   defineAxisKey(`${letter}tick`, (ctx, v) => { dir(ctx).ticks = readTickList(v); return true; });
   defineAxisKey(`minor ${letter}tick`, (ctx, v) => { dir(ctx).minorTicks = readTickList(v); return true; });
+  defineAxisKey(`symbolic ${letter} coords`, (ctx, v) => {
+    const names = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces).filter((name) => name.length > 0);
+    if (names.length === 0) return false;
+    dir(ctx).symbolic = names;
+    return true;
+  });
   defineAxisKey(`${letter}ticklabels`, (ctx, v) => { dir(ctx).tickLabels = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces); return true; });
   defineAxisKey(`${letter}tick distance`, (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; dir(ctx).tickDistance = n; return true; });
   defineAxisKey(`minor ${letter} tick num`, (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n < 0) return false; dir(ctx).minorTickNum = Math.round(n); return true; });
@@ -483,6 +513,10 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
       model.tableKeys.push(useToEntry(use));
       return;
     }
+    if (use.key.startsWith("error bars/")) {
+      model.plotDefaults.push(use);
+      return;
+    }
     if (use.key.startsWith("/pgf/number format/") || use.key.startsWith("/pgf/")) {
       model.tikzOptions.push(use);
       return;
@@ -562,6 +596,8 @@ export type PlotModel = {
   nodeNearCoordKeys: PgfplotsKeyUse[];
   /** `point meta` (`explicit symbolic`, `explicit`, `x`, `y`, …), when given. */
   pointMeta?: string;
+  /** `error bars/…` (X2); undefined when the plot sets none. */
+  errorBars?: ErrorBarsModel;
   unsupported: Array<{ key: string; span: Span }>;
   invalid: Array<{ key: string; value: string; span: Span }>;
 };
@@ -694,6 +730,39 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     }
     if (key === "every node near coord") return;
     if (key === "point meta") { plot.pointMeta = stripBraces(value ?? ""); return; }
+    // `error bars/.cd, y dir=both, y explicit`: the key names are unambiguous with or without the path.
+    const errorKey = key.replace(/^error bars\//u, "");
+    if (key === "error bars/.cd") return;
+    const errorDir = /^(x|y) (dir|explicit|explicit relative|fixed|fixed relative)$/u.exec(errorKey);
+    if (errorDir || errorKey === "error mark" || errorKey === "error mark options" || errorKey === "error bar style") {
+      plot.errorBars ??= {
+        x: { dir: "none", mode: "fixed", value: 0 }, y: { dir: "none", mode: "fixed", value: 0 },
+        mark: "-", markOptions: "rotate=90", barStyle: []
+      };
+      const bars = plot.errorBars;
+      if (errorDir) {
+        const d = bars[errorDir[1] === "x" ? "x" : "y"];
+        const what = errorDir[2] ?? "";
+        if (what === "dir") {
+          const v = stripBraces(value ?? "");
+          if (v === "none" || v === "plus" || v === "minus" || v === "both") d.dir = v;
+          else plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+        } else if (what === "explicit" || what === "explicit relative") d.mode = what;
+        else {
+          const n = value === null ? 0 : readPgfNumber(value);
+          if (n === null) plot.invalid.push({ key, value: value ?? "", span: use.origin.span });
+          else { d.mode = what === "fixed" ? "fixed" : "fixed relative"; d.value = n; }
+        }
+      } else if (errorKey === "error mark") {
+        const name = stripBraces(value ?? "");
+        bars.mark = name === "none" || name === "" ? null : name;
+      } else if (errorKey === "error mark options") bars.markOptions = stripBraces(value ?? "");
+      else if (value !== null) {
+        const list = parseOptionListRaw(`[${stripBraces(value)}]`);
+        bars.barStyle.push(...flattenStyleEntries([list], styles));
+      }
+      return;
+    }
     if (key === "unbounded coords") {
       const mode = stripBraces(value ?? "");
       if (mode === "discard" || mode === "jump") plot.unboundedCoords = mode;
