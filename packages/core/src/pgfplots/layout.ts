@@ -202,6 +202,8 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
           : tickSegment({ x: at, y: mapY(v) }, { x: inward, y: 0 }, length, dir.tickAlign)));
       }
       if (!(kind === "major" ? dir.majorGrids : dir.minorGrids)) grid[axis][kind] = [];
+      // `xmajorticks=false` / `ticks=none` remove the tick lines only (T1).
+      if (!(kind === "major" ? dir.majorTickMarks : dir.minorTickMarks)) tickMarks[axis][kind] = [];
     }
   }
 
@@ -325,7 +327,7 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
       const yRight = model.y.axisLine === "upper";
       place({ role: "xlabel", text: model.x.label.text, styles: input.labelStyles.xlabel, placement: yRight ? "anchor=south west" : "anchor=south east",
         at: { x: yRight ? x0 : x1, y: originY } });
-    } else if (model.x.axisLine === "upper") {
+    } else if (xSide === "upper") {
       place({ role: "xlabel", text: model.x.label.text, styles: input.labelStyles.xlabel, placement: "anchor=south",
         at: { x: (x0 + x1) / 2, y: top + model.x.labelShift } });
     } else {
@@ -338,7 +340,7 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
       // Measured (R6): above origin, anchor north west, not rotated.
       place({ role: "ylabel", text: model.y.label.text, styles: input.labelStyles.ylabel, placement: "anchor=north west",
         at: { x: originX, y: y1 } });
-    } else if (model.y.axisLine === "upper") {
+    } else if (ySide === "upper") {
       place({ role: "ylabel", text: model.y.label.text, styles: input.labelStyles.ylabel, placement: "rotate=90,anchor=north",
         at: { x: right + model.y.labelShift, y: (y0 + y1) / 2 } });
     } else {

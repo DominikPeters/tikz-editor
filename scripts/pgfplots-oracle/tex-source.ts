@@ -99,11 +99,16 @@ function instrumentation(engine: OracleEngine): string {
 % log label of an axis with xmode=log) stays the document's. Not for the
 % scale label, which shares the style but has no tick (\ticknum = S).
 \def\pgfplotsoracle@S{S}
+% Extra tick labels get the major tick label style too (styles append), so
+% each extra-tick style sets a flag that silences the x (y) probe from then
+% on; extra ticks are typeset after the major ones.
+\def\pgfplotsoracle@one{1}
 \def\pgfplotsoracle@tick#1#2{%
   \edef\pgfplotsoracle@tn{\ticknum}%
+  \expandafter\ifx\csname pgfplotsoracle@extra@#2\endcsname\pgfplotsoracle@one\else
   \ifx\pgfplotsoracle@tn\pgfplotsoracle@S\else
   \pgfplotsoracle@rec{TICK|#1|#2|\ticknum|\tick}%
-  \xdef\pgfplotsoracle@ticklist{\pgfplotsoracle@ticklist,#2\ticknum}\fi}
+  \xdef\pgfplotsoracle@ticklist{\pgfplotsoracle@ticklist,#2\ticknum}\fi\fi}
 \def\pgfplotsoracle@readticks#1{\pgfutil@for\pgfplotsoracle@t:=\pgfplotsoracle@ticklist\do{%
   \ifx\pgfplotsoracle@t\pgfutil@empty\else
     \edef\pgfplotsoracle@tn{pgfplotsoracle-\pgfplotsoracle@case-#1-\pgfplotsoracle@t}%
@@ -120,15 +125,16 @@ function instrumentation(engine: OracleEngine): string {
   % The probe style refers to the current axis through this macro: a second
   % axis appends the same style again, so ids must not be baked into it.
   \gdef\pgfplotsoracle@axisid{#1}%
+  \gdef\pgfplotsoracle@extra@x{0}\gdef\pgfplotsoracle@extra@y{0}%
   \pgfplotsoracle@rec{AXIS|#1}%
   \pgfplotsoracle@rec{MODE|#1|#4|#5}%
   \ifpgfplotsoracle@ticks
     \pgfplotsset{every axis/.append style={%
       xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-x\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{x}}},
       yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-y\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{y}}}},
-      every extra x tick/.append style={%
+      every extra x tick/.append style={/utils/exec={\gdef\pgfplotsoracle@extra@x{1}},%
       xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-xe\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{xe}}}},
-      every extra y tick/.append style={%
+      every extra y tick/.append style={/utils/exec={\gdef\pgfplotsoracle@extra@y{1}},%
       yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-ye\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{ye}}}}}%
   \fi
   \ifpgfplotsoracle@descriptions

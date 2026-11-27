@@ -1,0 +1,6 @@
+% Rotated tick labels: rotate=90 anchor=east on x, rotate=45 on y; the xlabel follows the rotated boxes.
+\begin{tikzpicture}
+\begin{axis}[xticklabel style={rotate=90, anchor=east}, yticklabel style={rotate=45}, xlabel={Rotated}, ylabel={Also}, xmin=0, xmax=3000]
+  \addplot coordinates {(0,0) (1000,2) (3000,1)};
+\end{axis}
+\end{tikzpicture}

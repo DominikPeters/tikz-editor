@@ -316,6 +316,10 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     return extra && extra.length > 0 ? { ...result.ticks, extra } : result.ticks;
   };
   const ticks = { x: tickFor("x"), y: tickFor("y") };
+  // T1: `xmajorticks=false` / `ticks=none|minor` drop the major ticks with their labels.
+  for (const letter of ["x", "y"] as const) {
+    if (!model[letter].majorTickMarks) ticks[letter] = { ...ticks[letter], major: [] };
+  }
   // R1: a hidden direction (`axis x line=none`, `hide x axis`) has no ticks.
   for (const letter of ["x", "y"] as const) {
     if (model[letter].axisLine === "none") ticks[letter] = { ...ticks[letter], major: [], minor: [], extra: [] };
@@ -344,7 +348,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
       labelStatements.set(request, statement);
     }
     if (!statement) return { elements: [], probe: null };
-    const positioned = withLabelPosition(statement, at);
+    const shift = rotatedOffsets.get(labelKey(request));
+    const positioned = withLabelPosition(statement, shift ? { x: at.x + shift.x, y: at.y + shift.y } : at);
     const handleStart = context.editHandles.length;
     const diagnosticsStart = diagnostics.length;
     let probe: NodeGeometryProbe | null = null;
@@ -368,10 +373,24 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     }
     return { elements: elements.map((element) => attributeTo(element, axis.id, axis.span)), probe };
   };
+  // T4: a rotated tick label without its own anchor hangs by the edge of its
+  // rotated box's canvas bounding box (outer sep included) facing the axis.
+  const rotatedOffsets = new Map<string, Point>();
   const measure = (request: LabelRequest): LabelGeometry | null => {
     const { probe } = evaluateLabel(request, request.at, false);
     if (!probe) return null;
-    return probeGeometry(probe, toLocal);
+    const geometry = probeGeometry(probe, toLocal);
+    const side = /anchor=(north|south|east|west)$/u.exec(request.placement)?.[1];
+    if (!side || !isTickRole(request.role) || !rotatedWithoutAnchor(request, model)) return geometry;
+    const corners = ["north east", "north west", "south east", "south west"].map((name) => geometry.anchors[name] ?? request.at);
+    const xs = corners.map((q) => q.x); const ys = corners.map((q) => q.y);
+    // The node was placed by its centre (placement anchor=center): offset it so the facing bbox edge meets `at`.
+    const c = geometry.anchors.center ?? request.at;
+    const offset = side === "north" ? { x: 0, y: -(Math.max(...ys) - c.y) } : side === "south" ? { x: 0, y: c.y - Math.min(...ys) }
+      : side === "east" ? { x: -(Math.max(...xs) - c.x), y: 0 } : { x: c.x - Math.min(...xs), y: 0 };
+    rotatedOffsets.set(labelKey(request), offset);
+    const again = evaluateLabel(request, request.at, false).probe;
+    return again ? probeGeometry(again, toLocal) : geometry;
   };
 
   const labelStyles: Record<LabelRole, OptionListAst[]> = {
@@ -492,11 +511,14 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const style = elementStyle(tickStyleNames(letter, kind));
     decorations.push(axisPath(`ticks:${letter}:${kind}`, style, segmentsToCommands(segments, toWorld)));
   }
+  // Extra ticks are painted after all major tick labels: x marks, x labels, y marks, y labels (tick-extra).
+  const extraMarks: Record<"x" | "y", SceneElement[]> = { x: [], y: [] };
+  const extraLabels: Record<"x" | "y", SceneElement[]> = { x: [], y: [] };
   for (const letter of ["x", "y"] as const) {
     const segments = layout.extraTickMarks[letter];
     if (segments.length === 0) continue;
     const style = elementStyle([...tickStyleNames(letter, "major"), "every extra tick", `every extra ${letter} tick`]);
-    decorations.push(axisPath(`ticks:${letter}:extra`, style, segmentsToCommands(segments, toWorld)));
+    extraMarks[letter].push(axisPath(`ticks:${letter}:extra`, style, segmentsToCommands(segments, toWorld)));
   }
   // C2 / R2: the axis lines, each with its `every outer/inner x axis line` style (arrow tips included).
   let tipBounds: Box | null = null;
@@ -524,8 +546,10 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   for (const placed of layout.labels) {
     const { elements: labelElements, probe } = evaluateLabel(placed.request, placed.request.at, true);
     labelRecords.push({ role: placed.request.role, ...(placed.request.tickPosition === undefined ? {} : { tickPosition: placed.request.tickPosition }), probe, text: placed.request.text });
-    (placed.request.role === "xlabel" || placed.request.role === "ylabel" || placed.request.role === "title" ? descriptionElements : tickLabelElements).push(...labelElements);
+    const role = placed.request.role;
+    (role === "xlabel" || role === "ylabel" || role === "title" ? descriptionElements : role === "xextra" ? extraLabels.x : role === "yextra" ? extraLabels.y : tickLabelElements).push(...labelElements);
   }
+  tickLabelElements.push(...extraMarks.x, ...extraLabels.x, ...extraMarks.y, ...extraLabels.y);
 
   // Clip (C3) and the content under it: plots and embedded TikZ in source order.
   const clip: SceneClipPath = {
@@ -842,7 +866,8 @@ function attributeTo(element: SceneElement, sourceId: string, span: Span): Scene
 /** `\path node[<styles>,<placement>] at (0pt,0pt) {<text>};`, parsed once per label; ids and spans belong to the axis. */
 function buildLabelStatement(request: LabelRequest, model: AxisModel, axis: AxisStatement): PathStatement | null {
   const uses = flattenStyleEntries(request.styles, model.styles).filter((use) => !use.key.startsWith("/pgf/number format/"));
-  const options = [...uses.map((use) => (use.value === null ? use.key : `${use.key}=${use.value}`)), request.placement].filter((s) => s.length > 0).join(",");
+  // The placement is the style default (`anchor=near ticklabel`, `rotate=90` of the y label): the document's styles come after it and win (T4).
+  const options = [nearTicklabelPlacement(request, uses), ...uses.map((use) => (use.value === null ? use.key : `${use.key}=${use.value}`))].filter((s) => s.length > 0).join(",");
   const source = `\\begin{tikzpicture}\\path node[${options}] at (0pt,0pt) {${request.text}};\\end{tikzpicture}`;
   const parsed = parseTikz(source, { recover: true });
   const statement = parsed.figure.body.find((entry): entry is PathStatement => entry.kind === "Path");
@@ -850,6 +875,41 @@ function buildLabelStatement(request: LabelRequest, model: AxisModel, axis: Axis
   const id = `${axis.id}:label:${request.role}${request.tickPosition === undefined ? "" : `:${String(request.tickPosition)}`}`;
   const anchor = axis.beginSpan;
   return relabel(statement, id, anchor);
+}
+
+function labelKey(request: LabelRequest): string {
+  return `${request.role}:${String(request.tickPosition ?? "")}`;
+}
+
+function isTickRole(role: LabelRole): boolean {
+  return role === "xtick" || role === "ytick" || role === "xextra" || role === "yextra";
+}
+
+/** The label's styles rotate it and give no anchor of their own. */
+function rotatedWithoutAnchor(request: LabelRequest, model: AxisModel): boolean {
+  const uses = flattenStyleEntries(request.styles, model.styles);
+  let rotation = 0;
+  for (const use of uses) {
+    if (use.key === "anchor") return false;
+    if (use.key === "rotate" && use.value !== null) rotation += readPgfNumber(use.value) ?? 0;
+  }
+  return rotation % 360 !== 0;
+}
+
+/**
+ * `anchor=near ticklabel` for a rotated tick label without an anchor of its
+ * own (T4): placed by its centre, then offset in `measure` so that the edge
+ * of its rotated box's canvas bounding box faces the axis at the tick.
+ */
+function nearTicklabelPlacement(request: LabelRequest, uses: readonly PgfplotsKeyUse[]): string {
+  if (!isTickRole(request.role)) return request.placement;
+  let rotation = 0;
+  for (const use of uses) {
+    if (use.key === "anchor") return request.placement;
+    if (use.key === "rotate" && use.value !== null) rotation += readPgfNumber(use.value) ?? 0;
+  }
+  if (rotation % 360 === 0) return request.placement;
+  return request.placement.replace(/anchor=(north|south|east|west)\b/u, "anchor=center");
 }
 
 function relabel(statement: PathStatement, id: string, anchor: Span): PathStatement {

@@ -75,6 +75,9 @@ export type AxisDirectionModel = {
   axisLine: "box" | "lower" | "upper" | "middle" | "none";
   /** The unstarred key moves the axis label (R6); `axis x line*` does not. */
   axisLineMovesLabel: boolean;
+  /** `xmajorticks`, `xminorticks`, `ticks=` (manual tickoptions.tex, initially true): draw the tick marks. */
+  majorTickMarks: boolean;
+  minorTickMarks: boolean;
   /** `hide obscured x ticks` (initially true, R4). */
   hideObscuredTicks: boolean;
   /** `extra x ticks`, `extra x tick labels` (manual tickoptions.tex). */
@@ -215,6 +218,8 @@ function direction(): AxisDirectionModel {
     mode: "linear",
     logTicksFixedPoint: false,
     axisLine: "box",
+    majorTickMarks: true,
+    minorTickMarks: true,
     axisLineMovesLabel: false,
     hideObscuredTicks: true
   };
@@ -363,6 +368,8 @@ defineAxisKey("clip", (ctx, v) => { const b = readBoolean(v); if (b === null) re
 defineAxisKey("axis on top", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.axisOnTop = b; return true; });
 defineAxisKey("title", (ctx, v, use) => { ctx.model.title = { text: stripBraces(v ?? ""), span: use.origin.span }; return true; });
 defineAxisKey("every axis title shift", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.titleShift = n; return true; });
+defineAxisKey("tickwidth", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.majorTickLength = n; return true; });
+defineAxisKey("subtickwidth", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.minorTickLength = n; return true; });
 defineAxisKey("major tick length", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.majorTickLength = n; return true; });
 defineAxisKey("minor tick length", (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; ctx.model.minorTickLength = n; return true; });
 defineAxisKey("compat", () => true);
@@ -467,6 +474,19 @@ for (const starred of [false, true]) {
     return true;
   });
 }
+for (const letter of ["x", "y"] as const) {
+  defineAxisKey(`${letter}majorticks`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model[letter].majorTickMarks = b; return true; });
+  // Measured (T1): `yminorticks=false` left the minor ticks of `minor tick num` drawn; not understood, so diagnosed.
+  defineAxisKey(`${letter}minorticks`, (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (!b) ctx.model.unsupported.push({ key: `${letter}minorticks`, span: use.origin.span }); return true; });
+}
+defineAxisKey("ticks", (ctx, v) => {
+  const text = stripBraces(v ?? "");
+  const major = text === "major" || text === "both"; const minor = text === "minor" || text === "both";
+  if (!major && !minor && text !== "none") return false;
+  // Only the major part is measured (T1); `minor`/`none` leave minor ticks as they are.
+  for (const d of [ctx.model.x, ctx.model.y]) d.majorTickMarks = major;
+  return true;
+});
 defineAxisKey("hide axis", (ctx, v) => { const b = readBoolean(v); if (b === null) return false; if (b) { setAxisLine(ctx, "x", "none", true); setAxisLine(ctx, "y", "none", true); } return true; });
 // `separate axis lines` (initially false): only the closed-box default is implemented.
 defineAxisKey("separate axis lines", (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (b) ctx.model.unsupported.push({ key: "separate axis lines", span: use.origin.span }); return true; });

@@ -213,6 +213,21 @@ export function logTickLabel(dir: AxisDirectionModel, internal: number, format: 
   return `$${dir.logBasisText ?? "10"}^{${formatPgfNumber(exponent, format).tex}}$`;
 }
 
+/**
+ * `log identify minor tick positions=true`, set by the initial `every extra x
+ * tick` style (manual styleoptions.tex): a value m·10^k (m = 2…9) prints as
+ * `$m \cdot 10^{k}$` (log-extra-ticks).
+ */
+function identifiedLogLabel(dir: AxisDirectionModel, internal: number, format: PgfNumberFormat): string | null {
+  if (dir.logBasis !== undefined && dir.logBasis !== 10) return null;
+  const d = internal * displayFactor(dir);
+  const k = Math.floor(d + 1e-9);
+  const m = 10 ** (d - k);
+  const rounded = Math.round(m);
+  if (rounded < 2 || rounded > 9 || Math.abs(m - rounded) > 1e-6 * rounded) return null;
+  return `$${String(rounded)}\\cdot 10^{${formatPgfNumber(k, format).tex}}$`;
+}
+
 /** A tick list of a log direction as internal coordinates (values without a logarithm dropped), numbered in list order. */
 function logListValues(dir: AxisDirectionModel, spec: TickListSpec, data: readonly number[]): Array<{ value: number; index: number }> | null {
   if (spec.kind === "data") return [...new Set(data)].sort((a, b) => a - b).map((value, index) => ({ value, index }));
@@ -245,6 +260,19 @@ export function computeLogTicks(input: TickInput): TickResult {
     const values = logListValues(dir, spec, input.data);
     if (!values) return { kind: "invalid", what: "raw" in spec ? spec.raw : "data" };
     major = values.filter((t) => inside(t.value));
+    // A list one decade apart keeps the minor log ticks (manual: minor ticks need a uniform list,
+    // log(10) apart on log axes; log-extra-ticks).
+    const ds = values.map((t) => t.value * f);
+    const uniform = ds.length >= 2 && ds.every((d, i) => i === 0 || Math.abs(d - (ds[i - 1] ?? 0) - 1) < 1e-6);
+    if (uniform && (dir.logBasis === undefined || dir.logBasis === 10)) {
+      const slack = LOG_RANGE_SLACK * f;
+      for (let i = Math.floor(nudged(lo * f)); i < Math.floor(hi * f + slack + 0.5); i += 1) {
+        for (let m = 1; m <= 9; m += 1) {
+          const v = (i + Math.log10(m)) / f;
+          if (inside(v)) minor.push(v);
+        }
+      }
+    }
   } else if (dir.tickDistance !== undefined) {
     return { kind: "invalid", what: "xtick distance on a log axis" };
   } else {
@@ -313,7 +341,7 @@ export function computeExtraTicks(input: TickInput, scaleExponent: number): Tick
   const ticks = values.filter((t) => t.value >= lo - tol && t.value <= hi + tol).map((t): Tick => ({ value: t.value, index: t.index }));
   for (const tick of ticks) {
     if (dir.extraTickLabels) tick.label = dir.extraTickLabels[tick.index] ?? "";
-    else if (dir.mode === "log") tick.label = logTickLabel(dir, tick.value, format);
+    else if (dir.mode === "log") tick.label = identifiedLogLabel(dir, tick.value, format) ?? logTickLabel(dir, tick.value, format);
     else {
       const scaled = scaleExponent === 0 ? tick.value : Number((tick.value / 10 ** scaleExponent).toPrecision(15));
       tick.label = `$${formatPgfNumber(scaled, format).tex}$`;
