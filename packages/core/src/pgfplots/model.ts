@@ -121,6 +121,8 @@ export type AxisModel = {
   unitVectorRatio?: { x: number; y: number };
   /** `unit rescale keep size` (initially `unless limits declared`). */
   unitRescaleKeepSize: "true" | "false" | "unless limits declared";
+  /** Set by the evaluator when x/y `unit` came from the ratio, not from `x=`/`y=`. */
+  unitsFromRatio?: boolean;
   x: AxisDirectionModel;
   y: AxisDirectionModel;
   majorTickLength: number;

@@ -54,6 +54,8 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "axis-lines-hide": { probes: "hide axis: no ticks, so no tick probe", tickPlacement: "no ticks", clip: "no axis lines" },
   "log-bars-base": { singleAxis: "two axes", tickPlacement: "log labels print b^k (behaviour Q4)" },
   "tick-tiny-range": { tickPlacement: "labels are rounded to the default precision: \"1\" for 1.00005 (behaviour T5)" },
+  "axis-equal-log": { tickPlacement: "log labels print b^k (behaviour Q4)" },
+  "axis-equal-image-short": { tickPlacement: "a ratio-shortened direction keeps ticks past its limits (behaviour AA2)", probes: "those ticks' labels overlap: glyphs of neighbouring labels land in one text box (harness)" },
   "dir-reverse": { map: "reversed directions: (xmin, ymin) is the upper right corner (behaviour S1)" },
   "log-extra-ticks": { tickPlacement: "log labels print b^k (behaviour Q4)" },
   "tick-majorticks": { probes: "xmajorticks=false: no x tick labels, so no x tick probe (T1)" },

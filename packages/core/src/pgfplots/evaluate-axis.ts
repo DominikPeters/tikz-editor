@@ -409,6 +409,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     limits = widened;
     model.x = { ...model.x, unit: ratioScaling.unitX };
     model.y = { ...model.y, unit: ratioScaling.unitY };
+    model.unitsFromRatio = true;
   }
 
   // Stage 4 needs the box length (A2): computed by the layout's size model.
@@ -420,7 +421,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const tickInput = {
       dir: model[letter], lo: letter === "x" ? limits.xmin : limits.ymin, hi: letter === "x" ? limits.xmax : limits.ymax,
       length: letter === "x" ? size.width : size.height, data: dataTickValues(drawn, letter), numberFormat,
-      listBase: limitsResult.tickBase[letter]
+      listBase: limitsResult.tickBase[letter],
+      ...(ratioScaling?.shrunk[letter] ? { ratioShrunk: { keepStart: lowerLimitEnlarged(model[letter]) } } : {})
     };
     const result = model[letter].mode === "log" ? computeLogTicks(tickInput) : computeTicks(tickInput);
     const extra = result.kind === "ok" ? computeExtraTicks(tickInput, result.ticks.scaleExponent) : [];
@@ -1277,6 +1279,13 @@ function scaleMarkSegment(segment: PlotMarkSegment, f: number): PlotMarkSegment 
   return { ...segment, x: segment.x * f, y: segment.y * f };
 }
 
+/** The lower limit was moved by `enlargelimits` (not given, enlargement on that side). */
+function lowerLimitEnlarged(dir: AxisModel["x"]): boolean {
+  if (dir.min !== undefined) return false;
+  const spec = dir.enlarge;
+  return spec.kind === "auto" || (spec.lower && spec.value > 0);
+}
+
 function boxSizeOf(model: AxisModel, limits: { xmin: number; xmax: number; ymin: number; ymax: number }): { width: number; height: number } {
   const layoutSize = computeAxisLayoutSize(model, limits);
   return layoutSize;
@@ -1392,8 +1401,10 @@ function axisEditInfo(axisId: string, model: AxisModel, layout: AxisLayout, fram
       ...(model.height === undefined ? {} : { height: model.height }),
       scaleOnlyAxis: model.scaleOnlyAxis,
       scale: model.scale,
-      ...(model.x.unit === undefined ? {} : { xUnit: model.x.unit }),
-      ...(model.y.unit === undefined ? {} : { yUnit: model.y.unit })
+      // Units derived from a unit vector ratio are not authored: the box is
+      // still sized by width/height, which a resize rewrites (AA1).
+      ...(model.x.unit === undefined || model.unitsFromRatio ? {} : { xUnit: model.x.unit }),
+      ...(model.y.unit === undefined || model.unitsFromRatio ? {} : { yUnit: model.y.unit })
     },
     ...(legend?.bbox ? { legend: { bbox: { ...legend.bbox }, anchor: legend.anchor } } : {}),
     linear: model.x.mode !== "log" && model.y.mode !== "log",

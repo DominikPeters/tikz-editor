@@ -27,9 +27,14 @@ const names = readdirSync(dir).filter((f) => f.endsWith(".tex")).map((f) => f.sl
 
 const TOLERANCES = { colour: 0.002 };
 
+const OVERLAP_LABELS = "ticks past the limits of a ratio-shortened direction (behaviour AA2) have overlapping labels; the harness gives each text box glyphs of its neighbours (positions and glyphs match)";
 const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zero-width TeX box (\\pgfsys@hbox); the editor draws the mark as a path, with no box";
 const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
+  "axis-equal-image-short": {
+    tier1: { "tick-label-text": OVERLAP_LABELS },
+    tier2: { "textbox-text": OVERLAP_LABELS }
+  },
   "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "symbolic-coords": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },

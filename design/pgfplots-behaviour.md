@@ -1105,9 +1105,9 @@ limits, ticks, tick labels follow the map, descriptions stay where they
 are. CONFIRMED (fixture dir-reverse, both directions reversed, with an
 `axis cs` node; exact).
 
-Not done: `axis equal`, `axis equal image`, `unit vector ratio(*)`, `scale
-mode`, `unit rescale keep size`, H4 (`enlargelimits={abs=<dimen>}`)
-exactness.
+Done 2026-11-27: `axis equal`, `axis equal image`, `unit vector ratio(*)`,
+`unit rescale keep size` (section AA). Not done: `scale mode` other than
+its default, H4 (`enlargelimits={abs=<dimen>}`) exactness.
 
 ## T. Tick variants
 
@@ -1422,3 +1422,85 @@ point (bars: at the bar's end, with the bar's shift; `west` for xbar;
 explicit symbolic`), in the plot colour, `every node near coord` applied;
 painted after the plot. OBSERVED (E19 `nodes-near*`), fixture
 bars-nodes-near (glyphs 0.005 pt).
+
+---
+
+## AA. Axis equal and unit vector ratios (2026-11-27)
+
+Experiment E22: `e22-cases.ts` (random two-point data rectangles under nine
+ratio settings × fourteen extras: `enlargelimits=false|0.3`, `enlarge x
+limits=false`, explicit limits on one or both sides, `scale only axis`,
+`width`/`height`, `scale=0.8`, every 17th case loglog; seed 0 = discovery,
+160 cases; `E22_SEED=1` = fresh validation, 140 cases), checked with
+`check-cases.mts ./e22-cases.ts`; `e22-axis-equal.mts` prints limits and
+boxes; `e22-ticks.mts`, `e22-short.mts` probe AA2. Sources: manual
+scaling.tex (`axis equal`, `axis equal image`, `unit vector ratio`, `unit
+rescale keep size`, `scale mode`).
+
+**AA1 — Rule.** `axis equal` = `unit vector ratio=1 1 1, unit rescale keep
+size=true`; `axis equal image` = the same with `false`; `unit vector
+ratio*` implies `false`; the initial `unit rescale keep size` is `unless
+limits declared` (manual). With limits L after H1/H2 and the A2 box W×H
+(before `scale`), r = rx/ry:
+```
+s  = min(W / (r Δx), H / Δy)        e_x = r s,  e_y = s
+```
+The direction that already fits keeps its limits and box length. The
+other needs range length/e: if it may change its limits (`true`: always;
+`unless limits declared`: unless both its limits are given; `false`:
+never), its range grows to length/e — about the centre, or away from the
+one given limit (`xmin=` given: only xmax moves) — and the box keeps W×H;
+otherwise its box shrinks to Δ·e. `scale` multiplies the result (A4);
+`scale only axis` changes only W, H (A2). Log directions use the internal
+coordinate (ln). Found on the way: a degenerate (single-value) range on a
+log direction widens to [v − 1, v + 1] internally (a factor e each way),
+not ±20 % (H2 is for linear directions). VERIFIED: discovery 154
+non-empty cases (124 clean), fresh 135 (113 clean): every limit and box
+within the comparison's tolerances except the cases explained below; worst passing layout error
+0.047 pt on fixtures (tier-1 tolerance), paths ≤ 0.008 pt.
+
+Residuals (not this rule): the `right of origin` projection noise of A7a
+(0.050–0.056 pt, 8 + 6 cases); marks on a limit with `enlargelimits=false`
+extend the editor's bounding box by the mark (1.8 pt) where TeX's does not
+— the same without any ratio (E22 edge case `e62`), a separate OPEN item;
+`xmin=-1`/`ymin=0` on log axes (ignored with a diagnostic by the editor,
+TeX does something else; 4 + 1 cases); two loglog cases with tick
+marks 0.021–0.022 pt off (log noise, Q); axes whose every point lies outside
+given limits (TeX treats them as empty axes, H3/Surprise 10; excluded, 6 +
+5 cases).
+
+**AA2 — Ticks of a ratio-shortened direction.** When AA1 shortens a
+direction's box below a fifth of its A2 length (threshold between 0.193
+and 0.215 on the discovery sweep), TeX keeps automatic ticks that a
+normal axis with the same limits and length drops (E22c `e22-short`: the
+same limits and box without a ratio give the ordinary list): ticks up to
+half a step beyond the upper limit (included at ≤ 0.495 step, dropped at
+≥ 0.585 step), and, when the lower limit was enlarged (`enlargelimits`
+on that side, limit not given), every tick from the list start
+trunc(listBase/step) − 1, below the lower limit; with
+`enlargelimits=false` the lower side is filtered as usual. Their marks and
+labels are drawn outside the box and extend the bounding box. OBSERVED:
+discovery 56/57 shortened cases match (42 clean, 14 with harness or A7a
+noise only; before the rule 24 failed), fresh sweep 45/46. Misses:
+discovery `s0-155` (`ratio*` with all four limits given, a 1.8 pt taller
+TeX bounding box, not analysed) and fresh `s1-35`: x [2.965, 5.305] on 20 pt of 135) drops the
+tick 1.965 steps below the lower limit that the rule keeps — the lower
+reach is not exactly "from the list start" (included up to 1.91 steps
+below elsewhere). **OPEN** for that bound and for why the threshold is a
+fifth. Overlapping labels of these ticks confuse the harness' glyph-to-label
+assignment (`tick-label-text`, `textbox-text`; positions and glyphs match).
+
+Fixtures: axis-equal, axis-equal-image, axis-equal-declared (keep size
+true overrides all four declared limits), axis-equal-log,
+unit-vector-ratio-limits (one declared limit), unit-vector-ratio-star
+(`enlargelimits=0.3`, `scale=0.8`), axis-equal-image-short (AA2): both
+tiers pass at design tolerances (tier 1 ≤ 0.047 pt, paths ≤ 0.008 pt,
+glyphs ≤ 0.003 pt); axis-equal-image-short has KNOWN harness
+label-text entries only.
+
+Editing: the ratio's unit vectors are not reported as authored `x=`/`y=`,
+so resize writes `width`/`height` as for any axis. With keep size (`axis
+equal`, the default `unless limits declared`) the box follows the drag
+exactly; under `axis equal image`/`ratio*` the shortened direction's box
+stays Δ·e, so a drag of that edge changes the target but not the edge
+(the other direction follows).

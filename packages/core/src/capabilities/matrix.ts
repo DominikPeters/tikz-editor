@@ -872,7 +872,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["pgfplots_axis"],
-    notes: "`axis` (linear; log axes: pgfplots_log_axes): size model (width, height, scale only axis, unit vectors, scale), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on the oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name. Editing: move writes `at=`, resize writes `width`/`height` (inverse size model), inspector sections (size, limits, labels, grid, axis lines, modes, tick distance, legend position), insert templates (test/pgfplots-editing.spec.ts)."
+    notes: "`axis` (linear; log axes: pgfplots_log_axes): size model (width, height, scale only axis, unit vectors, scale, `axis equal`, `axis equal image`, `unit vector ratio(*)`, `unit rescale keep size`: behaviour AA), automatic and explicit limits with enlargement, axis box, clip, grids, tick marks, paint order, at/anchor and `name`/`current axis` anchors, checked against LuaLaTeX on the oracle fixtures (test/pgfplots-oracle-compare.spec.ts). The axis is one selectable object. Unsupported keys warn by name. Editing: move writes `at=`, resize writes `width`/`height` (inverse size model), inspector sections (size, limits, labels, grid, axis lines, modes, tick distance, legend position), insert templates (test/pgfplots-editing.spec.ts)."
   },
   pgfplots_ticks: {
     parser: "not-applicable",

@@ -1,0 +1,6 @@
+% axis equal on a loglog axis: ratios in the internal (ln) coordinate (behaviour AA1).
+\begin{tikzpicture}
+\begin{loglogaxis}[axis equal]
+  \addplot coordinates {(1,1) (100,10) (10000,50)};
+\end{loglogaxis}
+\end{tikzpicture}

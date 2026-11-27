@@ -90,6 +90,13 @@ export type TickInput = {
   numberFormat?: PgfNumberFormat;
   /** Where the automatic tick list starts counting (`\ticknum`); `lo` unless the range was degenerate (H2). */
   listBase?: number;
+  /**
+   * AA2: the direction's box was shortened by a unit vector ratio. TeX then
+   * keeps automatic ticks up to half a step beyond the upper limit and, when
+   * the lower limit was enlarged (`keepStart`), every tick from the list's
+   * start (one below trunc(listBase/step)), even below the lower limit.
+   */
+  ratioShrunk?: { keepStart: boolean };
 };
 
 export type TickResult = { kind: "ok"; ticks: DirectionTicks } | { kind: "invalid"; what: string };
@@ -125,9 +132,11 @@ export function computeTicks(input: TickInput): TickResult {
     if (tooMany(step)) return { kind: "invalid", what: "automatic ticks" };
     // \ticknum counts from the grid point one below trunc(lo/step) (measured on the fixtures).
     const start = Math.trunc(Math.round(((input.listBase ?? lo) / step) * 1e9) / 1e9) - 1;
-    for (let j = start; j * step <= hi + tol; j += 1) {
+    const shrunk = input.ratioShrunk;
+    const top = shrunk ? hi + step / 2 : hi + tol;
+    for (let j = start; j * step <= top; j += 1) {
       const value = cleanMultiple(j, step);
-      if (inside(value)) major.push({ value, index: j - start });
+      if (shrunk ? (shrunk.keepStart || value >= lo - tol) : inside(value)) major.push({ value, index: j - start });
     }
   }
 

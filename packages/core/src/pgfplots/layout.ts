@@ -126,7 +126,7 @@ export function boxSize(model: AxisModel, limits: AxisLimits): { width: number; 
  * range grows about its centre. Returns the unit vector lengths (pt per
  * internal unit, before `scale`) and the new limits.
  */
-export function applyUnitVectorRatio(model: AxisModel, limits: AxisLimits): { limits: AxisLimits; unitX: number; unitY: number } | null {
+export function applyUnitVectorRatio(model: AxisModel, limits: AxisLimits): { limits: AxisLimits; unitX: number; unitY: number; shrunk: { x: boolean; y: boolean } } | null {
   const ratio = model.unitVectorRatio;
   if (!ratio || model.x.unit !== undefined || model.y.unit !== undefined) return null;
   const base = boxSize({ ...model, scale: 1 }, limits);
@@ -157,7 +157,14 @@ export function applyUnitVectorRatio(model: AxisModel, limits: AxisLimits): { li
   };
   widen("x", base.width, unitX);
   widen("y", base.height, unitY);
-  return { limits: out, unitX, unitY };
+  // AA2: a direction shortened below a fifth of its A2 length (E22; the
+  // threshold lies between 0.193 and 0.215 on the discovery sweep).
+  const threshold = 0.2;
+  const shrunk = {
+    x: (out.xmax - out.xmin) * unitX < base.width * threshold,
+    y: (out.ymax - out.ymin) * unitY < base.height * threshold
+  };
+  return { limits: out, unitX, unitY, shrunk };
 }
 
 /** The box size when it does not depend on the limits (unit vectors not given), for enlargement by a dimension. */

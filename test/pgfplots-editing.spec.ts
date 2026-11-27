@@ -327,6 +327,20 @@ describe("pgfplots editing: log and reversed axes", () => {
     const resized = apply(source, { kind: "resizeElement", elementId: id, role: "right", newWorld: { x: i.bbox.maxX + 28.452756, y: 0 }, referenceBounds: i.bbox });
     expect(resized).toBe(source.replace("[x dir=reverse, width=8cm]", "[x dir=reverse, width=9cm, height=6.9cm]"));
   });
+
+  it("an axis equal axis resizes through width/height: its units come from the ratio, not from x=/y= (behaviour AA1)", () => {
+    const source = picture(String.raw`\begin{axis}[axis equal, width=8cm]
+\addplot coordinates {(0,0) (1,1)};
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const i = info(source, id);
+    expect(i.size.xUnit).toBeUndefined();
+    const resized = apply(source, { kind: "resizeElement", elementId: id, role: "right", newWorld: { x: i.bbox.maxX + 28.452756, y: 0 }, referenceBounds: i.bbox });
+    expect(resized).toBe(source.replace("[axis equal, width=8cm]", "[axis equal, width=9cm, height=6.9cm]"));
+    // `axis equal` keeps the box (limits widen), so the edge follows the drag.
+    const j = info(resized, id);
+    expect(j.box.x1 - j.box.x0).toBeCloseTo(i.box.x1 - i.box.x0 + 28.452756, 1);
+  });
 });
 
 describe("pgfplots editing: inserting and deleting data points", () => {

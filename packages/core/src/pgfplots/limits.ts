@@ -58,9 +58,12 @@ function enlarge(dir: AxisDirectionModel, a: number, b: number, boxLength: numbe
   return { lo: spec.lower ? lo0 - amount : lo0, hi: spec.upper ? hi0 + amount : hi0 };
 }
 
-function degenerate(lo: number, hi: number, spec: EnlargeSpec): { lo: number; hi: number } {
+function degenerate(lo: number, hi: number, spec: EnlargeSpec, mode: AxisDirectionModel["mode"]): { lo: number; hi: number } {
   if (lo !== hi) return { lo, hi };
   if (spec.kind === "abs") return { lo, hi };
+  // AA (E22 s0-56, s0-73): on a log direction a single value v widens to
+  // [v − 1, v + 1] in the internal coordinate (a factor e each way).
+  if (mode === "log") return { lo: lo - 1, hi: hi + 1 };
   // H2: ±20 % of |v|, or [−1, 1] at zero.
   if (lo === 0) return { lo: -1, hi: 1 };
   const d = 0.2 * Math.abs(lo);
@@ -79,7 +82,7 @@ export function computeLimits(model: AxisModel, plots: ReadonlyArray<readonly Pl
     // [0, 1], enlarged like data ([-0.1, 1.1] by default).
     const data = range ?? { min: 0, max: 1 };
     const enlarged = enlarge(dir, data.min, data.max, axis === "x" ? boxLengths.x : boxLengths.y);
-    const { lo, hi } = degenerate(enlarged.lo, enlarged.hi, dir.enlarge);
+    const { lo, hi } = degenerate(enlarged.lo, enlarged.hi, dir.enlarge, dir.mode);
     tickBase[axis] = enlarged.lo;
     if (lo > hi) return { kind: "inverted", axis, min: lo, max: hi };
     if (axis === "x") { result.xmin = lo; result.xmax = hi; } else { result.ymin = lo; result.ymax = hi; }

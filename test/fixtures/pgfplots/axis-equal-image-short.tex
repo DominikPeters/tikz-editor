@@ -1,0 +1,6 @@
+% axis equal image shortening x below a fifth of its length: ticks run past the limits as TeX draws them (behaviour AA2).
+\begin{tikzpicture}
+\begin{axis}[axis equal image]
+  \addplot coordinates {(0.1,-1) (1,11)};
+\end{axis}
+\end{tikzpicture}
