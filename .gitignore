@@ -142,6 +142,7 @@ dist
 .yarn/install-state.gz
 .pnp.*
 /pgf-docs
+/pgfplots-docs
 /artifacts
 /pgf-src
 /examples

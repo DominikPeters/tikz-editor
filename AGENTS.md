@@ -9,6 +9,7 @@ WYSIWYG TikZ editor with a parser -> semantic scene graph -> SVG pipeline.
 - `apps/desktop`: Tauri shell for `@tikz-editor/app`; local Tauri docs are in `tauri-docs/`.
 - `apps/landing`: landing/marketing site.
 - `pgf-docs`, `pgf-src`: untracked local PGF manual/source references for renderer behavior. Reference this frequently to make sure that app behavior conforms to PGF; do not guess about TikZ semantics.
+- `pgfplots-docs`: untracked copy of the pgfplots manual sources (documentation only). pgfplots is GPL, so its support here is implemented from the manual and from TeX output only; see `design/pgfplots.md`. Do not open pgfplots implementation source (`*.code.tex`, `pgfplots*.sty`, its Lua files) anywhere on disk, including the TeX Live tree, and do not dump its macro definitions through `\meaning`, `\show` or TeX tracing. Do not commit manual examples as fixtures. PGF source in `pgf-src` remains fair game, and so are tikz-cd, tcolorbox and circuitikz (LPPL).
 
 ## Core Pipeline
 - Parser: `packages/core/src/parser`
