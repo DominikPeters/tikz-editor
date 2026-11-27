@@ -194,13 +194,16 @@ export function applyFlagEntry(
     return { style: { ...style, dashArray: [3, 6] }, transform, diagnostics: [] };
   }
   if (key === "dotted") {
-    return { style: { ...style, dashArray: [style.lineWidth, 2] }, transform, diagnostics: [] };
+    const dashArray = [style.lineWidth, 2];
+    return { style: { ...style, dashArray, dashLineWidthSlots: { array: dashArray, slots: [0] } }, transform, diagnostics: [] };
   }
   if (key === "densely dotted") {
-    return { style: { ...style, dashArray: [style.lineWidth, 1] }, transform, diagnostics: [] };
+    const dashArray = [style.lineWidth, 1];
+    return { style: { ...style, dashArray, dashLineWidthSlots: { array: dashArray, slots: [0] } }, transform, diagnostics: [] };
   }
   if (key === "loosely dotted") {
-    return { style: { ...style, dashArray: [style.lineWidth, 4] }, transform, diagnostics: [] };
+    const dashArray = [style.lineWidth, 4];
+    return { style: { ...style, dashArray, dashLineWidthSlots: { array: dashArray, slots: [0] } }, transform, diagnostics: [] };
   }
   // tikz.code.tex: dash dot (dashdotted) = on 3pt off g on \pgflinewidth off g, dash dot dot adds one more
   // dot; densely g = 1pt, plain 2pt, loosely 4pt.
@@ -210,6 +213,7 @@ export function applyFlagEntry(
     const dots = /dot dot|dotdotted/u.test(key) ? 2 : 1;
     const dashArray = [3, gap];
     for (let i = 0; i < dots; i += 1) dashArray.push(style.lineWidth, gap);
+    // `\the\pgflinewidth`: expanded when the key is read (unlike `dotted`'s `\pgflinewidth`, behaviour Z4).
     return { style: { ...style, dashArray }, transform, diagnostics: [] };
   }
   if (NAMED_COLORS.has(key) || normalizedColorCandidate !== key) {

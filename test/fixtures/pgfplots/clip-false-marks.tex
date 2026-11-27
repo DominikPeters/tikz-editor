@@ -1,0 +1,7 @@
+% With clip=false, marks of points outside the axis box are drawn and count
+% for the bounding box (behaviour Z3).
+\begin{tikzpicture}
+\begin{axis}[clip=false, ymax=2, xmin=0.5]
+\addplot+[mark=triangle*] coordinates {(0,0) (1,1) (2,-0.5) (3,3.2)};
+\end{axis}
+\end{tikzpicture}

@@ -42,7 +42,10 @@ function axisOf(oracle: PgfplotsOracle): OracleAxis {
  * checks themselves stay strict; these fixtures are covered by the renderer
  * comparison (test/pgfplots-oracle-compare.spec.ts).
  */
-const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip", string>>> = {
+const CANVAS = "the picture transformation reaches the axis as a canvas transformation (behaviour Z1); Tier 1 node probes are read in the axis' untransformed frame, so they do not line up with the painted trace";
+const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip" | "mutation", string>>> = {
+  ...Object.fromEntries(["picture-scale", "picture-xscale-rotate"].map((name) => [name, { probes: CANVAS, map: CANVAS, tickPlacement: CANVAS, singleAxis: CANVAS, clip: CANVAS, mutation: "the mutations locate geometry through Tier 1 (rect, ticks), which is in the untransformed frame here" }])),
+  "clip-false-marks": { clip: "clip=false" },
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
   xticklabels: { probes: "ytick=\\empty: no y tick labels, so no y tick probe", tickPlacement: "no y tick probe" },
   ...Object.fromEntries(["log-basis-two", "log-explicit-ticks", "log-loglog-default", "log-semilogy-grid", "log-small-range", "log-wide-range", "log-xmode-discard"]
@@ -188,6 +191,7 @@ describe("pgfplots oracle fixtures", () => {
       expect(compareTier1(oracle.tier1, oracle.tier1).findings).toEqual([]);
       expect(compareTier2(oracle.tier2, oracle.tier2).findings).toEqual([]);
       expect(comparePicture(oracle, structuredClone(oracle)).pass).toBe(true);
+      if (skip.mutation !== undefined) return;
       const rows = runMutationTest(oracle, name);
       expect(rows.filter((r) => !r.asExpected).map((r) => `${r.mutation}: ${JSON.stringify(r.detected)}`)).toEqual([]);
       // Mutations need a feature to mutate (a clipped blue plot, a legend, ticks); the controls always apply.

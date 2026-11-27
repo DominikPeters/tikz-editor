@@ -638,14 +638,20 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
   },
   {
     keys: ["node font", "font"],
-    handle: ({ valueRaw, style, transform }) => {
+    handle: ({ valueRaw, style, transform, resolveColorAlias }) => {
+      // `font=\color{c}` (matlab2tikz writes it for every label): the font
+      // code runs inside the node's text box, so the colour applies to the
+      // text (pgfmoduleshapes/tikz.code.tex: \tikz@textfont is executed in
+      // the box after the text colour).
+      const fontColor = /\\color\s*\{([^{}]*)\}/u.exec(valueRaw)?.[1];
+      const colored = fontColor === undefined ? style : { ...style, textColor: normalizeOptionColor(fontColor, style, resolveColorAlias) };
       const parsed = parseFontStyle(valueRaw, style.fontContext?.namedSizes);
       if (!parsed) {
-        return { style, transform, diagnostics: [] };
+        return { style: colored, transform, diagnostics: [] };
       }
       return {
         style: {
-          ...style,
+          ...colored,
           fontStyle: parsed.fontStyle ?? style.fontContext?.fontStyle ?? "normal",
           fontWeight: parsed.fontWeight ?? style.fontContext?.fontWeight ?? "normal",
           fontFamily: parsed.fontFamily ?? style.fontContext?.fontFamily ?? "serif",

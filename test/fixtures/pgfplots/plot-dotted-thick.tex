@@ -1,0 +1,12 @@
+% `dotted` before `very thick` in one option list: the dots are as long as the
+% final line width (behaviour Z4); a scope's `dotted` keeps the scope's width.
+\begin{tikzpicture}
+\begin{axis}
+\addplot[color=red, dotted, very thick] coordinates {(0,1) (1,2) (2,1.5)};
+\addplot[blue, densely dotted, line width=1pt] coordinates {(0,0.5) (2,2)};
+\addplot[black, dash dot, thick] coordinates {(0,2) (2,0.4)};
+\begin{scope}[dotted]
+\draw[very thick] (axis cs:0.2,0.6) -- (axis cs:1.8,0.6);
+\end{scope}
+\end{axis}
+\end{tikzpicture}

@@ -30,7 +30,13 @@ const TOLERANCES = { colour: 0.002 };
 const LM_OPTICAL = "text at 8/9pt: TeX uses LMRoman9/8 (own metrics); the editor's text engine has only lmroman10/12/17 and scales lmroman10";
 const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zero-width TeX box (\\pgfsys@hbox); the editor draws the mark as a path, with no box";
 const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
+const CANVAS_PROBES = "the picture's TikZ transformation reaches the axis as a canvas transformation (behaviour Z1); the harness' Tier 1 node probes are read in the axis' untransformed frame (node anchors do not include a low-level canvas transformation), so Tier 1 positions and the texts found in their quads are not comparable; Tier 2 (painted output) is";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
+  "picture-scale": { tier1: Object.fromEntries(["rect", "map", "tick-label", "tick-label-text", "description", "description-text", "legend-entry"].map((code) => [code, CANVAS_PROBES])) },
+  "picture-xscale-rotate": {
+    tier1: Object.fromEntries(["rect", "map", "tick-label", "tick-label-text", "description", "description-text"].map((code) => [code, CANVAS_PROBES])),
+    tier2: { "textbox-text": "rotated canvas: the harness assigns the ylabel glyph to the axis' nesting-0 box instead of the label box (glyph-to-box assignment uses axis-aligned probes)" }
+  },
   "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "symbolic-coords": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },

@@ -515,6 +515,14 @@ export type ResolvedStyle = {
   roundedCorners: number | null;
   lineWidth: number;
   dashArray: number[] | null;
+  /**
+   * Entries of `dashArray` that are `\pgflinewidth` (`dotted`): TikZ sets the
+   * dash after the line width keys of the same option list (tikz.code.tex
+   * `\tikz@addoption`; `dash dot` uses `\the\pgflinewidth`, read at once),
+   * so they take the list's final width.
+   * Resolved and removed at the end of the option list (behaviour Z4).
+   */
+  dashLineWidthSlots?: { array: number[]; slots: number[] };
   dashOffset: number;
   lineCap: "butt" | "round" | "square";
   lineJoin: "miter" | "round" | "bevel";

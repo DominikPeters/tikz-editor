@@ -148,6 +148,13 @@ export function resolveContextDelta(
   for (const layer of topLevelLayers) {
     applyLayer(layer, new Set());
   }
+  // `\pgflinewidth` in a dash pattern is read after the option list's line width keys (behaviour Z4).
+  if (style.dashLineWidthSlots) {
+    const { array, slots } = style.dashLineWidthSlots;
+    const { dashLineWidthSlots: _resolved, ...rest } = style;
+    void _resolved;
+    style = rest.dashArray === array ? { ...rest, dashArray: array.map((value, index) => (slots.includes(index) ? rest.lineWidth : value)) } : rest;
+  }
 
   return {
     style,

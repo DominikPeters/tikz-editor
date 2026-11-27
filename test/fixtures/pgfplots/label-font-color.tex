@@ -1,0 +1,7 @@
+% `font=\color{…}` in description styles colours the text (matlab2tikz writes
+% `xlabel style={font=\color{white!15!black}}`; behaviour Z2).
+\begin{tikzpicture}
+\begin{axis}[xlabel style={font=\color{white!15!black}}, xlabel={Level}, ylabel style={font=\color{blue!60!black}}, ylabel={Rate}, title style={font=\bfseries\color{red!70!black}}, title={Result}]
+\addplot coordinates {(0,1) (1,3) (2,2)};
+\end{axis}
+\end{tikzpicture}

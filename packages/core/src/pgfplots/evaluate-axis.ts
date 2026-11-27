@@ -83,6 +83,12 @@ export type AxisEvaluation = {
   labels: Array<{ role: LabelRole; tickPosition?: number; probe: NodeGeometryProbe | null; text: string; textBox?: { origin: Point; width: number; height: number; depth: number }; cell?: { row: number; column: number } }>;
   /** The axis clip (C3), when `clip=true`. */
   clip: SceneClipPath | null;
+  /**
+   * The canvas transformation applied to the evaluated elements (behaviour Z1),
+   * when the picture's TikZ transformation has a linear part. Label probes and
+   * label geometry are in the untransformed frame; map them with this.
+   */
+  canvas?: WorldTransform;
 };
 
 const axisEvaluations = new WeakMap<SemanticContext, AxisEvaluation[]>();
@@ -189,6 +195,76 @@ const NUMBER_FORMAT_PREFIX = "/pgf/number format/";
 
 /** Evaluates one axis; returns its scene elements in paint order. */
 export function evaluateAxisStatement(source: AxisStatement, context: SemanticContext, host: AxisHost): SceneElement[] {
+  const outer = currentFrame(context);
+  const t = outer.transform;
+  const everyPicture = outer.customStyles.get("every picture") ?? [];
+  if (everyPicture.some((layer) => layer.options.entries.some((entry) => entry.kind !== "unknown" && /^(?:scale|xscale|yscale|rotate|cm|xslant|yslant)$/u.test(entry.key.trim())))) {
+    // Behaviour Z1: pgfplots applies `every picture` once more inside the axis, as a
+    // coordinate transformation of its own drawing (box and tick lengths, not text).
+    host.diagnostics.push({
+      severity: "warning", code: "unsupported-pgfplots-every-picture-transform",
+      message: "A transformation in `every picture` is applied twice to a pgfplots axis (once inside the axis, to its coordinates); this editor applies it once, so the axis is drawn too large.",
+      span: source.beginSpan
+    });
+  }
+  const linear = Math.abs(t.a - 1) > 1e-9 || Math.abs(t.b) > 1e-9 || Math.abs(t.c) > 1e-9 || Math.abs(t.d - 1) > 1e-9;
+  if (!linear) return evaluateAxisInFrame(source, context, host);
+  // Behaviour Z1 (manual scaling.tex: "/tikz/scale ... will scale the complete
+  // resulting image, including all text labels"): the axis is computed in an
+  // untransformed frame at the picture origin, and the TikZ transformation in
+  // effect (`\begin{tikzpicture}[scale=0.7]`) is applied to the result as a
+  // canvas transformation (text, line widths and marks scale too).
+  const origin = worldTransform(1, 0, 0, 1, t.e, t.f);
+  const canvas = multiplyMatrix(t, inverseMatrix(origin) ?? origin);
+  const savedBounds = context.pictureBounds;
+  const tracker = context.statementEffectTracker;
+  const savedTrackerBounds = tracker?.pictureBounds;
+  const before = (axisEvaluations.get(context) ?? []).length;
+  pushFrame(context, childFrame(outer, { transform: origin }));
+  let elements: SceneElement[];
+  try {
+    elements = evaluateAxisInFrame(source, context, host);
+  } finally {
+    popFrame(context);
+  }
+  context.pictureBounds = savedBounds;
+  if (tracker) tracker.pictureBounds = savedTrackerBounds ?? null;
+  const outerClips = new Set((outer.clipChain ?? []).map((clip) => clip.id));
+  const mappedClips = new Map<string, SceneClipPath>();
+  const mapCommand = (command: ScenePathCommand): ScenePathCommand => {
+    switch (command.kind) {
+      case "Z": return command;
+      case "C": return { ...command, c1: applyMatrix(canvas, command.c1), c2: applyMatrix(canvas, command.c2), to: applyMatrix(canvas, command.to) };
+      case "A": return command;
+      default: return { ...command, to: applyMatrix(canvas, command.to) };
+    }
+  };
+  const mapClip = (clip: SceneClipPath): SceneClipPath => {
+    if (outerClips.has(clip.id)) return clip;
+    let mapped = mappedClips.get(clip.id);
+    if (!mapped) { mapped = { ...clip, commands: clip.commands.map(mapCommand) }; mappedClips.set(clip.id, mapped); }
+    return mapped;
+  };
+  const mappedElements = elements.map((element): SceneElement => ({
+    ...element,
+    transform: element.transform ? multiplyMatrix(canvas, element.transform) : canvas,
+    ...(element.clipChain ? { clipChain: element.clipChain.map(mapClip) } : {})
+  }) as SceneElement);
+  const list = axisEvaluations.get(context) ?? [];
+  for (let index = before; index < list.length; index += 1) {
+    const evaluation = list[index];
+    if (!evaluation) continue;
+    const frameTransform = multiplyMatrix(canvas, evaluation.frameTransform);
+    const toWorld = (q: Point): WorldPoint => applyMatrix(frameTransform, p(q.x, q.y));
+    list[index] = { ...evaluation, frameTransform, canvas, clip: evaluation.clip ? mapClip(evaluation.clip) : null };
+    extendPictureBounds(context, transformBox(evaluation.layout.bbox, toWorld));
+    registerAxisNode(context, "current axis", evaluation.layout, toWorld, evaluation.axisId);
+    if (evaluation.model.name) registerAxisNode(context, evaluation.model.name, evaluation.layout, toWorld, evaluation.axisId);
+  }
+  return mappedElements;
+}
+
+function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, host: AxisHost): SceneElement[] {
   const { diagnostics, markFeature } = host;
   const outer = currentFrame(context);
   // Macro definitions in the body (`\pgfmathsetmacro`, `\def`) take effect in
@@ -678,7 +754,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
           streamIndex += 1;
           if (!markSelected(plot.model, streamIndex)) continue;
           const q = map(point.x, point.y);
-          if (!insideBox(q, area)) continue;
+          if (model.clip && !insideBox(q, area)) continue;
           box = unionBox(box, { minX: q.x + extent.minX, minY: q.y + extent.minY, maxX: q.x + extent.maxX, maxY: q.y + extent.maxY });
         }
       });
@@ -867,7 +943,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
             streamIndex += 1;
             if (!markSelected(plot.model, streamIndex)) continue;
             const q = mapPoint(point.x, point.y);
-            if (!insideBox(q, layout.box)) continue;
+            // Behaviour Z3: with `clip=false` marks outside the box are drawn too.
+            if (model.clip && !insideBox(q, layout.box)) continue;
             marks.primitives.forEach((primitive, primitiveIndex) => {
               const markStyle: ResolvedStyle = { ...marks.style, stroke: primitive.stroke, drawExplicit: primitive.stroke !== null, fill: primitive.fill, dashArray: marks.style.dashArray };
               const path = makePath(statement.id, `mark:${String(n)}:${String(primitiveIndex)}`, markStyle, axisFrame.styleChain, statement.span);
