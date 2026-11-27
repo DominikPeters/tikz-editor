@@ -161,8 +161,9 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
   const x0 = 0; const y0 = 0; const x1 = size.width; const y1 = size.height;
   const sx = (x1 - x0) / (limits.xmax - limits.xmin);
   const sy = (y1 - y0) / (limits.ymax - limits.ymin);
-  const mapX = (x: number) => x0 + sx * (x - limits.xmin);
-  const mapY = (y: number) => y0 + sy * (y - limits.ymin);
+  // S1: `x dir=reverse` runs the direction from the upper limit at the lower box edge.
+  const mapX = model.x.reverse ? (x: number) => x1 - sx * (x - limits.xmin) : (x: number) => x0 + sx * (x - limits.xmin);
+  const mapY = model.y.reverse ? (y: number) => y1 - sy * (y - limits.ymin) : (y: number) => y0 + sy * (y - limits.ymin);
 
   // R2: the canvas position of each direction's line (a y for the x line).
   const lineAt = {
@@ -407,7 +408,7 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
     limits,
     box: { x0: x0 + dx, y0: y0 + dy, x1: x1 + dx, y1: y1 + dy },
     translation: { x: dx, y: dy },
-    map: { origin: shift({ x: mapX(0), y: mapY(0) }), xUnit: { x: sx, y: 0 }, yUnit: { x: 0, y: sy } },
+    map: { origin: shift({ x: mapX(0), y: mapY(0) }), xUnit: { x: model.x.reverse ? -sx : sx, y: 0 }, yUnit: { x: 0, y: model.y.reverse ? -sy : sy } },
     ticks,
     tickMarks,
     grid,

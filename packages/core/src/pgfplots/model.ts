@@ -78,6 +78,8 @@ export type AxisDirectionModel = {
   /** `xmajorticks`, `xminorticks`, `ticks=` (manual tickoptions.tex, initially true): draw the tick marks. */
   majorTickMarks: boolean;
   minorTickMarks: boolean;
+  /** `x dir=reverse` (manual specifyrange.tex, S1). */
+  reverse: boolean;
   /** `hide obscured x ticks` (initially true, R4). */
   hideObscuredTicks: boolean;
   /** `extra x ticks`, `extra x tick labels` (manual tickoptions.tex). */
@@ -218,6 +220,7 @@ function direction(): AxisDirectionModel {
     mode: "linear",
     logTicksFixedPoint: false,
     axisLine: "box",
+    reverse: false,
     majorTickMarks: true,
     minorTickMarks: true,
     axisLineMovesLabel: false,
@@ -478,6 +481,14 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`${letter}majorticks`, (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model[letter].majorTickMarks = b; return true; });
   // Measured (T1): `yminorticks=false` left the minor ticks of `minor tick num` drawn; not understood, so diagnosed.
   defineAxisKey(`${letter}minorticks`, (ctx, v, use) => { const b = readBoolean(v); if (b === null) return false; if (!b) ctx.model.unsupported.push({ key: `${letter}minorticks`, span: use.origin.span }); return true; });
+}
+for (const letter of ["x", "y"] as const) {
+  defineAxisKey(`${letter} dir`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text !== "normal" && text !== "reverse") return false;
+    ctx.model[letter].reverse = text === "reverse";
+    return true;
+  });
 }
 defineAxisKey("ticks", (ctx, v) => {
   const text = stripBraces(v ?? "");

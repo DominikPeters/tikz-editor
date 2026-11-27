@@ -465,7 +465,9 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     measure,
     markBounds: (map) => {
       let box: Box | null = null;
-      const area = { x0: map(limits.xmin, limits.ymin).x, y0: map(limits.xmin, limits.ymin).y, x1: map(limits.xmax, limits.ymax).x, y1: map(limits.xmax, limits.ymax).y };
+      const lo = map(limits.xmin, limits.ymin); const hi = map(limits.xmax, limits.ymax);
+      // Reversed directions (S1) swap the corners.
+      const area = { x0: Math.min(lo.x, hi.x), y0: Math.min(lo.y, hi.y), x1: Math.max(lo.x, hi.x), y1: Math.max(lo.y, hi.y) };
       plots.forEach((plot, index) => {
         const marks = markStyles[index];
         if (!marks || !plot.points) return;

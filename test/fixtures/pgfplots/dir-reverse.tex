@@ -1,0 +1,7 @@
+% x dir=reverse and y dir=reverse: the map runs from the upper limit at the lower edge; descriptions stay put.
+\begin{tikzpicture}
+\begin{axis}[x dir=reverse, y dir=reverse, xlabel={$x$ decreasing}, ylabel={$y$ decreasing}, title={Reversed}]
+  \addplot coordinates {(0,0) (1,2) (3,1)};
+  \node[draw] at (axis cs:2.5,0.5) {N};
+\end{axis}
+\end{tikzpicture}

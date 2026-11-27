@@ -52,6 +52,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
   "axis-lines-mixed": { tickPlacement: "ticks on the axis lines (R3)", clip: "separate axis lines (R2)", singleAxis: "two axes" },
   "axis-lines-styles": { tickPlacement: "ticks on the axis lines (R3); hide x axis has no x ticks", clip: "separate axis lines (R2)", singleAxis: "two axes" },
   "axis-lines-hide": { probes: "hide axis: no ticks, so no tick probe", tickPlacement: "no ticks", clip: "no axis lines" },
+  "dir-reverse": { map: "reversed directions: (xmin, ymin) is the upper right corner (behaviour S1)" },
   "log-extra-ticks": { tickPlacement: "log labels print b^k (behaviour Q4)" },
   "tick-majorticks": { probes: "xmajorticks=false: no x tick labels, so no x tick probe (T1)" },
   "tick-none-lengths": { probes: "ticks=none: no tick probe (T1)", singleAxis: "two axes", tickPlacement: "ticks on the upper sides" },
