@@ -132,7 +132,10 @@ function instrumentation(engine: OracleEngine): string {
       yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-ye\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{ye}}}}}%
   \fi
   \ifpgfplotsoracle@descriptions
-    \pgfplotsset{every axis/.append style={%
+    % every axis post (applied after the axis options): axis x line=middle
+    % and similar options redefine every axis x label with .style, which
+    % dropped a name appended earlier (harness version 3).
+    \pgfplotsset{every axis post/.append style={%
       title style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-title},
       xlabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-xlabel},
       ylabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-ylabel},

@@ -11,6 +11,7 @@
  * labels) or from the text element and the engine's metrics.
  */
 import { renderTikzToSvgAsync } from "../../packages/core/src/render/index.js";
+import { renderPathWithArrows } from "../../packages/core/src/svg/arrows/render.js";
 import { getAxisEvaluations, type AxisEvaluation } from "../../packages/core/src/pgfplots/evaluate-axis.js";
 import { normalizeColor } from "../../packages/core/src/semantic/style/colors.js";
 import type { ResolvedStyle, SceneClipPath, SceneElement, ScenePathCommand, SceneText } from "../../packages/core/src/semantic/types.js";
@@ -358,6 +359,22 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
     if (element.overlayCovered) continue;
     syncClip(element.clipChain ?? []);
     const clipState = { clipDepth: activeClips.length, ...(clipBox ? { clipBox } : {}) };
+    if (element.kind === "Path" && (element.style.markerStart || element.style.markerEnd)) {
+      // Arrow tips are built at SVG emission: the shaft is shortened and each
+      // tip is its own painted path, as PGF paints them (stroke, then the tip).
+      const rendered = renderPathWithArrows(element);
+      const shaft = commandsToSegments(rendered.shaftCommands);
+      const stroke = element.style.stroke && element.style.stroke !== "none" ? paintOf(element.style.stroke, element.style.strokeOpacity) : undefined;
+      if (stroke && shaft.length > 0) primitives.push({ type: "path", order: order(), operation: "stroke", segments: shaft, paint: stroke, ...strokeAttributes(element.style), ...clipState });
+      for (const tip of rendered.tipPaths) {
+        const segments = commandsToSegments(tip.commands);
+        const fill = tip.fill && tip.fill !== "none" ? paintOf(tip.fill, element.style.strokeOpacity) : undefined;
+        const tipStroke = tip.stroke && tip.stroke !== "none" && tip.strokeWidth > 0 ? paintOf(tip.stroke, element.style.strokeOpacity) : undefined;
+        if (fill) primitives.push({ type: "path", order: order(), operation: "fill", fillRule: "nonzero", segments, paint: fill, ...clipState });
+        if (tipStroke) primitives.push({ type: "path", order: order(), operation: "stroke", segments, paint: tipStroke, ...strokeAttributes({ ...element.style, lineWidth: tip.strokeWidth, lineCap: tip.lineCap, lineJoin: tip.lineJoin, dashArray: null }), ...clipState });
+      }
+      continue;
+    }
     if (element.kind === "Path" || element.kind === "Circle" || element.kind === "Ellipse") {
       const segments = element.kind === "Path" ? commandsToSegments(element.commands)
         : ellipseSegments(element.center, element.kind === "Circle" ? element.radius : element.rx, element.kind === "Circle" ? element.radius : element.ry, element.kind === "Ellipse" ? element.rotation ?? 0 : 0, element.transform);
