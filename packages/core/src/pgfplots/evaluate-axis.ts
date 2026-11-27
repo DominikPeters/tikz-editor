@@ -87,7 +87,7 @@ function plotDataCacheKey(
   const text = expandMacroBindings(source.slice(statement.span.from, statement.span.to), bindings);
   if (/\b(?:rand|rnd|random)\b/u.test(text)) return null;
   const parts = [stableKeyText(plot), stableKeyText(env), stableKeyText(io.tableKeys.map((entry) => entry.raw)), stableKeyText(io.symbolic)];
-  if (parts.some((part) => part === null)) return null;
+  if (parts.includes(null)) return null;
   return [text, ...parts].join("\u0000");
 }
 

@@ -48,17 +48,17 @@ export function ensurePgfplotsSetup(source: string): EditedSource {
     const lastUse = [...next.matchAll(/^[^%\n]*\\usepackage[^\n]*$/gmu)].at(-1);
     const classLine = /^[^%\n]*\\documentclass[^\n]*$/mu.exec(next);
     const after = lastUse ?? classLine;
-    const at = after ? (after.index ?? 0) + after[0].length : 0;
+    const at = after ? after.index + after[0].length : 0;
     next = replaceSpan(next, { from: at, to: at }, userText("\n\\usepackage{pgfplots}", "pasted-tikz")).source;
   }
   if (!COMPAT_RE.test(next)) {
     if (hasDocumentClass) {
       const use = /^[^%\n]*\\usepackage(?:\[[^\]]*\])?\{[^}]*\bpgfplots\b[^}]*\}[^\n]*$/mu.exec(next);
-      const at = use ? (use.index ?? 0) + use[0].length : 0;
+      const at = use ? use.index + use[0].length : 0;
       next = replaceSpan(next, { from: at, to: at }, userText("\n\\pgfplotsset{compat=1.18}", "pasted-tikz")).source;
     } else {
       const picture = /\\begin\{tikzpicture\}/u.exec(next);
-      const at = picture?.index ?? 0;
+      const at = picture ? picture.index : 0;
       next = replaceSpan(next, { from: at, to: at }, userText("\\pgfplotsset{compat=1.18}\n", "pasted-tikz")).source;
     }
   }

@@ -69,10 +69,10 @@ export function stableKeyText(value: unknown): string | null {
 }
 
 function stableKeyTextUnchecked(value: unknown): string {
-  return JSON.stringify(value, (key, nested: unknown) => {
-    if (key === "span" || key === "statement" || key === "origin" || key.endsWith("Span")) return undefined;
-    if (nested instanceof Map) return [...nested.entries()];
-    if (nested instanceof Set) return [...nested.values()];
+  return JSON.stringify(value, (key, nested: unknown): unknown => {
+    if (key === "span" || key === "statement" || key === "origin" || key.endsWith("Span")) return null;
+    if (nested instanceof Map) return Array.from(nested.entries(), (entry: unknown) => entry);
+    if (nested instanceof Set) return Array.from(nested.values(), (item: unknown) => item);
     if (typeof nested === "function") return String(nested);
     return nested;
   });
