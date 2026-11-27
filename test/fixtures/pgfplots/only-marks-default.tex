@@ -1,0 +1,12 @@
+% `only marks` with no mark draws `*` marks: without a mark key, with
+% `mark=none`, and after the axis' `no markers` (behaviour Z15, generator fuzz).
+\begin{tikzpicture}
+\begin{axis}[no markers, legend pos=north west]
+\addplot[only marks] coordinates {(0,0) (1,1) (2,0.5)};
+\addlegendentry{plain}
+\addplot[only marks, red, mark=none] coordinates {(0,1.5) (1,2) (2,1.8)};
+\addlegendentry{none}
+\addplot+[only marks, mark=square*] coordinates {(0,2.5) (1,2.8) (2,3)};
+\addlegendentry{cycle}
+\end{axis}
+\end{tikzpicture}

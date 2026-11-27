@@ -1299,6 +1299,8 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     value: entry.kind === "kv" ? entry.valueRaw : null,
     origin: entry
   })));
+  // `only marks` without a mark (none given, `mark=none`, or `no markers`) draws `*` (behaviour Z15, measured).
+  if (plot.onlyMarks && plot.mark === null) plot.mark = "*";
   return plot;
 }
 

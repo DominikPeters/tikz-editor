@@ -1663,3 +1663,11 @@ zero-length bars. `ybar stacked` and `xbar stacked` use the `single ybar
 legend`/`single xbar legend` images (one 6pt bar). Found by the generator
 fuzz (6 of 300 cases with a 1.5–3pt legend offset); fixture
 legend-bar-images. OBSERVED.
+
+**Z15 — `only marks` without a mark draws `*`.** When `only marks` is on and
+the final mark is none (no `mark` key in `\addplot[…]`, an explicit
+`mark=none`, or the axis' `no markers` in `every axis plot post`, which even
+beats `+[…, mark=square*]`), pgfplots draws filled circles (`*`, mark size
+2pt) in the plot colour; the legend image shows the same mark. G2's "no marks
+unless `mark=` is given" does not hold under `only marks`. Found by the
+generator fuzz (5 of 300 cases); fixture only-marks-default. OBSERVED.
