@@ -397,6 +397,12 @@ function makePathRule(
       return "Select a single editable path.";
     }
     const selectedId = requireArrayValue(facts.selectedSourceIds, 0);
+    // A data point of a pgfplots `coordinates` plot (design 8): deleting it removes the `(x,y)`.
+    if (/^axis:\d+:plot:\d+$/u.test(selectedId)) {
+      if (mode !== "delete-point") return "Plots are edited through their points and the inspector.";
+      return facts.editHandles.some((handle) => handle.id === facts.activeHandleId && handle.sourceRef.sourceId === selectedId)
+        ? null : "Choose a data point to delete.";
+    }
     const eligible = resolveExplicitPathEligibility(facts, selectedId);
     if (eligible.kind !== "eligible") {
       return eligible.reason;

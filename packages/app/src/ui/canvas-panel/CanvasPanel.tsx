@@ -2427,6 +2427,11 @@ export const CanvasPanel = memo(function CanvasPanel({
       if (!sceneText) {
         return null;
       }
+      // pgfplots labels are editable only where their text is written (descriptions, legend entries);
+      // tick labels are generated.
+      if (sceneText.sourceRef.sourceId.startsWith("axis:") && !sceneText.textSourceSpan) {
+        return null;
+      }
       let sourceSpan = sceneText.matrixCell?.textSpan ?? sceneText.textSourceSpan ?? sceneText.sourceRef.sourceSpan;
       let isForeachTemplateEdit = false;
       const foreachOrigin = sceneText.origin;

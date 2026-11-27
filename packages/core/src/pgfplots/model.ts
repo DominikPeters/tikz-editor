@@ -156,7 +156,7 @@ export type AxisModel = {
 };
 
 /** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
-export type LegendEntryText = { text: string; options: string; span: Span };
+export type LegendEntryText = { text: string; options: string; span: Span; /** Where the entry text is written, for canvas text editing (editing only). */ textSpan?: Span };
 
 export type LegendModel = {
   /** `legend entries={…}`: used only when the axis has no legend command (manual). */
@@ -683,7 +683,18 @@ defineAxisKey(["reverse legend", "legend reversed"], (ctx, v) => { const b = rea
 defineAxisKey(["transpose legend", "legend transposed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.transpose = b; return true; });
 defineAxisKey("legend to name", (ctx, v) => { const name = stripBraces(v ?? ""); if (name === "") delete ctx.model.legend.toName; else ctx.model.legend.toName = name; return true; });
 defineAxisKey("legend entries", (ctx, v, use) => {
-  ctx.model.legend.entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  const entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  // Editing: where each item's text is written, when the value is the one in the document (the evaluator checks it).
+  const origin = use.origin;
+  const base = origin.kind === "kv" && origin.valueSpan && v !== null && v === origin.valueRaw ? origin.valueSpan.from : null;
+  let cursor = 0;
+  ctx.model.legend.entries = entries.map((entry) => {
+    if (base === null || v === null || entry.text.length === 0) return entry;
+    const at = v.indexOf(entry.text, cursor);
+    if (at < 0) return entry;
+    cursor = at + entry.text.length;
+    return { ...entry, textSpan: { from: base + at, to: base + at + entry.text.length } };
+  });
   return true;
 });
 

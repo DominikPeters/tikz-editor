@@ -493,6 +493,22 @@ export const APP_MENU_DEFINITION = [
         kind: "command",
         commandId: APP_MENU_COMMAND_IDS.INSERT_IMAGE,
         label: "Image…"
+      },
+      { kind: "separator" },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.INSERT_FUNCTION_PLOT,
+        label: "Function Plot"
+      },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.INSERT_DATA_PLOT,
+        label: "Data Plot"
+      },
+      {
+        kind: "command",
+        commandId: APP_MENU_COMMAND_IDS.INSERT_BAR_CHART,
+        label: "Bar Chart"
       }
     ]
   },

@@ -90,7 +90,9 @@ const ELEMENT_KIND_TITLES: Record<InspectorDescriptor["elementKind"], string> = 
   circle: "Circle",
   ellipse: "Ellipse",
   text: "Node",
-  scope: "Scope"
+  scope: "Scope",
+  axis: "Axis",
+  plot: "Plot"
 };
 
 type ScalarInspectorProperty =

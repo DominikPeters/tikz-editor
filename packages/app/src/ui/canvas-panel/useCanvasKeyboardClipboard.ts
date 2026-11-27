@@ -301,6 +301,15 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       }
 
       if ((event.key === "Delete" || event.key === "Backspace") && selectedElementIds.size > 0) {
+        // A selected pgfplots plot with an active data point: Delete removes that point.
+        const activeHandleId = useEditorStore.getState().activeHandleId;
+        const [onlySelected] = selectedElementIds;
+        if (selectedElementIds.size === 1 && onlySelected && /^axis:\d+:plot:\d+$/u.test(onlySelected) && activeHandleId &&
+          snapshot.editHandles.some((handle) => handle.id === activeHandleId && handle.sourceRef.sourceId === onlySelected)) {
+          dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "deletePathPoint", elementId: onlySelected, handleId: activeHandleId } });
+          event.preventDefault();
+          return;
+        }
         const didDelete = deleteSelection({
           source,
           snapshotSource: snapshot.source,

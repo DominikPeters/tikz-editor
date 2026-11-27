@@ -62,6 +62,8 @@ export type LegendResult = {
   textBox: { origin: Point; width: number; height: number; depth: number };
   /** Each drawn entry node, in paint order. */
   entries: Array<{ index: number; probe: NodeGeometryProbe | null; text: string; row: number; column: number }>;
+  /** The anchor the legend node is placed by (editing). */
+  anchor: string;
 };
 
 /** Keys of `every axis legend` that belong to the matrix layout rather than the legend node. */
@@ -143,12 +145,13 @@ function columnCellStyle(style: LegendStyle, column: number): OptionListAst[] {
 
 function legendTexts(host: LegendHost): LegendEntryText[] {
   return collectLegendEntries(host.axis.body, host.model.legend, {
-    addLegendEntry: (item) => ({ text: host.expand(item.text), options: item.options ? item.options.entries.map((e) => e.raw).join(",") : "", span: item.span }),
+    addLegendEntry: (item) => ({ text: host.expand(item.text), options: item.options ? item.options.entries.map((e) => e.raw).join(",") : "", span: item.span, textSpan: item.textSpan }),
     legend: (item) => {
       const raws = item.entries.map((entry) => entry.raw);
       let list = raws;
       if (item.delimiter === "," && raws.some((raw) => raw.trim() === "...")) list = expandDots(raws);
-      return list.map((raw) => legendEntryText(host.expand(raw), item.span));
+      // Editing keeps a span per item when the list was not expanded (no dots).
+      return list.map((raw, i) => ({ ...legendEntryText(host.expand(raw), item.span), ...(list === raws && item.entries[i] ? { textSpan: item.entries[i].span } : {}) }));
     }
   }).entries;
 }
@@ -189,7 +192,7 @@ export function emitLegend(host: LegendHost): LegendResult | null {
     entryIndex += 1;
     const cellsOptions = (column: number) => [...style.cells, ...columnCellStyle(style, column), ...style.nodes, ...(pair.entry.options ? [parseOptionListRaw(`[${pair.entry.options}]`)] : [])];
     const textCell = (column: number): Cell => {
-      const request: LabelRequest = { role: "legend-entry", tickPosition: index, text: pair.entry.text, styles: cellsOptions(column), placement: "", at: { x: 0, y: 0 } };
+      const request: LabelRequest = { role: "legend-entry", tickPosition: index, text: pair.entry.text, styles: cellsOptions(column), placement: "", at: { x: 0, y: 0 }, ...(pair.entry.textSpan ? { textSpan: pair.entry.textSpan } : {}) };
       const measured = host.node(request, frame, false).geometry;
       const box = measured ? measured.border : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
       return { kind: "text", request, box };
@@ -267,7 +270,8 @@ export function emitLegend(host: LegendHost): LegendResult | null {
     probe,
     text: visibleText.join(""),
     textBox: { origin: { x: left, y: base.y }, width: matrix.width, height: matrix.height, depth: matrix.depth },
-    entries: entryRecords
+    entries: entryRecords,
+    anchor: style.anchor
   };
 }
 

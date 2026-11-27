@@ -97,6 +97,11 @@ import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
 import { nestedStatements } from "../ast/walk.js";
+import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
+import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
+import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
+import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
+import { evaluateTikzFigure } from "../semantic/evaluate.js";
 
 export type ResizeRole =
   | "top-left"
@@ -148,6 +153,8 @@ export type EditAction =
   | { kind: "updateNodeText"; elementId: string; text: string }
   | SetFigureBoundsAction
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
+  /** A pgfplots axis from a template, placed right of the picture's content. */
+  | { kind: "insertPgfplotsTemplate"; template: PgfplotsTemplateKind }
   /** A new path through world points: what the path and freehand tools draw. */
   | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
@@ -305,12 +312,14 @@ export function applyEditAction(
       case "toggleClosedPath":
         return applyToggleClosedPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "deletePathPoint":
+        if (parseAxisPlotId(action.elementId.trim())) return applyDeletePlotPointAction(source, editHandles, action.elementId.trim(), action.handleId, parseOptions);
         return applyDeletePathPoint(source, editHandles, action, parseOptions, evaluateOptions);
       case "setPathPointKind":
         return applySetPathPointKind(source, editHandles, action, parseOptions, evaluateOptions);
       case "appendToPath":
         return applyAppendToPathAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "insertPathPoint":
+        if (parseAxisPlotId(action.elementId.trim())) return applyInsertPlotPointAction(source, editHandles, action.elementId.trim(), action.segmentIndex, action.point, parseOptions);
         return applyInsertPathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "moveElement":
         return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);
@@ -362,6 +371,8 @@ export function applyEditAction(
         return applyAddElement(source, action.template, action.at, parseOptions, evaluateOptions, geometry);
       case "addPath":
         return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
+      case "insertPgfplotsTemplate":
+        return applyInsertPgfplotsTemplate(source, action.template, parseOptions, evaluateOptions);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":
@@ -385,6 +396,9 @@ export function applyEditAction(
       case "convertNodePositionToAbsolute":
         return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions, geometry);
       case "reorderElements":
+        if (action.elementIds.length > 0 && action.elementIds.every((id) => parseAxisPlotId(id.trim()) !== null)) {
+          return applyReorderPlotsAction(source, action.elementIds.map((id) => id.trim()), action.direction, parseOptions);
+        }
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":
         return applyGroupElementsAction(source, action.elementIds, parseOptions, geometry);
@@ -411,6 +425,7 @@ export function applyEditAction(
       case "transposeMatrix":
         return applyTransposeMatrixAction(source, action, parseOptions);
       case "resizeElement":
+        if (isAxisId(action.elementId.trim())) return applyResizeAxisAction(geometry?.source ?? source, { ...action, elementId: action.elementId.trim() }, parseOptions, geometry);
         return applyResizeElementAction(source, action, evaluateOptions, parseOptions, geometry);
     }
   });
@@ -926,7 +941,44 @@ function applyMoveElements(
   baseline?: MoveElementsBaseline,
   geometry?: EditGeometrySession
 ): EditActionResult {
-  return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
+  // pgfplots: an axis moves by `at`, its legend by `legend style`/`legend pos`; everything else by its handles.
+  const axisIds = elementIds.filter((id) => isAxisId(id.trim()));
+  const legendIds = elementIds.filter((id) => parseAxisDescriptionId(id.trim())?.part === "legend");
+  const otherIds = elementIds.filter((id) => !axisIds.includes(id) && !legendIds.includes(id));
+  if (axisIds.length === 0 && legendIds.length === 0) {
+    return applyMoveElementsAction(source, editHandles, elementIds, delta, formatPrecision, parseOptions, baseline, geometry);
+  }
+  if (baseline) {
+    source = baseline.source;
+    editHandles = baseline.editHandles;
+  }
+  const state: { current: EditActionResult } = { current: { kind: "success", newSource: unchangedSource(source), patches: [] } };
+  const steps: SourcePatch[][] = [];
+  const changed = new Set<string>();
+  const reasons: string[] = [];
+  const apply = (run: (from: string) => EditActionResult) => {
+    const previous = state.current;
+    if (previous.kind !== "success" && previous.kind !== "partial") return;
+    const from = previous.newSource;
+    const next = run(from);
+    if (next.kind !== "success" && next.kind !== "partial") { state.current = next; return; }
+    const normalized = normalizeResultPatches(from, next);
+    if (normalized.kind === "success" || normalized.kind === "partial") steps.push(normalized.patches);
+    for (const id of next.changedSourceIds ?? []) changed.add(id);
+    if (next.kind === "partial") reasons.push(next.reason);
+    state.current = next;
+  };
+  if (otherIds.length > 0) apply((from) => applyMoveElementsAction(from, editHandles, otherIds, delta, formatPrecision, parseOptions, baseline ? { ...baseline, source: from } : undefined, geometry));
+  for (const id of axisIds) apply((from) => applyMoveAxisAction(from, id.trim(), delta, formatPrecision, parseOptions, geometry));
+  for (const id of legendIds) {
+    const axisId = parseAxisDescriptionId(id.trim())?.axisId;
+    if (axisId && !axisIds.includes(axisId)) apply((from) => applyMoveLegendAction(from, axisId, delta, parseOptions, geometry));
+  }
+  const final = state.current;
+  if (final.kind !== "success" && final.kind !== "partial") return final;
+  const patches = composeSourcePatches(source, steps);
+  if (reasons.length > 0) return { kind: "partial", newSource: final.newSource, patches, changedSourceIds: [...changed], skippedHandles: [], reason: reasons.join(" ") };
+  return { kind: "success", newSource: final.newSource, patches, changedSourceIds: [...changed] };
 }
 
 function applyPasteStatements(
@@ -1170,6 +1222,11 @@ function applySetProperty(
   parseOptions: EditParseOptions,
   geometry?: EditGeometrySession
 ): EditActionResult {
+  // pgfplots targets take minimal option edits, without render-equivalence cleanup.
+  if (!action.commentMode) {
+    const pgfplots = applyPgfplotsSetProperty(source, action, parseOptions);
+    if (pgfplots) return pgfplots;
+  }
   return applyPlannedSetPropertyAction(source, action, parseOptions, geometry);
 }
 
@@ -1232,6 +1289,37 @@ function applyAddPath(
 }
 
 /** Appends a new statement to the figure of `working` and selects it. */
+function applyInsertPgfplotsTemplate(
+  source: string,
+  template: PgfplotsTemplateKind,
+  parseOptions: EditParseOptions,
+  evaluateOptions: EvaluateOptions | undefined
+): EditActionResult {
+  const working = ensurePgfplotsSetup(source);
+  const parsed = parseTikzForEdit(working, parseOptions);
+  // Beside what the picture already shows: 1cm right of its content, bottoms aligned.
+  let text = PGFPLOTS_TEMPLATES[template].text;
+  const hasContent = parsed.figure.body.some((statement) => statement.kind !== "PgfplotsSet" && statement.kind !== "PgfplotsLibrary");
+  if (hasContent) {
+    const bounds = evaluateTikzFigure(parsed.figure, working, evaluateOptions).scene.bounds;
+    if (bounds) {
+      const cm = (value: number) => String(Math.round((value / PT_PER_CM) * 2) / 2);
+      text = text.replace("\\begin{axis}[", `\\begin{axis}[at={(${cm(bounds.maxX + PT_PER_CM)}cm,${cm(bounds.minY)}cm)}, `);
+    }
+  }
+  const snippet = userText(text.replace(/\n/gu, "\n  "), "pasted-tikz");
+  const newSource = insertElementIntoSource(working, snippet, parsed.figure.span);
+  const after = parseTikzForEdit(newSource, parseOptions);
+  const axes = after.figure.body.filter((statement) => statement.kind === "Axis");
+  const inserted = axes.at(-1)?.id;
+  return {
+    kind: "success",
+    newSource,
+    patches: [computeMinimalReplacementPatch(source, newSource)],
+    ...(inserted ? { selectedSourceIds: [inserted], changedSourceIds: [inserted] } : {})
+  };
+}
+
 function appendStatement(
   source: string,
   working: string,

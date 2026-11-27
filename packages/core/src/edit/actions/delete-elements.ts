@@ -1,7 +1,8 @@
 import { EMPTY_FRAGMENT, joinFragments, sliceFragment, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
-import type { NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
+import type { AddPlotStatement, NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
+import { parseAxisDescriptionId } from "../../pgfplots/edit-ids.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { replaceSpan } from "../patch.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -25,6 +26,15 @@ export function applyDeleteElementsAction(
   const normalizedIds = normalizeElementIds(elementIds);
   if (normalizedIds.length === 0) {
     return { kind: "unsupported", reason: "No element ids were provided for deleteElements" };
+  }
+
+  // A selected axis title or label: deleting it removes its key from the axis options.
+  const descriptionIds = normalizedIds.filter((id) => {
+    const part = parseAxisDescriptionId(id)?.part;
+    return part === "xlabel" || part === "ylabel" || part === "title";
+  });
+  if (descriptionIds.length > 0 && descriptionIds.length === normalizedIds.length) {
+    return deleteAxisDescriptions(source, descriptionIds, parseOptions);
   }
 
   const parsed = parseTikzForEdit(source, {
@@ -105,10 +115,43 @@ export function applyDeleteAdornmentAction(
   };
 }
 
+function deleteAxisDescriptions(source: string, ids: readonly string[], parseOptions: EditParseOptions): EditActionResultLike {
+  let current = unchangedSource(source);
+  const patches: SourcePatch[] = [];
+  const changed: string[] = [];
+  for (const id of ids) {
+    const parsedId = parseAxisDescriptionId(id);
+    if (!parsedId) continue;
+    const resolved = resolvePropertyTarget(current, id, current === source ? parseOptions : {});
+    if (resolved.kind !== "found") continue;
+    const keys = (resolved.target.options?.entries ?? []).flatMap((entry) =>
+      entry.kind === "kv" && normalizeOptionKey(entry.key).replace(/^\/pgfplots\//u, "") === parsedId.part ? [normalizeOptionKey(entry.key)] : []);
+    if (keys.length === 0) continue;
+    const rewritten = applyOptionMutationsToTarget(current, resolved.target, new Map(keys.map((key): [string, OptionMutation] => [key, { kind: "remove" }])));
+    if (!rewritten) continue;
+    current = rewritten.source;
+    patches.push(rewritten.patch);
+    changed.push(parsedId.axisId);
+  }
+  if (patches.length === 0) return { kind: "unsupported", reason: "The selected axis description is not written in the axis options." };
+  return { kind: "success", newSource: current, patches, selectedSourceIds: [], changedSourceIds: changed };
+}
+
 function resolveDeleteTarget(statements: readonly Statement[], elementId: string): DeleteTarget | null {
   for (const statement of statements) {
     if (statement.id === elementId) {
       return { span: statement.span, scope: "statement" };
+    }
+
+    // An `\addplot` goes with the `\addlegendentry` right after it.
+    if (statement.kind === "Axis") {
+      const plot = statement.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === elementId);
+      if (plot) {
+        const index = statement.body.indexOf(plot);
+        const next = statement.body[index + 1];
+        const entry = next?.kind === "AddLegendEntry" && next.span.from >= plot.span.to ? next : null;
+        return { span: { from: plot.span.from, to: (entry ?? plot).span.to }, scope: "statement" };
+      }
     }
 
     if (statement.kind === "Path") {
