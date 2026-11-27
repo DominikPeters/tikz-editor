@@ -47,7 +47,10 @@ export function automaticTickStep(lo: number, hi: number, length: number, dir: P
   const raw = (hi - lo) / n;
   const k = Math.floor(Math.log10(raw));
   const m = raw / 10 ** k;
-  let step = 10 ** k * (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10);
+  // pgfplots switches ~6e-6 relatively early (I1); at an exact tie (range 0.6 over 4 intervals: m = 1.5
+  // up to float noise) it takes the larger step, so the comparison carries that margin (behaviour Z7).
+  const early = 1 - 5e-6;
+  let step = 10 ** k * (m < 1.5 * early ? 1 : m < 3.5 * early ? 2 : m < 7.5 * early ? 5 : 10);
   for (let guard = 0; guard < 8; guard += 1) {
     const count = Math.floor(hi / step + 1e-9) - Math.trunc(lo / step) + 1;
     if (count >= 2) break;

@@ -275,7 +275,9 @@ const EXACT_KV_HANDLERS = createKvHandlerMap([
     handle: ({ key, valueRaw, style, transform }) => {
       const action = parseDecorationAction(style.decoration, valueRaw);
       if (!action) {
-        return { style, transform, diagnostics: [] };
+        // Only decoration actions are drawn; a `postaction={pattern=…}` or
+        // `preaction={fill=…}` would otherwise vanish without a word.
+        return { style, transform, diagnostics: [`unsupported-option-key:${key}`] };
       }
       return {
         style: {

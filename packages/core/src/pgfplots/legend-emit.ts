@@ -143,7 +143,7 @@ function columnCellStyle(style: LegendStyle, column: number): OptionListAst[] {
 
 function legendTexts(host: LegendHost): LegendEntryText[] {
   return collectLegendEntries(host.axis.body, host.model.legend, {
-    addLegendEntry: (item) => ({ text: host.expand(item.text), options: item.options ? item.options.entries.map((e) => e.raw).join(",") : "", span: item.span }),
+    addLegendEntry: (item) => ({ text: host.expand(item.text), options: item.options ? item.options.entries.map((e) => e.raw).join(",") : "", span: item.span, keep: true }),
     legend: (item) => {
       const raws = item.entries.map((entry) => entry.raw);
       let list = raws;

@@ -361,9 +361,15 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
 
   let numberFormat = readPgfNumberFormat(parent.macroBindings);
   const applyNumberFormat = (uses: readonly PgfplotsKeyUse[]) => {
+    // `/pgf/number format/.cd, precision=3, /tikz/.cd` (pgfkeys `.cd`): relative keys after a
+    // `.cd` live in that directory (behaviour Z6; tikzplotlib writes it in tick label styles).
+    let directory: string | null = null;
     for (const use of uses) {
-      if (!use.key.startsWith(NUMBER_FORMAT_PREFIX)) continue;
-      numberFormat = applyPgfNumberFormatKey(numberFormat, use.key.slice(NUMBER_FORMAT_PREFIX.length), use.value).format;
+      const raw = use.key.trim();
+      if (raw.endsWith("/.cd")) { directory = `${raw.slice(0, -"/.cd".length)}/`; continue; }
+      const key = !raw.startsWith("/") && directory ? `${directory}${raw}` : raw;
+      if (!key.startsWith(NUMBER_FORMAT_PREFIX)) continue;
+      numberFormat = applyPgfNumberFormatKey(numberFormat, key.slice(NUMBER_FORMAT_PREFIX.length), use.value).format;
     }
   };
   applyNumberFormat(model.tikzOptions);

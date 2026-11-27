@@ -238,14 +238,17 @@ export function resolveNodeLayout(
     midLineY = plainMetrics.midLineY;
   }
 
-  // Empty node text should not contribute a synthetic baseline line box
-  // unless explicit text metrics were requested.
-  if (normalizedText.length === 0 && textHeightOverride == null && textDepthOverride == null) {
+  // Empty node text (or only spaces, which TeX skips at the start of the
+  // box) has no line box: height and depth 0. `text height`/`text depth`
+  // then replace those zeros (pgfplots' empty legend entries, behaviour Z8).
+  if (normalizedText.trim().length === 0) {
+    // `mid` stays .5ex above the baseline (pgfmoduleshapes.code.tex), also for an empty box.
+    const midAboveBase = midLineY - baseLineY;
     textLines = [""];
     textNaturalWidth = 0;
     textNaturalHeight = 0;
     baseLineY = 0;
-    midLineY = 0;
+    midLineY = textHeightOverride == null && textDepthOverride == null ? 0 : midAboveBase;
   }
 
   const resolvedMinWidth = Math.max(minWidth, minSize ?? minWidth);

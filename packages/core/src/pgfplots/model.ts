@@ -149,7 +149,8 @@ export type AxisModel = {
 };
 
 /** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
-export type LegendEntryText = { text: string; options: string; span: Span };
+/** `keep`: an `\addlegendentry{}` keeps its pair even when empty (behaviour Z8); empty `\legend` items do not. */
+export type LegendEntryText = { text: string; options: string; span: Span; keep?: boolean };
 
 export type LegendModel = {
   /** `legend entries={…}`: used only when the axis has no legend command (manual). */

@@ -32,6 +32,7 @@ const ERROR_MARK_BOX = "pgfplots places each error mark in an empty, rotated zer
 const SYMBOLIC_TICK_PROBE = "symbolic x coords set their own xticklabel, which replaces the harness' tick probe (README: lost probes); labels are checked in Tier 2";
 const CANVAS_PROBES = "the picture's TikZ transformation reaches the axis as a canvas transformation (behaviour Z1); the harness' Tier 1 node probes are read in the axis' untransformed frame (node anchors do not include a low-level canvas transformation), so Tier 1 positions and the texts found in their quads are not comparable; Tier 2 (painted output) is";
 const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<string, string> }> = {
+  "legend-empty-entry": { tier2: { "textbox-missing": "an empty node text paints nothing; TeX still typesets an empty box (seen by the text-box walk), the editor emits no text element for it" } },
   "picture-scale": { tier1: Object.fromEntries(["rect", "map", "tick-label", "tick-label-text", "description", "description-text", "legend-entry"].map((code) => [code, CANVAS_PROBES])) },
   "picture-xscale-rotate": {
     tier1: Object.fromEntries(["rect", "map", "tick-label", "tick-label-text", "description", "description-text"].map((code) => [code, CANVAS_PROBES])),

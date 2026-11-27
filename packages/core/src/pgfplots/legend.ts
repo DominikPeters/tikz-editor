@@ -21,13 +21,13 @@ import type { LegendEntryText, LegendModel } from "./model.js";
 /** A drawn legend entry: text and the index of its image (into the image list), in grid order. */
 export type LegendPair = { entry: LegendEntryText; image: number };
 
-/** Images and texts pair up in order; empty texts drop their pair; the shorter list ends the legend (L4). */
+/** Images and texts pair up in order; empty `\legend` items drop their pair (an `\addlegendentry{}` does not, Z8); the shorter list ends the legend (L4). */
 export function legendPairs(entries: readonly LegendEntryText[], imageCount: number, model: LegendModel): LegendPair[] {
   const pairs: LegendPair[] = [];
   const n = Math.min(entries.length, imageCount);
   for (let i = 0; i < n; i += 1) {
     const entry = entries[i];
-    if (!entry || entry.text.trim() === "") continue;
+    if (!entry || (entry.text.trim() === "" && !entry.keep)) continue;
     pairs.push({ entry, image: i });
   }
   return model.reverse ? pairs.reverse() : pairs;

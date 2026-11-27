@@ -63,6 +63,7 @@ const pngCount = Number(opt("--png") ?? "30");
 const mutationName = opt("--mutate");
 const includeUnclean = args.includes("--all");
 const listFile = opt("--list");
+const compatDiff = args.includes("--compat-diff");
 const TEX_TIMEOUT_MS = 180_000;
 
 /** Strict tolerances: path error 0.05pt after alignment (task), glyph origins 0.05pt (harness 0.02 + alignment residual + PDF text positioning). */
@@ -174,7 +175,9 @@ function primitiveBounds(p: Tier2Primitive): Box | undefined {
   if (p.type !== "path") return p.bounds;
   const pts = p.segments.flatMap((s) => (s.op === "Z" ? [] : s.op === "C" ? [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }, { x: s.x, y: s.y }] : [{ x: s.x, y: s.y }]));
   if (pts.length === 0) return undefined;
-  const w = p.operation === "stroke" ? (p.lineWidth ?? 0) / 2 : 0;
+  // Geometry only: a clip through the middle of an edge line cuts half its width, which the
+  // axis box drawn over the same edge hides (pre-1.11 tick/grid clips, behaviour Z5).
+  const w = 0;
   return { minX: Math.min(...pts.map((q) => q.x)) - w, minY: Math.min(...pts.map((q) => q.y)) - w, maxX: Math.max(...pts.map((q) => q.x)) + w, maxY: Math.max(...pts.map((q) => q.y)) + w };
 }
 
@@ -270,7 +273,14 @@ type Row = {
   maxPath: number; maxGlyph: number; strict: boolean; visual: boolean; diagnostics: string[];
   findings?: Array<{ code: string; where: string; message: string }>;
   pageSize?: { tex: { w: number; h: number }; editor: { w: number; h: number } };
+  compat118?: Record<"texVsTex" | "editorVsModern", { strict: boolean; visual: boolean; missing: number; extra: number; maxPath: number; maxGlyph: number; codes: string[] }>;
 };
+
+/** The snippet at compat=1.18: every `compat=…` value replaced, or one set after \usepackage{pgfplots} (compat experiment only). */
+export function forceCompat118(source: string): string {
+  if (/compat\s*=/u.test(source)) return source.replace(/compat\s*=\s*[0-9.]+|compat\s*=\s*newest|compat\s*=\s*default/gu, "compat=1.18");
+  return source.replace(/\\usepackage(\[[^\]]*\])?\{pgfplots\}/u, (m) => `${m}\\pgfplotsset{compat=1.18}`);
+}
 
 function count(result: CompareResult, ...codes: string[]): number { return result.findings.filter((f) => codes.includes(f.code)).length; }
 
@@ -346,6 +356,20 @@ for (const file of files) {
   const row = summarise(id, paper, compat, picture, alignment, result, tex);
   if (!clean) { row.status = "compared-unclean"; row.reason = [...new Set(unsupported)].join("; ").slice(0, 200); }
   if (mutation && !effective) { row.status = "mutation-ineffective"; }
+  if (compatDiff && /compat\s*=\s*(?!1\.1[1-8]\b|newest)/u.test(source) || compatDiff && !/compat\s*=/u.test(source)) {
+    // Step 4 (compat policy): the same snippet compiled at compat=1.18. TeX(original) vs TeX(1.18)
+    // says whether compat changes the picture; editor vs TeX(1.18) what the policy leaves.
+    const modern = compileTex(`${id.replace("/", "-")}-c118`, paper, forceCompat118(source));
+    if (modern.status === "ok") {
+      const modernPrims = pagePrimitives({ number: 1, width: modern.width, height: modern.height, xml: modern.xml }, { minX: 0, maxY: modern.height });
+      const a2 = align(modernPrims, picture);
+      const modernTier2 = dropInertClips(translateTier2({ page: { width: modern.width, height: modern.height }, primitives: modernPrims, textBoxes: [] }, a2.dx, a2.dy));
+      const texVsTex = compareTier2(expected, modernTier2, { tolerances: STRICT, textBoxes: false });
+      const editorVsModern = compareTier2(modernTier2, dropInertClips({ ...picture.tier2, textBoxes: [] }), { tolerances: STRICT, textBoxes: false });
+      const brief = (r: CompareResult) => { const x = summarise(id, paper, compat, picture, a2, r, modern); return { strict: x.strict, visual: x.visual, missing: x.pathMissing + x.glyphMissing, extra: x.pathExtra + x.glyphExtra, maxPath: x.maxPath, maxGlyph: x.maxGlyph, codes: [...new Set(r.findings.map((f) => f.code))] }; };
+      row.compat118 = { texVsTex: brief(texVsTex), editorVsModern: brief(editorVsModern) };
+    }
+  }
   rows.push(row);
   pictures.set(id, { svg: picture.svg, work: join(outDir, "work", id.replace("/", "-")) });
   if (rows.length % 25 === 0) console.log(`${rows.length}/${files.length} (${compiled} compiled, ${((Date.now() - started) / 1000).toFixed(0)}s)`);
@@ -362,7 +386,7 @@ const tsv = [header.join("\t"), ...ranked.map((r) => [
   r.pathMissing, r.pathExtra, r.pathGeometry, r.glyphMissing, r.glyphExtra, r.glyphPosition, r.glyphFont, r.paint, r.stroke, r.clip, r.paintOrder,
   r.maxPath.toFixed(4), r.maxGlyph.toFixed(4), r.reason ?? r.diagnostics.join(",")
 ].join("\t"))].join("\n");
-const suffix = mutation ? `-${mutation.name}` : "";
+const suffix = mutation ? `-${mutation.name}` : compatDiff ? "-compat" : "";
 writeFileSync(join(outDir, `results${suffix}.tsv`), `${tsv}\n`);
 writeFileSync(join(outDir, `results${suffix}.json`), JSON.stringify(ranked, null, 1));
 

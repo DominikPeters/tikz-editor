@@ -1,0 +1,8 @@
+% Number format keys reached through `.cd` in a tick label style (tikzplotlib
+% writes `x tick label style={/pgf/number format/.cd, precision=3, /tikz/.cd}`;
+% behaviour Z6).
+\begin{tikzpicture}
+\begin{axis}[xmin=0.9991, xmax=1.0067, x tick label style={/pgf/number format/.cd, precision=3, /tikz/.cd,}, y tick label style={/pgf/number format/.cd, fixed, fixed zerofill, precision=1, /tikz/.cd}]
+\addplot coordinates {(1,0.2) (1.003,0.7) (1.006,0.4)};
+\end{axis}
+\end{tikzpicture}
