@@ -1054,7 +1054,8 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   // `bar width`/`bar shift` may come before the bar handler that uses them.
   const pendingBar: { width?: BarLength; shift?: BarLength; relative?: number; intervalShift?: number } = {};
   // The axis styles `ybar`/`xbar` (and stacked) also set `ybar legend`/`xbar legend` (manual 2dplots.tex).
-  if (axis.bar && !axis.bar.kind.endsWith("interval")) plot.legendImage = `${axis.bar.kind} legend`;
+  // Measured (behaviour Z14): `ybar stacked`/`xbar stacked` draw `single ybar/xbar legend` images.
+  if (axis.bar && !axis.bar.kind.endsWith("interval")) plot.legendImage = axis.bar.stacked ? `single ${axis.bar.kind} legend` : `${axis.bar.kind} legend`;
   const useCycle = statement.increment || !statement.options;
   const lists: OptionListAst[] = [];
   lists.push(...(styles.get("every axis plot") ?? []));

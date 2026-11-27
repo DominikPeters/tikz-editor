@@ -133,7 +133,9 @@ function barLegend(points: Array<{ x: number; y: number }>, width: number, verti
 
 const BAR_LEGEND_IMAGES: Record<string, (plot: { onlyMarks: boolean; hasMarks: boolean }) => LegendImageGeometry> = {
   "ybar legend": () => barLegend([{ x: 0, y: 0.8 * EM }, { x: 6, y: 0.6 * EM }], 3, true, -0.2 * EM),
-  "xbar legend": () => barLegend([{ x: 0, y: 0.8 * EM }, { x: 6, y: 0.6 * EM }], 3, false, -0.2 * EM),
+  // Measured (behaviour Z14): bars of 0.8em centred at y=-0.2em and 0.6em at y=2*bar width-0.2em,
+  // i.e. the ybar coordinates with x and y exchanged.
+  "xbar legend": () => barLegend([{ x: 0.8 * EM, y: 0 }, { x: 0.6 * EM, y: 6 }], 3, false, -0.2 * EM),
   "single ybar legend": () => barLegend([{ x: 0, y: 0.8 * EM }], 6, true, -0.2 * EM),
   "single xbar legend": () => barLegend([{ x: 0.8 * EM, y: 0 }], 6, false, 0.2 * EX)
 };

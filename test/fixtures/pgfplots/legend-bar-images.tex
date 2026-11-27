@@ -1,0 +1,23 @@
+% Bar legend images (behaviour Z14, found by the generator fuzz): `xbar` draws
+% two horizontal bars (0.8em at -0.2em, 0.6em at 2*3pt-0.2em); the stacked
+% styles draw the single-bar images.
+\begin{tikzpicture}
+\begin{axis}[xbar, legend pos=south east]
+\addplot coordinates {(2,1) (3,2)};
+\addlegendentry{left}
+\addplot coordinates {(1.5,1) (2.5,2)};
+\addlegendentry{right}
+\end{axis}
+\begin{axis}[at={(7cm,0)}, ybar stacked, legend pos=north west]
+\addplot coordinates {(1,2) (2,3)};
+\addlegendentry{base}
+\addplot coordinates {(1,1) (2,2)};
+\addlegendentry{top}
+\end{axis}
+\begin{axis}[at={(0,-6cm)}, xbar stacked, legend pos=south east]
+\addplot coordinates {(2,1) (3,2)};
+\addlegendentry{a}
+\addplot coordinates {(1,1) (1,2)};
+\addlegendentry{b}
+\end{axis}
+\end{tikzpicture}

@@ -1646,3 +1646,20 @@ increasing data, so its arrow tip (`-stealth` of the non-boxed style) is at
 the upper limit: on a reversed y the y line points down. Found by the
 generator fuzz (`axis lines*=left, y dir=reverse`); fixture
 axis-lines-reverse (two axes, x and y reversed). OBSERVED.
+
+**Z13 — Minor ticks above the last major tick** appear only when the upper
+limit is at least half a major step beyond it (the same rule as Q4 for log
+decades): y limits [2.79, 8.91] with majors 4, 6, 8 and `minor tick num=4` give
+no minor ticks above 8, while I2's [0.3, 4.6] with step 1 has minors up to
+4.5. Below the first major tick the minor ticks always continue to the limit.
+Found by the generator fuzz (7 of 300 cases); fixture minor-ticks-upper.
+OBSERVED (fuzz cases f1-34, f1-103, f1-162 and the fixture).
+
+**Z14 — Bar legend images, measured.** `xbar legend` draws a 0.8em bar at
+y = −0.2em and a 0.6em bar at y = 2·3pt − 0.2em (both 3pt thick, from x = 0):
+the `ybar legend` coordinates with x and y exchanged. The manual's printed
+initial value of `xbar legend` repeats the ybar coordinates, which drew two
+zero-length bars. `ybar stacked` and `xbar stacked` use the `single ybar
+legend`/`single xbar legend` images (one 6pt bar). Found by the generator
+fuzz (6 of 300 cases with a 1.5–3pt legend offset); fixture
+legend-bar-images. OBSERVED.
