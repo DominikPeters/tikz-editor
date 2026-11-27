@@ -248,12 +248,9 @@ export function resolveNodeLayout(
     midLineY = 0;
   } else if (normalizedText.length === 0) {
     // An empty text box whose \ht/\dp are set (`text height`/`text depth`,
-    // e.g. the pgfplots legend matrix): its natural box is empty, and `mid`
-    // is the baseline raised by .5ex of the ambient font, as above.
-    textNaturalWidth = 0;
-    textNaturalHeight = 0;
-    baseLineY = 0;
-    midLineY = 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
+    // e.g. the pgfplots legend matrix): `mid` is the baseline raised by .5ex
+    // of the ambient font, as above, not the node font's plain metrics.
+    midLineY = baseLineY + 0.5 * 0.430554 * (style.fontContext?.fontSize ?? DEFAULT_TEXT_FONT_SIZE);
   }
 
   const resolvedMinWidth = Math.max(minWidth, minSize ?? minWidth);
