@@ -15,7 +15,9 @@ import type { EvaluateOptions, PgfplotsAxisEditInfo, SceneElement } from "../../
 import { LEGEND_POSITIONS } from "../../pgfplots/model.js";
 import { DEFAULT_HEIGHT, DEFAULT_WIDTH, DESCRIPTION_ALLOWANCE } from "../../pgfplots/layout.js";
 import { parseAxisDescriptionId, parseAxisPlotId } from "../../pgfplots/edit-ids.js";
-import { unchangedSource, userText } from "../fragment.js";
+import { sourceSlice, unchangedSource, userText } from "../fragment.js";
+import { replaceSpan } from "../patch.js";
+import type { SourcePatch } from "../types.js";
 import { coordinateText } from "../writer/coordinate-text.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import { applyOptionMutationsToTarget, type OptionMutation } from "../option-mutations.js";
@@ -387,3 +389,65 @@ export function lineSpan(source: string, span: Span): Span {
 }
 
 export { parseAxisDescriptionId, parseAxisPlotId };
+
+/**
+ * Reorders plots of one axis: each `\addplot` moves together with the
+ * `\addlegendentry` right after it; other statements of the body stay where
+ * they are (the plots trade places). Plot order sets the cycle list index
+ * (behaviour G1), so styling follows the new order as in TeX.
+ */
+export function applyReorderPlotsAction(
+  source: string,
+  plotIds: readonly string[],
+  direction: "sendToBack" | "sendBackward" | "bringForward" | "bringToFront",
+  parseOptions: EditParseOptions = {}
+): EditActionResultLike {
+  const parsed = parseTikzForEdit(source, parseOptions);
+  const axisIds = new Set(plotIds.map((id) => parseAxisPlotId(id)?.axisId));
+  const [axisId] = [...axisIds];
+  if (axisIds.size !== 1 || !axisId) return { kind: "unsupported", reason: "Reorder plots of one axis at a time." };
+  const axis = findAxisStatement(parsed.figure.body, axisId);
+  if (!axis) return { kind: "unsupported", reason: "The axis of the selected plots was not found." };
+  const plots = axis.body.filter((item): item is AddPlotStatement => item.kind === "AddPlot");
+  const units = plots.map((plot) => ({ id: plot.id, span: plotWithLegendEntry(source, axis, plot).span }));
+  const selected = new Set(plotIds);
+  const order = units.map((unit) => unit.id);
+  const moved = order.filter((id) => selected.has(id));
+  let next: string[];
+  if (direction === "bringToFront") next = [...order.filter((id) => !selected.has(id)), ...moved];
+  else if (direction === "sendToBack") next = [...moved, ...order.filter((id) => !selected.has(id))];
+  else {
+    next = [...order];
+    const step = direction === "bringForward" ? 1 : -1;
+    const indices = next.flatMap((id, i) => (selected.has(id) ? [i] : []));
+    for (const i of step > 0 ? indices.reverse() : indices) {
+      const j = i + step;
+      const other = next[j];
+      const self = next[i];
+      if (other === undefined || self === undefined || selected.has(other)) continue;
+      next[i] = other;
+      next[j] = self;
+    }
+  }
+  if (next.join("\n") === order.join("\n")) return { kind: "unsupported", reason: "The plots are already in that order." };
+  const textById = new Map(units.map((unit) => [unit.id, source.slice(unit.span.from, unit.span.to)]));
+  let current = unchangedSource(source);
+  const patches: SourcePatch[] = [];
+  for (let slot = units.length - 1; slot >= 0; slot -= 1) {
+    const unit = units[slot];
+    const replacementText = textById.get(next[slot] ?? "");
+    if (!unit || replacementText === undefined || replacementText === source.slice(unit.span.from, unit.span.to)) continue;
+    const fragment = sourceSlice(source, findUnitSpan(units, next[slot] ?? ""));
+    const updated = replaceSpan(current, unit.span, fragment);
+    patches.unshift({ oldSpan: unit.span, newSpan: updated.changedSpan, replacement: fragment });
+    current = updated.source;
+  }
+  return {
+    kind: "success", newSource: current, patches, changedSourceIds: [axis.id],
+    selectedSourceIds: plotIds.map((id) => `${axis.id}:plot:${String(next.indexOf(id))}`)
+  };
+}
+
+function findUnitSpan(units: ReadonlyArray<{ id: string; span: Span }>, id: string): Span {
+  return units.find((unit) => unit.id === id)?.span ?? { from: 0, to: 0 };
+}

@@ -97,8 +97,8 @@ import type { SemanticPropertyId } from "./property-registry.js";
 import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/flatten.js";
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
 import { nestedStatements } from "../ast/walk.js";
-import { isAxisId, parseAxisDescriptionId } from "../pgfplots/edit-ids.js";
-import { applyMoveAxisAction, applyMoveLegendAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
+import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
+import { applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 
 export type ResizeRole =
   | "top-left"
@@ -387,6 +387,9 @@ export function applyEditAction(
       case "convertNodePositionToAbsolute":
         return applyConvertNodePositionToAbsoluteAction(source, action, evaluateOptions, parseOptions, geometry);
       case "reorderElements":
+        if (action.elementIds.length > 0 && action.elementIds.every((id) => parseAxisPlotId(id.trim()) !== null)) {
+          return applyReorderPlotsAction(source, action.elementIds.map((id) => id.trim()), action.direction, parseOptions);
+        }
         return applyReorderElementsAction(source, action.elementIds, action.direction, parseOptions);
       case "groupElements":
         return applyGroupElementsAction(source, action.elementIds, parseOptions, geometry);

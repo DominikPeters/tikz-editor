@@ -193,3 +193,122 @@ describe("pgfplots editing: property targets", () => {
       .toBe(source.replace("[ymin=0]", ""));
   });
 });
+
+describe("pgfplots editing: structure", () => {
+  const SOURCE = picture(String.raw`\begin{axis}[title=T, xlabel={$t$}]
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{first}
+\draw (0,0) -- (1,1);
+\addplot {x^2};
+\addlegendentry{second}
+\addplot {x};
+\end{axis}`);
+
+  it("deleting a plot removes it with the legend entry right after it", () => {
+    const id = AXIS_ID(SOURCE);
+    expect(apply(SOURCE, { kind: "deleteElements", elementIds: [`${id}:plot:0`] }))
+      .toBe(SOURCE.replace("\\addplot coordinates {(0,0) (1,1)};\n\\addlegendentry{first}\n", ""));
+    expect(apply(SOURCE, { kind: "deleteElements", elementIds: [`${id}:plot:2`] }))
+      .toBe(SOURCE.replace("\\addplot {x};\n", ""));
+  });
+
+  it("deleting a selected title or label removes its key", () => {
+    const id = AXIS_ID(SOURCE);
+    expect(apply(SOURCE, { kind: "deleteElements", elementIds: [`${id}:title`] }))
+      .toBe(SOURCE.replace("[title=T, xlabel={$t$}]", "[xlabel={$t$}]"));
+  });
+
+  it("reordering moves a plot with its legend entry; other statements stay", () => {
+    const id = AXIS_ID(SOURCE);
+    const after = apply(SOURCE, { kind: "reorderElements", elementIds: [`${id}:plot:0`], direction: "bringForward" });
+    expect(after).toBe(picture(String.raw`\begin{axis}[title=T, xlabel={$t$}]
+\addplot {x^2};
+\addlegendentry{second}
+\draw (0,0) -- (1,1);
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{first}
+\addplot {x};
+\end{axis}`));
+    const front = apply(SOURCE, { kind: "reorderElements", elementIds: [`${id}:plot:0`], direction: "bringToFront" });
+    expect(front.indexOf("\\addplot {x};")).toBeLessThan(front.indexOf("coordinates"));
+  });
+});
+
+describe("pgfplots editing: descriptions and legend", () => {
+  it("description and legend texts are sub-selections with spans into the source", () => {
+    const source = picture(String.raw`\begin{axis}[xlabel={Time}, ylabel=Speed, title={Run}, legend entries={a,b}]
+\addplot coordinates {(0,0) (1,1)};
+\addplot coordinates {(0,1) (1,0)};
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const texts = evaluate(source).scene.elements.filter((e) => e.kind === "Text");
+    const bySource = (sourceId: string) => texts.filter((t) => t.sourceRef.sourceId === sourceId);
+    for (const [part, text] of [["xlabel", "Time"], ["ylabel", "Speed"], ["title", "Run"]] as const) {
+      const [element] = bySource(`${id}:${part}`);
+      expect(element?.kind === "Text" && element.textSourceSpan && source.slice(element.textSourceSpan.from, element.textSourceSpan.to)).toBe(text);
+    }
+    const legend = bySource(`${id}:legend`).flatMap((t) => (t.kind === "Text" && t.textSourceSpan ? [source.slice(t.textSourceSpan.from, t.textSourceSpan.to)] : []));
+    expect(legend).toEqual(["a", "b"]);
+    // Tick labels stay with the axis and are not editable text.
+    expect(texts.some((t) => t.sourceRef.sourceId === id && t.kind === "Text" && !t.textSourceSpan)).toBe(true);
+  });
+
+  it("\\addlegendentry text has its span", () => {
+    const source = picture(String.raw`\begin{axis}
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{$x^2$ fit}
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const entry = evaluate(source).scene.elements.find((e) => e.kind === "Text" && e.sourceRef.sourceId === `${id}:legend` && e.textSourceSpan);
+    expect(entry?.kind === "Text" && entry.textSourceSpan && source.slice(entry.textSourceSpan.from, entry.textSourceSpan.to)).toBe("$x^2$ fit");
+  });
+
+  it("dragging the legend writes legend style at/anchor in axis description coordinates", () => {
+    const source = picture(String.raw`\begin{axis}[legend style={font=\small}]
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{a}
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const i = info(source, id);
+    const w = i.box.x1 - i.box.x0; const h = i.box.y1 - i.box.y0;
+    const after = apply(source, { kind: "moveElements", elementIds: [`${id}:legend`], delta: { x: -0.3 * w, y: -0.4 * h } });
+    expect(after).toBe(source.replace("legend style={font=\\small}", "legend style={font=\\small, at={(0.68,0.58)}, anchor=north east}"));
+    const j = info(after, id);
+    expect(j.legend && i.legend && j.legend.bbox.maxX - i.legend.bbox.maxX).toBeCloseTo(-0.3 * w, 0);
+    expect(j.legend && i.legend && j.legend.bbox.maxY - i.legend.bbox.maxY).toBeCloseTo(-0.4 * h, 0);
+  });
+
+  it("a legend dropped near a legend pos preset snaps to it and drops the conflicting at", () => {
+    const source = picture(String.raw`\begin{axis}[legend style={at={(0.5,0.5)}, anchor=center}]
+\addplot coordinates {(0,0) (1,1)};
+\addlegendentry{a}
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const i = info(source, id);
+    if (!i.legend) throw new Error("no legend");
+    const w = i.box.x1 - i.box.x0; const h = i.box.y1 - i.box.y0;
+    // Move the legend's south west corner to (0.03, 0.03) of the box, give or take a little.
+    const dx = i.box.x0 + 0.035 * w - i.legend.bbox.minX;
+    const dy = i.box.y0 + 0.025 * h - i.legend.bbox.minY;
+    const after = apply(source, { kind: "moveElements", elementIds: [`${id}:legend`], delta: { x: dx, y: dy } });
+    expect(after).toBe(source.replace("legend style={at={(0.5,0.5)}, anchor=center}", "legend pos=south west"));
+  });
+});
+
+describe("pgfplots editing: data points", () => {
+  it("coordinates plots have point handles that write data units", () => {
+    const source = picture(String.raw`\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=4]
+\addplot coordinates {(1,1) (2,3) (3,2)};
+\end{axis}`);
+    const id = AXIS_ID(source);
+    const result = evaluate(source);
+    const handles = result.editHandles.filter((h) => h.sourceRef.sourceId === `${id}:plot:0`);
+    expect(handles.map((h) => h.sourceText)).toEqual(["(1,1)", "(2,3)", "(3,2)"]);
+    const i = info(source, id);
+    const unitX = i.map.xUnit.x; const unitY = i.map.yUnit.y;
+    const handle = handles[1];
+    if (!handle) throw new Error("no handle");
+    const moved = applyEditAction(source, result.editHandles, { kind: "moveHandle", handleId: handle.id, newWorld: { x: handle.world.x + 0.5 * unitX, y: handle.world.y - unitY }, bypassSnapping: true });
+    expect(moved.kind === "success" && moved.newSource).toBe(source.replace("(2,3)", "(2.5,2)"));
+  });
+});
