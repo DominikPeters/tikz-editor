@@ -96,7 +96,7 @@ determinism check; fixed).
 | Axis rectangle | `\coordinate[overlay] (…-r00) at (rel axis cs:0,0);` …(1,0),(0,1),(1,1); read after `\end{axis}` with `\pgfpointanchor{…}{center}` under `\pgftransformreset` | `rel axis cs`: `pgfplots.reference.gridoptions-axiscoordinates.tex` | no |
 | Data-to-canvas map | `\coordinate[overlay] … at (axis cs:\pgfkeysvalueof{/pgfplots/xmin},\pgfkeysvalueof{/pgfplots/ymin});` and (xmax,ymin), (xmin,ymax); affine map derived from these and the limits | `axis cs`: same file; annotations may use `\pgfkeysvalueof` (specifyrange, `xmin`) | no |
 | Axis anchors, outer bbox | after `\end{axis}`: `\pgfpointanchor{current axis}{<anchor>}` for all 35 documented anchors (rectangle, outer, mixed, origin sets) | `pgfplots.reference.alignment.tex` ("Basic Alignment", `current axis`) | no (read-only) |
-| Tick values | `\pgfplotsset{every axis/.append style={xticklabel={\pgfplotsoracle@tick{a1}{x}\axisdefaultticklabel}}}` before the axis; the tick macro writes `\ticknum` and `\tick` (`\axisdefaultticklabellog` on log axes) | `x ticklabel`, `\tick`, `\ticknum`, `\axisdefaultticklabel(log)`: `pgfplots.reference.tickoptions.tex` "Tick Coordinates and Label Texts" | no |
+| Tick values | harness version 3: `xticklabel style={execute at begin node={\pgfplotsoracle@tick…}}` in `every axis/.append style` (and in `every extra x tick` for extra ticks, reported as `xe`/`ye`); the macro writes `\ticknum` and `\tick` from inside each tick label node, so the label code (`xticklabel`, log labels) stays the document's. Version 2 replaced `xticklabel`, which broke `axis` with `xmode=log` (FPU error) and lost custom labels | `\tick`, `\ticknum`, `every extra x tick`: `pgfplots.reference.tickoptions.tex`, styleoptions; `execute at begin node`: TikZ | no (all fixtures; Tier 2 of the 28 older fixtures unchanged by the switch) |
 | Tick label nodes | same style: `xticklabel style={name=pgfplotsoracle-<case>-a1-x\ticknum}`, anchors read after the axis | `xticklabel style={name=tick no \ticknum}` example, tickoptions "typeset ticklabels with strut" | no |
 | Tick label strings | PDF glyphs (Tier 2) inside the label node's anchor quad | (derived) | — |
 | Title, xlabel, ylabel, legend | `title style={name=…}`, `xlabel style`, `ylabel style`, `legend style={name=…}` in `every axis/.append style`; 13 node anchors each; text from PDF glyphs inside the quad | `title style={name=MyTitleNode}` example in alignment; description styles in `pgfplots.reference.axisdescription.tex`, `pgfplots.reference.styleoptions.tex` | no |
@@ -275,12 +275,17 @@ read, so parser changes never need a flush.
   probe key: a custom `xticklabel`/`xticklabels`, or `title style={name=…}`
   (checked: painting identical, probe empty). `refresh` warns about missing
   tick/limit/map probes; description names are not warned about.
-- Log mode is detected from the environment name or a literal `xmode=log` in
-  the axis options. A log mode set elsewhere would make the tick probe use the
-  linear default label and change the output (seen with `xmode=log` before the
-  detection was added); the disturbance check would show it. On log axes
-  `\tick` is the log value and the affine `map` is meaningless (not yet handled).
-- Not probed: minor ticks, extra ticks, z axis, tick mark lengths (Tier 2
+- Log mode (the `MODE` record, Tier 1 `scale`) is detected from the
+  environment name, a literal `xmode=log` in the axis options, or one in an
+  `every axis` style defined earlier in the body (a bare
+  `\pgfplotsset{xmode=log}` has no effect, behaviour Q1). It no longer affects
+  painting (the tick probe does not choose a label macro), only how Tier 1 is
+  assembled: on a log direction limits and `\tick` are logarithms and the map
+  is derived from `rect` and the limits. A mode set through a macro is missed.
+- Positive controls of `disturbance` are injected before the axis end of any
+  of the four environments (before version 3 only `\end{axis}`, so log
+  fixtures got no control).
+- Not probed: minor ticks, z axis, tick mark lengths (Tier 2
   has them), legend entries individually (only the legend matrix node and its
   glyphs), colorbars, multiple axes beyond reading each one's `current axis`
   (two side-by-side axes were tried once and read correctly).
@@ -288,9 +293,10 @@ read, so parser changes never need a flush.
   using an approximate ink box (origin, advance end, 0.6 em up), which is what
   keeps a neighbouring label corner out; very tight layouts could still
   mis-assign.
-- The tick probe relies on `xticklabel` running once per drawn tick in a
-  context where `\immediate\write` works; duplicates with different values
-  would throw.
+- The tick probe relies on each tick label node being typeset once per drawn
+  tick; duplicates with different values throw (the message names the case).
+  Text boxes: a glyph's upper probe point is capped at 90 % of a tight TeX
+  box's height (a lone math `y` is 4.3 pt high).
 - The text-box walk relies on all `q`/`Q`/`cm` going through `\pgfsys@invoke`;
   anything else that emits a transform literal would misplace boxes. The spec's
   "label text box centred on the label node" check would notice.

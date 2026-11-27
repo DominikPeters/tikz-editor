@@ -1,0 +1,7 @@
+% xmode=log from an every axis style; points without a logarithm are discarded and their neighbours joined.
+\begin{tikzpicture}
+\pgfplotsset{every axis/.append style={xmode=log}}
+\begin{axis}[width=200pt, height=150pt]
+  \addplot coordinates {(-1,1) (0,2) (0.5,2.5) (5,3) (50,2) (500,4)};
+\end{axis}
+\end{tikzpicture}

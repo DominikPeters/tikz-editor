@@ -24,7 +24,7 @@ def predict(lo,hi,L,msbt=35,tmt=4,tmtlog=3):
         step=1; mode='one'
     else:
         mode='frac'
-        step=nice(R/max(math.floor(L/msbt+1e-9)-1, tmtlog-1, 1))
+        step=nice(R/max(math.floor(L/msbt+1e-9)-1, 2))
     f=math.floor(lo2/step+1e-9)
     ticks=[]
     j=math.floor((lo-tol)/step)

@@ -30,7 +30,9 @@ export type TickListSpec =
   | { kind: "auto" }
   | { kind: "empty" }
   | { kind: "data" }
-  | { kind: "list"; raw: string };
+  | { kind: "list"; raw: string }
+  /** `xtickten`: exponents. */
+  | { kind: "ten"; raw: string };
 
 export type AxisDirectionModel = {
   min?: number;
@@ -55,6 +57,17 @@ export type AxisDirectionModel = {
   tryMinTicks: number;
   /** `x=<length>`: the unit vector length (behaviour A3). */
   unit?: number;
+  /** `xmode` (behaviour Q1): `log` from the environment or the key. */
+  mode: "linear" | "log";
+  /** `log basis x`: undefined = natural log internally, base 10 for display (manual tickoptions.tex). */
+  logBasis?: number;
+  /** The `log basis x` text as written, for labels (`2^{3}`). */
+  logBasisText?: string;
+  /** `log ticks with fixed point` (manual numberformatting.tex). */
+  logTicksFixedPoint: boolean;
+  /** `extra x ticks`, `extra x tick labels` (manual tickoptions.tex). */
+  extraTicks?: TickListSpec;
+  extraTickLabels?: string[];
 };
 
 export type AxisModel = {
@@ -121,7 +134,9 @@ function direction(): AxisDirectionModel {
     scaledTicks: true,
     labelShift: 0,
     maxSpaceBetweenTicks: 35,
-    tryMinTicks: 4
+    tryMinTicks: 4,
+    mode: "linear",
+    logTicksFixedPoint: false
   };
 }
 
@@ -303,7 +318,29 @@ for (const letter of ["x", "y"] as const) {
   defineAxisKey(`${letter}ticklabel pos`, forAxes(letter, (d, v) => setTickLabelPos(d, letter, v)));
   defineAxisKey(`scaled ${letter} ticks`, forAxes(letter, (d, v) => setScaledTicks(d, v)));
   defineAxisKey(letter, (ctx, v) => { const n = v === null ? null : readLength(v); if (n === null) return false; dir(ctx).unit = n; return true; });
+  defineAxisKey(`${letter}mode`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text === "log") dir(ctx).mode = "log";
+    else if (text === "normal" || text === "linear") dir(ctx).mode = "linear";
+    else return false;
+    return true;
+  });
+  defineAxisKey(`log basis ${letter}`, (ctx, v) => {
+    const text = stripBraces(v ?? "");
+    if (text === "") { delete dir(ctx).logBasis; delete dir(ctx).logBasisText; return true; }
+    const n = readPgfNumber(text);
+    if (n === null || !(n > 0) || n === 1) return false;
+    dir(ctx).logBasis = n; dir(ctx).logBasisText = text;
+    return true;
+  });
+  // `xtickten={1,2}` = `xtick={1e1,1e2}` (in the log basis when one is set; manual tickoptions.tex).
+  defineAxisKey(`${letter}tickten`, (ctx, v) => { dir(ctx).ticks = { kind: "ten", raw: stripBraces(v ?? "") }; return true; });
+  defineAxisKey(`extra ${letter} ticks`, (ctx, v) => { dir(ctx).extraTicks = readTickList(v); return true; });
+  defineAxisKey(`extra ${letter} tick labels`, (ctx, v) => { dir(ctx).extraTickLabels = splitTopLevelList(stripBraces(v ?? "")).map(stripBraces); return true; });
 }
+defineAxisKey("log ticks with fixed point", (ctx, v) => { if (v !== null) return false; ctx.model.x.logTicksFixedPoint = true; ctx.model.y.logTicksFixedPoint = true; return true; });
+// Only the documented initial value is implemented (behaviour Q3: its effect on the step rule is OPEN).
+defineAxisKey("try min ticks log", (_ctx, v) => v !== null && readPgfNumber(v) === 3);
 defineAxisKey("enlargelimits", forAxes("xy", (d, v) => { const e = readEnlarge(v); if (!e) return false; d.enlarge = e; return true; }));
 defineAxisKey("minor tick num", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n < 0) return false; d.minorTickNum = Math.round(n); return true; }));
 defineAxisKey("tick align", forAxes("xy", (d, v) => setTickAlign(d, v)));
@@ -422,6 +459,12 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     // Settings outside an axis only define defaults: axis keys there apply to every axis.
     sink(use);
   }, { onProblem: problems });
+  // Every axis environment sets both modes at its start (manual
+  // axis-addplot.tex: the log environments are `xmode=log`/`ymode=log`), after
+  // the `\pgfplotsset` defaults: a bare `\pgfplotsset{xmode=log}` before an
+  // `axis` changes nothing (behaviour Q1); `every axis` styles and options can.
+  model.x.mode = input.axis.environment === "semilogxaxis" || input.axis.environment === "loglogaxis" ? "log" : "linear";
+  model.y.mode = input.axis.environment === "semilogyaxis" || input.axis.environment === "loglogaxis" ? "log" : "linear";
   // `every axis` (and its variants) is applied at the start of each axis.
   const environmentStyle = input.axis.environment === "axis" ? "every linear axis"
     : input.axis.environment === "semilogxaxis" ? "every semilogx axis"

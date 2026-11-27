@@ -6,6 +6,7 @@ import { expandForeachList } from "../foreach/list.js";
 import { DEFAULT_PGF_NUMBER_FORMAT, formatPgfNumber, type PgfNumberFormat } from "../semantic/pgfmath/number-format.js";
 import type { PlotPoint } from "./data.js";
 import { readPgfNumber, type AxisDirectionModel, type TickListSpec } from "./model.js";
+import { displayFactor, toInternal } from "./scale.js";
 
 export type Tick = {
   /** Data value. */
@@ -18,6 +19,8 @@ export type Tick = {
 
 export type DirectionTicks = {
   major: Tick[];
+  /** `extra x ticks` (drawn after the major ticks, with `every extra x tick`). */
+  extra?: Tick[];
   minor: number[];
   /** The common factor exponent e of scaled ticks (J1), or 0. */
   scaleExponent: number;
@@ -175,4 +178,146 @@ export function computeTicks(input: TickInput): TickResult {
 export function dataTickValues(plots: ReadonlyArray<readonly PlotPoint[]>, axis: "x" | "y"): number[] {
   const first = plots.find((points) => points.length > 0) ?? [];
   return first.map((p) => (axis === "x" ? p.x : p.y)).filter((v) => Number.isFinite(v));
+}
+
+// ---------------------------------------------------------------------------
+// Log axes (behaviour Q3, Q4)
+
+/** The range pgfplots compares with its step thresholds is 0.001 internal units larger than the limits (Q3, bisected). */
+const LOG_RANGE_SLACK = 0.001;
+
+/** An exact decade nudged away from zero, as pgfplots' stored logarithms behave (Q3: 1e-3 as below -3, 1e2 as at or above 2). */
+function nudged(v: number): number {
+  return v * (1 + 1e-9);
+}
+
+function niceStep(raw: number): number {
+  const k = Math.floor(Math.log10(raw) + 1e-12);
+  const m = raw / 10 ** k;
+  return 10 ** k * (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10);
+}
+
+function cleanExponent(e: number): number {
+  const rounded = Math.round(e);
+  if (Math.abs(e - rounded) < 1e-9) return rounded;
+  return Number(e.toPrecision(12));
+}
+
+/** `$10^{e}$` (manual numberformatting.tex, `log number format basis`), or a fixed-point number with `log ticks with fixed point`. */
+export function logTickLabel(dir: AxisDirectionModel, internal: number, format: PgfNumberFormat): string {
+  const exponent = cleanExponent(internal * displayFactor(dir));
+  if (dir.logTicksFixedPoint) {
+    const value = (dir.logBasis ?? 10) ** exponent;
+    return `$${formatPgfNumber(Number(value.toPrecision(12)), { ...format, printer: "fixed" }).tex}$`;
+  }
+  return `$${dir.logBasisText ?? "10"}^{${formatPgfNumber(exponent, format).tex}}$`;
+}
+
+/** A tick list of a log direction as internal coordinates (values without a logarithm dropped), numbered in list order. */
+function logListValues(dir: AxisDirectionModel, spec: TickListSpec, data: readonly number[]): Array<{ value: number; index: number }> | null {
+  if (spec.kind === "data") return [...new Set(data)].sort((a, b) => a - b).map((value, index) => ({ value, index }));
+  if (spec.kind === "ten") {
+    const exponents = listValues(spec.raw);
+    return exponents ? exponents.map((e, index) => ({ value: e / displayFactor(dir), index })) : null;
+  }
+  if (spec.kind !== "list") return [];
+  const values = listValues(spec.raw);
+  if (!values) return null;
+  return values.map((v, index) => ({ value: toInternal(dir, v), index })).filter((t) => Number.isFinite(t.value));
+}
+
+/**
+ * Ticks of a log direction. `lo`, `hi` and the tick values are internal
+ * coordinates; the automatic rule (Q3) works on exponents in the display basis.
+ */
+export function computeLogTicks(input: TickInput): TickResult {
+  const { dir, lo, hi, length } = input;
+  if (!(hi > lo) || !Number.isFinite(lo) || !Number.isFinite(hi) || !(length > 0)) return { kind: "invalid", what: "limits" };
+  const f = displayFactor(dir);
+  const tol = (TICK_PLACEMENT_TOLERANCE_PT * (hi - lo)) / length;
+  const inside = (v: number) => v >= lo - tol && v <= hi + tol;
+  const format = input.numberFormat ?? DEFAULT_PGF_NUMBER_FORMAT;
+  let major: Tick[] = [];
+  let minor: number[] = [];
+  const spec = dir.ticks;
+  if (spec.kind === "empty") major = [];
+  else if (spec.kind !== "auto") {
+    const values = logListValues(dir, spec, input.data);
+    if (!values) return { kind: "invalid", what: "raw" in spec ? spec.raw : "data" };
+    major = values.filter((t) => inside(t.value));
+  } else if (dir.tickDistance !== undefined) {
+    return { kind: "invalid", what: "xtick distance on a log axis" };
+  } else {
+    const dlo = lo * f; const dhi = hi * f; const dtol = tol * f;
+    const slack = LOG_RANGE_SLACK * f;
+    const R = dhi - dlo + slack;
+    const fit = Math.floor(length / dir.maxSpaceBetweenTicks + 1e-9);
+    // Decade candidates: every k-th decade from the first one above lo.
+    const k = Math.max(1, Math.floor(R / Math.max(fit, 2)));
+    const start = Math.floor(nudged(dlo)) + 1;
+    let count = 0;
+    while (start + count * k <= dhi + slack && count < MAX_TICKS) count += 1;
+    const decades = count >= (k === 1 ? 2 : 3);
+    if (decades && k >= 2) {
+      for (let j = 0; start + j * k <= dhi + dtol; j += 1) major.push({ value: (start + j * k) / f, index: j });
+    } else {
+      let step = decades ? 1 : niceStep(R / Math.max(fit - 1, 2));
+      if (!(step > 0) || R / step > MAX_TICKS) return { kind: "invalid", what: "automatic ticks" };
+      if (!decades) {
+        // Fewer than two grid points from trunc(lo/step) up to hi: the next smaller step (as I1b).
+        for (let guard = 0; guard < 8; guard += 1) {
+          if (Math.floor(dhi / step + 1e-9) - Math.trunc(dlo / step) + 1 >= 2) break;
+          step = niceStepBelow(step);
+        }
+      }
+      const base = Math.floor(nudged(dlo) / step + 1e-9);
+      for (let j = Math.floor((dlo - dtol) / step); j * step <= dhi + dtol; j += 1) {
+        const d = step >= 1 ? j * step : cleanMultiple(j, step);
+        if (d >= dlo - dtol) major.push({ value: d / f, index: j - base });
+      }
+      // Q4: minor ticks at m·10^i (m = 1…9) in decade mode, base-10 display only.
+      if (decades && (dir.logBasis === undefined || dir.logBasis === 10)) {
+        for (let i = Math.floor(nudged(dlo)); i < Math.floor(dhi + slack + 0.5); i += 1) {
+          for (let m = 1; m <= 9; m += 1) {
+            const v = (i + Math.log10(m)) / f;
+            if (inside(v)) minor.push(v);
+          }
+        }
+      }
+    }
+  }
+  if (dir.minorTicks && dir.minorTicks.kind !== "auto") {
+    const values = logListValues(dir, dir.minorTicks, input.data);
+    if (!values) return { kind: "invalid", what: "minor ticks" };
+    minor = values.map((t) => t.value).filter(inside);
+  }
+  for (const tick of major) tick.label = dir.tickLabels ? dir.tickLabels[tick.index] ?? "" : logTickLabel(dir, tick.value, format);
+  return { kind: "ok", ticks: { major, minor, scaleExponent: 0, labelled: spec.kind !== "empty" } };
+}
+
+/**
+ * `extra x ticks` (manual tickoptions.tex): the listed values inside the
+ * limits (logarithms on a log axis), numbered in list order, labelled like
+ * major ticks unless `extra x tick labels` gives the texts.
+ */
+export function computeExtraTicks(input: TickInput, scaleExponent: number): Tick[] | null {
+  const { dir, lo, hi, length } = input;
+  const spec = dir.extraTicks;
+  if (!spec || spec.kind === "auto" || spec.kind === "empty") return [];
+  const tol = (TICK_PLACEMENT_TOLERANCE_PT * (hi - lo)) / length;
+  const format = input.numberFormat ?? DEFAULT_PGF_NUMBER_FORMAT;
+  const values = dir.mode === "log" ? logListValues(dir, spec, input.data)
+    : spec.kind === "list" ? listValues(spec.raw)?.map((value, index) => ({ value, index })) ?? null
+      : spec.kind === "data" ? [...new Set(input.data)].sort((a, b) => a - b).map((value, index) => ({ value, index })) : null;
+  if (!values) return null;
+  const ticks = values.filter((t) => t.value >= lo - tol && t.value <= hi + tol).map((t): Tick => ({ value: t.value, index: t.index }));
+  for (const tick of ticks) {
+    if (dir.extraTickLabels) tick.label = dir.extraTickLabels[tick.index] ?? "";
+    else if (dir.mode === "log") tick.label = logTickLabel(dir, tick.value, format);
+    else {
+      const scaled = scaleExponent === 0 ? tick.value : Number((tick.value / 10 ** scaleExponent).toPrecision(15));
+      tick.label = `$${formatPgfNumber(scaled, format).tex}$`;
+    }
+  }
+  return ticks;
 }

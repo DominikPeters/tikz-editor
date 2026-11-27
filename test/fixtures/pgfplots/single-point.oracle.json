@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "single-point",
   "sourceSha256": "0e8cce51d71327183452dc0a68290d586921b41f4ac47646f006a271e8076a34"
@@ -780,6 +780,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

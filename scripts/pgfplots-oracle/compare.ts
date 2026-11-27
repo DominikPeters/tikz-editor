@@ -160,9 +160,20 @@ export function compareTier1(expected: Tier1, observed: Tier1, options: CompareO
         et.forEach((tick: OracleTick, i) => {
           const other = ot[i];
           if (!other) return;
-          const d = Math.abs(tick.value - other.value) / Math.abs(range || 1);
-          noteDelta(stats, "tick-value-relative", d);
-          if (d > tol.tickRelative) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value}`, d, tol.tickRelative);
+          const logDirection = e.scale?.[letter.startsWith("x") ? "x" : "y"] === "log";
+          const dirUnit = letter.startsWith("x") ? unit?.x : unit?.y;
+          if (logDirection && dirUnit !== undefined) {
+            // On a log direction TeX writes \tick (a logarithm) with 5 decimals
+            // and its fractional-step ticks carry fixed-point drift (behaviour
+            // Q3): compared as the canvas distance it causes, like the limits.
+            const canvas = Math.abs(tick.value - other.value) * dirUnit;
+            noteDelta(stats, "tick-value-canvas", canvas);
+            if (canvas > tol.layoutPt) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value} (${canvas.toFixed(4)}pt on canvas)`, canvas, tol.layoutPt);
+          } else {
+            const d = Math.abs(tick.value - other.value) / Math.abs(range || 1);
+            noteDelta(stats, "tick-value-relative", d);
+            if (d > tol.tickRelative) add("tick-value", `${twhere}[${i}].value`, `expected ${tick.value}, observed ${other.value}`, d, tol.tickRelative);
+          }
           if (tick.index !== other.index) add("tick-index", `${twhere}[${i}].index`, `expected \\ticknum ${tick.index}, observed ${other.index}`);
           node("tick-label", `${twhere}[${i}].label`, tick.label, other.label);
         });

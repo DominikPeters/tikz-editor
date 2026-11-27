@@ -57,6 +57,8 @@ export type AxisLayout = {
   labels: PlacedLabel[];
   /** Axis line width (the box stroke; F1 outsets the box by half of it). */
   lineWidth: number;
+  /** Which directions clamp the `origin` anchor into the box (linear ones, Q5). */
+  originClamp: { x: boolean; y: boolean };
   /** Outer bounding box (F1). */
   bbox: Box;
   /** `current axis` anchors (A7). */
@@ -238,7 +240,8 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
   }
   bbox = union(bbox, input.markBounds((x, y) => ({ x: mapX(x), y: mapY(y) }))) ?? bbox;
 
-  const localAnchors = axisAnchors({ x0, y0, x1, y1 }, bbox, { x: mapX(0), y: mapY(0) });
+  const originClamp = { x: model.x.mode !== "log", y: model.y.mode !== "log" };
+  const localAnchors = axisAnchors({ x0, y0, x1, y1 }, bbox, { x: mapX(0), y: mapY(0) }, originClamp);
   // A6: `current axis.<anchor>` lands on `at`.
   const target = input.at ?? { x: 0, y: 0 };
   const anchorPoint = localAnchors[model.anchor] ?? localAnchors["south west"] ?? { x: 0, y: 0 };
@@ -268,17 +271,19 @@ export function computeAxisLayout(input: LayoutInput): AxisLayout {
     grid,
     labels: shiftedLabels,
     lineWidth: input.lineWidth,
+    originClamp,
     bbox: shiftBox(bbox),
     anchors: Object.fromEntries(Object.entries(localAnchors).map(([k, p]) => [k, shift(p)]))
   };
 }
 
 /** A7: the documented `current axis` anchors of a boxed 2-D axis. */
-export function axisAnchors(box: { x0: number; y0: number; x1: number; y1: number }, outer: Box, origin: Point): Record<string, Point> {
+export function axisAnchors(box: { x0: number; y0: number; x1: number; y1: number }, outer: Box, origin: Point, clamp: { x: boolean; y: boolean } = { x: true, y: true }): Record<string, Point> {
   const { x0, y0, x1, y1 } = box;
   const cx = (x0 + x1) / 2; const cy = (y0 + y1) / 2;
   const ox = (outer.minX + outer.maxX) / 2; const oy = (outer.minY + outer.maxY) / 2;
-  const clamped = { x: Math.min(Math.max(origin.x, x0), x1), y: Math.min(Math.max(origin.y, y0), y1) };
+  // A log direction's origin is internal 0 (data 1), not clamped into the box (behaviour Q5).
+  const clamped = { x: clamp.x ? Math.min(Math.max(origin.x, x0), x1) : origin.x, y: clamp.y ? Math.min(Math.max(origin.y, y0), y1) : origin.y };
   return {
     center: { x: cx, y: cy }, north: { x: cx, y: y1 }, south: { x: cx, y: y0 }, east: { x: x1, y: cy }, west: { x: x0, y: cy },
     "north east": { x: x1, y: y1 }, "north west": { x: x0, y: y1 }, "south east": { x: x1, y: y0 }, "south west": { x: x0, y: y0 },
@@ -302,5 +307,5 @@ export function extendAxisLayout(layout: AxisLayout, extra: Box | null): AxisLay
   if (!extra) return layout;
   const bbox = union(layout.bbox, extra) ?? layout.bbox;
   const origin = { x: layout.map.origin.x, y: layout.map.origin.y };
-  return { ...layout, bbox, anchors: axisAnchors(layout.box, bbox, origin) };
+  return { ...layout, bbox, anchors: axisAnchors(layout.box, bbox, origin, layout.originClamp) };
 }

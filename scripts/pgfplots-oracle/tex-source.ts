@@ -88,16 +88,22 @@ function instrumentation(engine: OracleEngine): string {
 \def\pgfplotsoracle@anchors#1#2#3{\pgfutil@for\pgfplotsoracle@a:=#3\do{\pgfplotsoracle@anchor{#1}{#2}{\pgfplotsoracle@a}}}
 \def\pgfplotsoracle@nodeanchors{${anchorList(NODE_ANCHORS)}}
 \def\pgfplotsoracle@axisanchors{${anchorList(AXIS_ANCHORS)}}
-% Tick probe: documented xticklabel code; reports \tick and \ticknum, then
-% typesets the documented default label.
+% Tick probe: reports \tick and \ticknum from each tick label node.
 % The tick scale label (scaled ticks) is typeset with the tick label style
 % but outside the tick loop, where \ticknum is undefined; there it expands
 % to "S" (behaviour log, harness notes; painting unchanged, disturbance.mts).
 \def\ticknum{S}
 \def\pgfplotsoracle@ticklist{}
+% Harness version 3: run from the tick label node (TikZ execute at begin
+% node in xticklabel style), so the label code itself (xticklabel, the
+% log label of an axis with xmode=log) stays the document's. Not for the
+% scale label, which shares the style but has no tick (\ticknum = S).
+\def\pgfplotsoracle@S{S}
 \def\pgfplotsoracle@tick#1#2{%
+  \edef\pgfplotsoracle@tn{\ticknum}%
+  \ifx\pgfplotsoracle@tn\pgfplotsoracle@S\else
   \pgfplotsoracle@rec{TICK|#1|#2|\ticknum|\tick}%
-  \xdef\pgfplotsoracle@ticklist{\pgfplotsoracle@ticklist,#2\ticknum}}
+  \xdef\pgfplotsoracle@ticklist{\pgfplotsoracle@ticklist,#2\ticknum}\fi}
 \def\pgfplotsoracle@readticks#1{\pgfutil@for\pgfplotsoracle@t:=\pgfplotsoracle@ticklist\do{%
   \ifx\pgfplotsoracle@t\pgfutil@empty\else
     \edef\pgfplotsoracle@tn{pgfplotsoracle-\pgfplotsoracle@case-#1-\pgfplotsoracle@t}%
@@ -111,20 +117,19 @@ function instrumentation(engine: OracleEngine): string {
 % the letter xe/ye through the documented every extra x tick style.
 \def\pgfplotsoracle@beforeaxis#1#2#3#4#5{%
   \gdef\pgfplotsoracle@ticklist{}%
+  % The probe style refers to the current axis through this macro: a second
+  % axis appends the same style again, so ids must not be baked into it.
+  \gdef\pgfplotsoracle@axisid{#1}%
   \pgfplotsoracle@rec{AXIS|#1}%
   \pgfplotsoracle@rec{MODE|#1|#4|#5}%
   \ifpgfplotsoracle@ticks
     \pgfplotsset{every axis/.append style={%
-      xticklabel={\pgfplotsoracle@tick{#1}{x}#2},
-      yticklabel={\pgfplotsoracle@tick{#1}{y}#3},
-      xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-x\ticknum},
-      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-y\ticknum}},
+      xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-x\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{x}}},
+      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-y\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{y}}}},
       every extra x tick/.append style={%
-      xticklabel={\pgfplotsoracle@tick{#1}{xe}#2},
-      xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-xe\ticknum}},
+      xticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-xe\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{xe}}}},
       every extra y tick/.append style={%
-      yticklabel={\pgfplotsoracle@tick{#1}{ye}#3},
-      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-#1-ye\ticknum}}}%
+      yticklabel style={name=pgfplotsoracle-\pgfplotsoracle@case-\pgfplotsoracle@axisid-ye\ticknum,execute at begin node={\pgfplotsoracle@tick{\pgfplotsoracle@axisid}{ye}}}}}%
   \fi
   \ifpgfplotsoracle@descriptions
     \pgfplotsset{every axis/.append style={%
@@ -223,20 +228,24 @@ export function injectProbes(body: string): string {
     axisIndex += 1;
     const id = `a${axisIndex}`;
     ids.push(id);
-    // Log mode from the environment name, or a literal `xmode=log` in the
-    // environment's own options or anywhere in the body before this axis
-    // (\pgfplotsset, style definitions); a later `xmode=normal` there wins.
+    // Log mode from the environment name, a literal `xmode=log` in the
+    // environment's own options, or one in an `every axis` style defined in
+    // the body before this axis.
     // A mode set through a macro or an outside file is not detected
     // (README: limitations).
     const options = axisOptions(body, offset + match.length);
     const before = body.slice(0, offset);
     const label = (log: boolean) => (log ? "\\axisdefaultticklabellog" : "\\axisdefaultticklabel");
     const lastMode = (text: string, letter: string): string | undefined => [...text.matchAll(new RegExp(`\\b${letter}mode\\s*=\\s*(log|normal|linear)\\b`, "gu"))].at(-1)?.[1];
+    // Every environment sets its modes at its start, so only `every axis`
+    // style definitions before it can change them (behaviour Q1).
+    const styleText = [...before.matchAll(/every axis\/\.(?:append )?style\s*=\s*\{([^{}]*)\}/gu)].map((m) => m[1] ?? "").join(",");
     const isLog = (letter: string, envLog: boolean): boolean => {
       const own = lastMode(options, letter);
       if (own !== undefined) return own === "log";
-      if (envLog) return true;
-      return lastMode(before, letter) === "log";
+      const styled = lastMode(styleText, letter);
+      if (styled !== undefined) return styled === "log";
+      return envLog;
     };
     const xlog = isLog("x", environment === "semilogxaxis" || environment === "loglogaxis");
     const ylog = isLog("y", environment === "semilogyaxis" || environment === "loglogaxis");

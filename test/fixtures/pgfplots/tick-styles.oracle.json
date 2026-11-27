@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "tick-styles",
   "sourceSha256": "0fc5205792514a48eb3deacda03e257aec15e47dfce68da5cb9bb533c927980c"
@@ -904,6 +904,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

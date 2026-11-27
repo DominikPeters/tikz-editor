@@ -198,6 +198,14 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
       return { index: tick.index, value, valueRaw: String(value), ...(label ? { label } : {}) };
     });
   };
+  const extraTicks = (letter: "x" | "y"): Partial<Record<"xExtra" | "yExtra", OracleTick[]>> => {
+    const extra = layout.ticks[letter].extra;
+    if (!extra || extra.length === 0) return {};
+    return { [`${letter}Extra`]: extra.map((tick, position) => {
+      const label = labelOf(`${letter}extra`, position);
+      return { index: tick.index, value: tick.value, valueRaw: String(tick.value), ...(label ? { label } : {}) };
+    }) };
+  };
   const descriptions: OracleAxis["descriptions"] = {};
   for (const kind of ["title", "xlabel", "ylabel"] as const) {
     const label = labelOf(kind);
@@ -211,7 +219,8 @@ function adaptAxis(axis: AxisEvaluation, index: number, texts: TextGeometry[]): 
     limitCorners: { d00: map(limits.xmin, limits.ymin), d10: map(limits.xmax, limits.ymin), d01: map(limits.xmin, limits.ymax) },
     map: { origin, xUnit: { x: ex.x - origin.x, y: ex.y - origin.y }, yUnit: { x: ey.x - origin.x, y: ey.y - origin.y } },
     anchors: Object.fromEntries(Object.entries(layout.anchors).map(([k, q]) => [k, w(q)])),
-    ticks: { x: ticks("x"), y: ticks("y") },
+    ticks: { x: ticks("x"), y: ticks("y"), ...extraTicks("x"), ...extraTicks("y") },
+    scale: { x: axis.model.x.mode, y: axis.model.y.mode },
     descriptions
   };
 }

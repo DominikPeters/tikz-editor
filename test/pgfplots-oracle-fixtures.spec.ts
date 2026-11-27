@@ -44,7 +44,10 @@ function axisOf(oracle: PgfplotsOracle): OracleAxis {
  */
 const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "singleAxis" | "clip", string>>> = {
   "empty-axis": { probes: "no \\addplot: \\pgfplotsextra (limits, map probes) does not run (H3)", map: "no limits probe", tickPlacement: "no limits probe" },
-  xticklabels: { probes: "xticklabels/ytick=\\empty replace the tick probe (README: lost probes)", tickPlacement: "no tick probe" },
+  xticklabels: { probes: "ytick=\\empty: no y tick labels, so no y tick probe", tickPlacement: "no y tick probe" },
+  ...Object.fromEntries(["log-basis-two", "log-explicit-ticks", "log-loglog-default", "log-semilogy-grid", "log-small-range", "log-wide-range", "log-xmode-discard"]
+    .map((name) => [name, { tickPlacement: "log labels print b^k (or a fixed-point value), not \\tick (behaviour Q4)" }])),
+  "log-pgfplotsset-mode": { map: "axis cs probe over a range of 600 carries 1e-3 pt noise (behaviour N2)", tickPlacement: "same probe noise" },
   "scaled-ticks": { map: "axis cs probe at |y| ~ 1e4 carries ~0.16pt noise (behaviour N2)", tickPlacement: "\\tick is the scaled value (J4)" },
   "tick-align-outside": { tickPlacement: "labels are shifted by the outside ticks (D1)" },
   "tick-styles": { tickPlacement: "x ticks on top, y labels on the right" },

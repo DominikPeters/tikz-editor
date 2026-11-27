@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "tick-align-outside",
   "sourceSha256": "616012d2d188535a05279c0b69cdf96143d308a9789606af28a1f8a9fca72bc9"
@@ -966,6 +966,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     },
     "descriptions": {
      "xlabel": {

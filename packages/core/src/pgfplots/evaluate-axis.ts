@@ -50,7 +50,8 @@ import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyU
 import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
 import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
-import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
+import { computeExtraTicks, computeLogTicks, computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
+import { internalBase, internalLimitsModel, toInternal } from "./scale.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
 export const PGFPLOTS_SETTINGS_BINDING = "\\pgfplots settings state";
@@ -192,11 +193,6 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));
   markFeature("pgfplots_axis", "supported");
 
-  if (axis.environment !== "axis") {
-    markFeature("pgfplots_log_axes", "unsupported");
-    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-axis", message: `Logarithmic axes (\`${axis.environment}\`) are not rendered yet; this editor skips the environment and everything inside it.`, span: axis.beginSpan });
-    return [];
-  }
   const compat = readPgfplotsCompat(settings);
   // Per axis, so a statement's diagnostics do not depend on what was evaluated before it (incremental replay).
   if (compat === undefined || compatBelow111(compat)) {
@@ -211,6 +207,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
 
   // Stage 1.
   const model = resolveAxisModel({ axis, settings, bodySettings });
+  const logAxis = model.x.mode === "log" || model.y.mode === "log";
+  if (logAxis) markFeature("pgfplots_log_axes", "supported");
   const warned = new Set<string>();
   dedupeWarnings(diagnostics, model.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
   for (const bad of model.invalid) {
@@ -255,7 +253,16 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     if (statement.trailingPath) {
       diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: "Path operations after an `\\addplot` input (`\\closedcycle`, `node[pos=…]`) are not drawn yet.", span: statement.trailingPath.span });
     }
-    plots.push({ model: plot, points: data.points });
+    // Log directions work in the logarithm (Q1); a point without one is
+    // discarded (`unbounded coords=discard`, initially), its neighbours joined (Q2).
+    const points = logAxis
+      ? data.points.flatMap((point) => {
+        const x = toInternal(model.x, point.x); const y = toInternal(model.y, point.y);
+        if ((Number.isFinite(point.x) && !Number.isFinite(x)) || (Number.isFinite(point.y) && !Number.isFinite(y))) return [];
+        return [{ ...point, x, y }];
+      })
+      : data.points;
+    plots.push({ model: plot, points });
   });
   for (const item of axis.body) {
     if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend") {
@@ -271,7 +278,9 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
 
   // Stage 3.
   const drawn = plots.flatMap((plot) => (plot.points && !plot.model.forget ? [plot.points] : plot.points ? [plot.points] : []));
-  const limitsResult = computeLimits(model, drawn, boxSizeWithoutLimits(model));
+  const limitsModel = internalLimitsModel(model);
+  for (const bad of limitsModel.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `\`${bad.key}=${String(bad.value)}\` has no logarithm on a log axis; it is ignored.`, span: axis.optionsSpan ?? axis.beginSpan });
+  const limitsResult = computeLimits(limitsModel.model, drawn, boxSizeWithoutLimits(model));
   if (limitsResult.kind === "inverted") {
     diagnostics.push({ severity: "error", code: "pgfplots-inverted-limits", message: `${limitsResult.axis}min (${String(limitsResult.min)}) is larger than ${limitsResult.axis}max (${String(limitsResult.max)}); pgfplots cannot draw this axis.`, span: axis.optionsSpan ?? axis.beginSpan });
     return [];
@@ -284,17 +293,20 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     const styleUses = flattenStyleEntries(styleLists(model.styles, ["every tick label", `every ${letter} tick label`]), model.styles);
     const before = numberFormat;
     applyNumberFormat(styleUses);
-    const result = computeTicks({
+    const tickInput = {
       dir: model[letter], lo: letter === "x" ? limits.xmin : limits.ymin, hi: letter === "x" ? limits.xmax : limits.ymax,
       length: letter === "x" ? size.width : size.height, data: dataTickValues(drawn, letter), numberFormat,
       listBase: limitsResult.tickBase[letter]
-    });
+    };
+    const result = model[letter].mode === "log" ? computeLogTicks(tickInput) : computeTicks(tickInput);
+    const extra = result.kind === "ok" ? computeExtraTicks(tickInput, result.ticks.scaleExponent) : [];
     numberFormat = before;
+    if (extra === null) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:extra ${letter} ticks`, message: "Cannot read the extra tick list; no extra ticks are drawn.", span: axis.optionsSpan ?? axis.beginSpan });
     if (result.kind === "invalid") {
       diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${letter}tick`, message: `Cannot read the tick list \`${result.what}\`; no ticks are drawn.`, span: axis.optionsSpan ?? axis.beginSpan });
       return { major: [], minor: [], scaleExponent: 0, labelled: false };
     }
-    return result.ticks;
+    return extra && extra.length > 0 ? { ...result.ticks, extra } : result.ticks;
   };
   const ticks = { x: tickFor("x"), y: tickFor("y") };
   markFeature("pgfplots_ticks", "supported");
@@ -472,14 +484,18 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const dataTransform = multiplyMatrix(frameTransform, worldTransform(1, 0, 0, 1, layout.map.origin.x, layout.map.origin.y));
   const contentFrame = childFrame(axisFrame, {
     transform: dataTransform,
-    axisBasis: { x: worldVector(pt(layout.map.xUnit.x), pt(0)), y: worldVector(pt(0), pt(layout.map.yUnit.y)) },
+    axisBasis: {
+      x: worldVector(pt(layout.map.xUnit.x), pt(0)), y: worldVector(pt(0), pt(layout.map.yUnit.y)),
+      // Bare coordinates in a log direction are data values: the resolver takes their logarithm (design 4.2).
+      ...(logAxis ? { log: { ...(model.x.mode === "log" ? { x: internalBase(model.x) } : {}), ...(model.y.mode === "log" ? { y: internalBase(model.y) } : {}) } } : {})
+    },
     clipChain: contentClip,
     pictureSizeRelevant: model.clip ? false : parent.pictureSizeRelevant
   });
   const content: SceneElement[] = [];
   const markElements: SceneElement[] = [];
   const previousSystems = context.coordinateSystems;
-  context.coordinateSystems = new Map([...(previousSystems ?? []), ...axisCoordinateSystems(layout, toWorld)]);
+  context.coordinateSystems = new Map([...(previousSystems ?? []), ...axisCoordinateSystems(layout, toWorld, model)]);
   pushFrame(context, contentFrame);
   try {
     let plotIndex = 0;
@@ -709,7 +725,7 @@ function withLabelPosition(statement: PathStatement, at: Point): PathStatement {
   };
 }
 
-function axisCoordinateSystems(layout: AxisLayout, toWorld: (q: Point) => WorldPoint): Array<[string, CoordinateSystemResolver]> {
+function axisCoordinateSystems(layout: AxisLayout, toWorld: (q: Point) => WorldPoint, model: AxisModel): Array<[string, CoordinateSystemResolver]> {
   const { x0, y0, x1, y1 } = layout.box;
   const parsePair = (raw: string): [string, string] | null => {
     const parts = splitArgs(raw);
@@ -730,9 +746,11 @@ function axisCoordinateSystems(layout: AxisLayout, toWorld: (q: Point) => WorldP
   };
   const axisCs: CoordinateSystemResolver = (raw) => {
     const pair = parsePair(raw);
-    const x = pair ? numeric(pair[0]) : null;
-    const y = pair ? numeric(pair[1]) : null;
-    if (x === null || y === null) return { error: `axis cs:${raw}` };
+    const xData = pair ? numeric(pair[0]) : null;
+    const yData = pair ? numeric(pair[1]) : null;
+    const x = xData === null ? null : toInternal(model.x, xData);
+    const y = yData === null ? null : toInternal(model.y, yData);
+    if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return { error: `axis cs:${raw}` };
     return { point: toWorld({ x: layout.map.origin.x + x * layout.map.xUnit.x, y: layout.map.origin.y + y * layout.map.yUnit.y }) };
   };
   const relCs: CoordinateSystemResolver = (raw) => {

@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 2,
+ "harnessVersion": 3,
  "case": {
   "name": "embedded-tikz",
   "sourceSha256": "bcb07b6f7c8021db48bb79f20e3c4a1a99d3f438a8c839635d72ffd426cd95f6"
@@ -904,6 +904,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

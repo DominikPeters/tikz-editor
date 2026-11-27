@@ -1,0 +1,8 @@
+% Explicit ticks on a log axis, fixed-point log labels, embedded TikZ at bare and axis cs coordinates.
+\begin{tikzpicture}
+\begin{loglogaxis}[xmin=1, xmax=1000, ymin=0.01, ymax=100, xtick={1,5,50,500}, log ticks with fixed point]
+  \addplot coordinates {(1,0.02) (20,1) (1000,50)};
+  \draw[red] (10,0.1) -- (100,10);
+  \node[draw] at (axis cs:300,0.05) {A};
+\end{loglogaxis}
+\end{tikzpicture}

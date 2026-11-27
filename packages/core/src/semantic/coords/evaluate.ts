@@ -1,5 +1,5 @@
 import { requireArrayValue } from "../../utils/collections.js";
-import { coordinateTransform, type AxisBasis } from "./axis-basis.js";
+import { coordinateTransform, unitlessToAxisCoordinate, type AxisBasis } from "./axis-basis.js";
 import type { CoordinateSpelling } from "../site-context.js";
 import type { CoordinateForm, CoordinateItem } from "../../ast/types.js";
 import { pt } from "../../coords/scalars.js";
@@ -281,7 +281,15 @@ export function evaluateCoordinate(item: CoordinateItem, context: SemanticContex
       ...(optionalX4 === undefined ? {} : { x: optionalX4 }),
       ...(optionalY5 === undefined ? {} : { y: optionalY5 })
     };
-    localPoint = frameLocalPoint(pt(x.value), pt(y.value));
+    // Inside a pgfplots log axis a plain number is a data value: its
+    // logarithm is what the axis vectors scale (design/pgfplots.md 4.2).
+    const lx = scalarX ? unitlessToAxisCoordinate(frame.axisBasis, "x", x.value) : x.value;
+    const ly = scalarY ? unitlessToAxisCoordinate(frame.axisBasis, "y", y.value) : y.value;
+    if (lx === null || ly === null || (frame.axisBasis.log && item.relativePrefix)) {
+      diagnostics.push(frame.axisBasis.log && item.relativePrefix ? `unsupported-log-axis-relative-coordinate:${item.raw}` : `invalid-log-axis-coordinate:${item.raw}`);
+      return invalidCoordinate("cartesian", diagnostics, item.relativePrefix === "++");
+    }
+    localPoint = frameLocalPoint(pt(lx), pt(ly));
   }
 
   if (item.relativePrefix) {

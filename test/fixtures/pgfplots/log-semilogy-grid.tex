@@ -1,0 +1,6 @@
+% Semilog-y axis: an expression sampled in linear x, major and minor grid on the log direction.
+\begin{tikzpicture}
+\begin{semilogyaxis}[grid=both, domain=0:6, samples=13, ymin=0.5]
+  \addplot+[mark=none] {exp(x)};
+\end{semilogyaxis}
+\end{tikzpicture}
