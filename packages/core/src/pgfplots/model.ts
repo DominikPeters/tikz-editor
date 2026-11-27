@@ -85,6 +85,23 @@ export type AxisModel = {
   invalid: Array<{ key: string; value: string; span: Span }>;
   /** Plot-level keys given at axis level (`mark=*`, `only marks`), applied to every plot after `every axis plot`. */
   plotDefaults: PgfplotsKeyUse[];
+  /** Legend keys (behaviour L); the legend's TikZ style is `every axis legend` in `styles`. */
+  legend: LegendModel;
+};
+
+/** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
+export type LegendEntryText = { text: string; options: string; span: Span };
+
+export type LegendModel = {
+  /** `legend entries={…}`: used only when the axis has no legend command (manual). */
+  entries?: LegendEntryText[];
+  /** `legend columns` (initially 1; −1: one row). */
+  columns: number;
+  plotPos: "left" | "right" | "none";
+  reverse: boolean;
+  transpose: boolean;
+  /** `legend to name`: the legend is stored, not drawn. */
+  toName?: string;
 };
 
 export const PT_PER_CM = 72.27 / 2.54;
@@ -328,6 +345,50 @@ defineAxisKey("label shift", forAxes("xy", (d, v) => { const n = v === null ? nu
 defineAxisKey("max space between ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || n <= 0) return false; d.maxSpaceBetweenTicks = n; return true; }));
 defineAxisKey("try min ticks", forAxes("xy", (d, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null) return false; d.tryMinTicks = Math.round(n); return true; }));
 
+// Legends (manual axisdescription.tex "Legends", "Legend Appearance"; behaviour L).
+/**
+ * `legend pos` values: `at` and `anchor` appended to `every axis legend`
+ * (L2, measured: the four inner positions sit 3 % in from the box, while the
+ * initial `every axis legend` uses `at={(0.98,0.98)}`).
+ */
+export const LEGEND_POSITIONS: Record<string, string> = {
+  "south west": "at={(0.03,0.03)},anchor=south west",
+  "south east": "at={(0.97,0.03)},anchor=south east",
+  "north west": "at={(0.03,0.97)},anchor=north west",
+  "north east": "at={(0.97,0.97)},anchor=north east",
+  "outer north east": "at={(1.03,1)},anchor=north west"
+};
+const LEGEND_CELL_ANCHORS: Record<string, string> = { left: "west", right: "east", center: "center" };
+function appendLegendStyle(ctx: Ctx, raw: string): void {
+  ctx.model.styles.set("every axis legend", [...(ctx.model.styles.get("every axis legend") ?? []), parseOptionListRaw(`[${raw}]`)]);
+}
+defineAxisKey("legend pos", (ctx, v) => { const at = LEGEND_POSITIONS[stripBraces(v ?? "")]; if (!at) return false; appendLegendStyle(ctx, at); return true; });
+defineAxisKey("legend cell align", (ctx, v) => { const anchor = LEGEND_CELL_ANCHORS[stripBraces(v ?? "")]; if (!anchor) return false; appendLegendStyle(ctx, `cells={anchor=${anchor}}`); return true; });
+defineAxisKey("legend columns", (ctx, v) => { const n = v === null ? null : readPgfNumber(v); if (n === null || !Number.isInteger(n) || n === 0 || n < -1) return false; ctx.model.legend.columns = n; return true; });
+defineAxisKey("legend plot pos", (ctx, v) => { const text = stripBraces(v ?? ""); if (text !== "left" && text !== "right" && text !== "none") return false; ctx.model.legend.plotPos = text; return true; });
+defineAxisKey(["reverse legend", "legend reversed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.reverse = b; return true; });
+defineAxisKey(["transpose legend", "legend transposed"], (ctx, v) => { const b = readBoolean(v); if (b === null) return false; ctx.model.legend.transpose = b; return true; });
+defineAxisKey("legend to name", (ctx, v) => { const name = stripBraces(v ?? ""); if (name === "") delete ctx.model.legend.toName; else ctx.model.legend.toName = name; return true; });
+defineAxisKey("legend entries", (ctx, v, use) => {
+  ctx.model.legend.entries = splitTopLevelList(stripBraces(v ?? "")).map((item) => legendEntryText(item, use.origin.span));
+  return true;
+});
+
+/** `[opts]text` or `{[opts]text}` → options and text (manual `legend entries`). */
+export function legendEntryText(raw: string, span: Span): LegendEntryText {
+  const item = stripBraces(raw.trim());
+  if (item.startsWith("[")) {
+    let depth = 0;
+    for (let i = 0; i < item.length; i += 1) {
+      const c = item[i];
+      if (c === "{") depth += 1;
+      else if (c === "}") depth -= 1;
+      else if (c === "]" && depth === 0) return { options: item.slice(1, i), text: item.slice(i + 1).trim(), span };
+    }
+  }
+  return { options: "", text: item, span };
+}
+
 function setTickAlign(d: AxisDirectionModel, v: string | null): boolean {
   const text = stripBraces(v ?? "");
   if (text !== "inside" && text !== "outside" && text !== "center") return false;
@@ -373,7 +434,10 @@ function setScaledTicks(d: AxisDirectionModel, v: string | null): boolean {
 export const PLOT_LEVEL_KEYS = new Set([
   "mark", "only marks", "no marks", "no markers", "mark size", "mark options", "sharp plot",
   "every mark", "domain", "samples", "forget plot", "samples at", "variable", "trig format plots",
-  "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*"
+  "unbounded coords", "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
+  "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
+  "xbar interval legend", "ybar interval legend", "zbar interval legend",
+  "single xbar legend", "single ybar legend", "single zbar legend", "mesh legend"
 ]);
 
 /** Keys of a plot that this evaluator understands, beyond the TikZ path keys. */
@@ -408,7 +472,8 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     cycleList: [...COLOR_CYCLE_LIST],
     unsupported: [],
     invalid: [],
-    plotDefaults: []
+    plotDefaults: [],
+    legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
   const ctx: Ctx = { model };
   const sink = (use: PgfplotsKeyUse): void => {
@@ -477,6 +542,8 @@ export type PlotModel = {
   restrict: Array<{ axis: "x" | "y"; min: number; max: number; truncate: boolean }>;
   /** `declare function`/`trig format` given to the plot: they apply to its expressions. */
   pgfmathKeys: PgfplotsKeyUse[];
+  /** The legend image kind (`line legend` initially; `area legend`, `empty legend`, …; L5). */
+  legendImage: string;
   forget: boolean;
   unsupported: Array<{ key: string; span: Span }>;
   invalid: Array<{ key: string; value: string; span: Span }>;
@@ -487,7 +554,7 @@ export type PlotModel = {
  * `\addplot+[opts]` and `\addplot`: `every axis plot`, the cycle entry,
  * then opts (behaviour G2). `every axis plot post` comes last.
  */
-export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, cycleIndex: number): PlotModel {
+export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, cycleIndex: number, extraLists: readonly OptionListAst[] = []): PlotModel {
   const styles = cloneStyleRegistry(axis.styles);
   const plot: PlotModel = {
     statement,
@@ -500,6 +567,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
     unboundedCoords: "discard",
     restrict: [],
     pgfmathKeys: [],
+    legendImage: "line legend",
     forget: false,
     unsupported: [],
     invalid: []
@@ -515,6 +583,7 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   if (statement.options) lists.push(statement.options);
   if (statement.legacyPlot?.options) lists.push(statement.legacyPlot.options);
   lists.push(...(styles.get("every axis plot post") ?? []));
+  lists.push(...extraLists);
   // `every mark` is a TikZ style: it accumulates through definitions, and is read at the end.
   styles.set("every mark", []);
   expandPgfplotsOptions(lists, styles, (use) => {
@@ -552,6 +621,8 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "forget plot") { plot.forget = readBoolean(value) ?? true; return; }
+    if (LEGEND_IMAGE_KEYS.has(key)) { plot.legendImage = key; return; }
+    if (key === "legend image code") { plot.legendImage = "legend image code"; return; }
     if (key === "samples at") {
       const text = stripBraces(value ?? "");
       if (text === "") delete plot.samplesAt;
@@ -607,6 +678,13 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
   })));
   return plot;
 }
+
+/** Styles that set `legend image code` (manual "Legend Appearance"). */
+export const LEGEND_IMAGE_KEYS = new Set([
+  "line legend", "area legend", "empty legend", "xbar legend", "ybar legend", "zbar legend",
+  "xbar interval legend", "ybar interval legend", "zbar interval legend",
+  "single xbar legend", "single ybar legend", "single zbar legend", "mesh legend"
+]);
 
 /** `a:b` at the top-level colon (`domain=-2*pi:{f(1:2)}` keeps the braced colon). */
 export function splitDomain(text: string): [string, string] | null {

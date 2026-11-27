@@ -251,10 +251,22 @@ export function resolveNodeLayout(
   const resolvedMinWidth = Math.max(minWidth, minSize ?? minWidth);
   const resolvedMinHeight = Math.max(minHeight, minSize ?? minHeight);
   const measuredTextWidth = textWidth != null ? Math.max(textNaturalWidth, textWidth) : textNaturalWidth;
-  const effectiveTextHeight =
-    textHeightOverride != null || textDepthOverride != null
-      ? Math.max(0, (textHeightOverride ?? 0) + (textDepthOverride ?? 0))
-      : textNaturalHeight;
+  // `text height` and `text depth` replace the text box's height and depth
+  // independently (tikz.code.tex sets \ht and \dp of the node's text box);
+  // the box stays centred on the node, so the baseline (and the glyphs) move.
+  let textOffsetY = 0;
+  let effectiveTextHeight = textNaturalHeight;
+  if (textHeightOverride != null || textDepthOverride != null) {
+    const naturalAbove = textNaturalHeight / 2 - baseLineY;
+    const naturalBelow = textNaturalHeight / 2 + baseLineY;
+    const above = textHeightOverride ?? naturalAbove;
+    const below = textDepthOverride ?? naturalBelow;
+    effectiveTextHeight = Math.max(0, above + below);
+    const newBaseLineY = (below - above) / 2;
+    textOffsetY = newBaseLineY + (naturalAbove - naturalBelow) / 2;
+    midLineY += newBaseLineY - baseLineY;
+    baseLineY = newBaseLineY;
+  }
   const naturalWidth = measuredTextWidth + innerXSep * 2;
   const naturalHeight = effectiveTextHeight + innerYSep * 2;
   const visualWidth = Math.max(naturalWidth, resolvedMinWidth);
@@ -281,7 +293,9 @@ export function resolveNodeLayout(
     anchorHalfHeight: visualHeight / 2 + resolvedOuterY,
     anchorRadius: Math.max(visualWidth / 2 + resolvedOuterX, visualHeight / 2 + resolvedOuterY),
     baseLineY,
-    midLineY
+    midLineY,
+    ...(textOffsetY !== 0 ? { textOffsetY } : {}),
+    ...(textHeightOverride != null || textDepthOverride != null ? { textBoxHeight: effectiveTextHeight } : {})
   };
 }
 

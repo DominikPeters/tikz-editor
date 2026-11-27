@@ -57,5 +57,13 @@ export type NodeLayout = {
   anchorRadius: number;
   baseLineY: number;
   midLineY: number;
+  /**
+   * Vertical offset of the text block's centre from the node centre, when
+   * `text height`/`text depth` replace the box's height or depth (the
+   * glyphs then sit off-centre: their baseline is at `baseLineY`). 0 otherwise.
+   */
+  textOffsetY?: number;
+  /** The text box's height plus depth after `text height`/`text depth` (absent: the text block's). */
+  textBoxHeight?: number;
   twoPartShapeSizing?: TwoPartShapeSizingInput;
 };

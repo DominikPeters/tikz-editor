@@ -664,3 +664,119 @@ the manual, not swept.
 expressions: ≤ 0.0035 pt, the size of the LuaLaTeX/pdfLaTeX path noise
 floor (0.00245 pt, harness README). The comparison's `curvePt` = 0.02 pt
 therefore stands; no loosening.
+
+---
+
+## L. Legend (2026-11-27)
+
+Experiment E17: `e17-legend.mts` prints a Tier 1/Tier 2 digest of the
+discovery cases; `e17-cases.ts` holds the discovery set (29 cases) and a
+fresh validation set `b` (18 cases, new values and combinations);
+`check-cases.mts ./e17-cases.js` renders every case with the editor and
+compares it with the cached LuaLaTeX result at the design tolerances
+(`E17_SET=b` for the fresh set). Raw output
+`artifacts/pgfplots-experiments/e17-legend*/`.
+
+**Result.** Discovery set: 26 / 29 pass both tiers; fresh set: 16 / 18 pass
+first time after the rules below were fixed on the discovery set. Max error
+over the passing cases: layout (legend node anchors, bbox) **0.0077 pt**,
+paths **0.0078 pt**, glyphs **0.0080 pt**. The five failures: `\Large` and
+`\small` legend text (K4: LuaLaTeX uses LMRoman12/LMRoman9, the editor's
+text engine scales lmroman10; 0.14–0.37 pt), `rounded corners` on the legend
+(a TikZ node-path start-point difference, not a legend rule), and
+`nodes={text width=…}` multi-line entries (OPEN, below).
+
+**L1 — The legend is a TikZ matrix node.** Documented initial style
+(manual axisdescription.tex, "The default every axis legend style is"):
+`cells={anchor=center}, inner xsep=3pt, inner ysep=2pt, nodes={inner
+sep=2pt, text depth=0.15em}, anchor=north east, shape=rectangle,
+fill=white, draw=black, at={(0.98,0.98)}`. `legend style={…}` appends to it.
+`at` is in `axis description cs` (a plain pair is relative to the box);
+`anchor` is the matrix node's anchor *including* its outer sep (0.5 ×
+line width). The node's text box is the cell grid; its `base` anchor is the
+last row's origin (Tier 2 text box of the matrix: origin = content left
+edge on that baseline, height/depth = grid above/below). VERIFIED (all
+cases; e.g. base: node NE at (195.996, 146.993) = 0.98 × box).
+
+**L2 — `legend pos`.** `south west` = `at={(0.03,0.03)},anchor=south west`,
+`south east` (0.97,0.03), `north west` (0.03,0.97), `north east`
+(0.97,0.97), `outer north east` = `at={(1.03,1)},anchor=north west`.
+Surprise: `legend pos=north east` is **not** the initial position
+(0.98,0.98); the four inner positions sit 3 % in. The manual names the
+values only. VERIFIED (pos-* discovery, b-title, b-dots, b-cycle10 fresh).
+
+**L3 — Cell layout = PGF's matrix.** pgfmodulematrix.code.tex (LPPL): each
+cell is a picture; per column, its width is max(extent left of the origin)
++ max(extent right of it) over the rows that have that cell; per row, the
+height is max(0, extents above) and the depth max(0, extents below); the
+origins are aligned per column and per row; `column sep` in effect in a
+column's cell (matrix `column sep`, or `every odd/even column` styles —
+the documented `/tikz/every even column/.append style={column sep=…}`)
+separates it from the next column; `row sep` separates rows. Defaults: no
+separation. Cell extents: a text node's border box without outer sep; a
+stroked image path grows by half its line width; marks count by their
+geometric extent; an empty image (`empty legend`) is a zero box at its
+origin. `matrix.ts` lays out cells by their centres and only holds nodes,
+so the legend uses a dedicated implementation of this algorithm
+(`pgfplots/legend.ts`) and TikZ nodes for the texts and the box (open
+question of design/pgfplots.md settled). VERIFIED (heights: rows of
+`$x^2$`, `g`; wide; cols2; colsall; transpose; b-colsep, b-evencol,
+b-cols3, b-revtrans fresh).
+
+**L4 — Entries.** `\legend{…}` replaces all other entries (the last one
+wins); otherwise `\addlegendentry` in order (position in the body does not
+matter: b-addleg-order); `legend entries` only when the axis has no legend
+command (b-legend-wins). `\legend` lists are `\foreach` lists (dots:
+b-dots). `[opts]text` or `{[opts]text}` give per-entry node options
+(b-entrykey, b-entryopts). Images come from every `\addplot` that is not
+`forget plot` and from `\addlegendimage{opts}` (as `\addplot[opts]`, no
+cycle list), in body order. Entry i pairs with image i; the legend has
+min(#entries, #images) pairs (fewer, more); an empty entry drops its pair
+and its image (emptyentry: `\legend{a,,c}` shows plots 1 and 3).
+`reverse legend` reverses the pairs; `legend columns=n` fills rows of n
+pairs (−1: one row); `transpose legend` (n > 1) turns the input rows into
+columns (a,b,c,d at n=2 → rows [a c], [b d]). `legend plot pos=left`
+(initial) puts image then text in each pair, `right` text then image,
+`none` text only. VERIFIED (reverse, transpose, cols2, plotright,
+plotnone; fresh b-revtrans, b-entrykey).
+
+**L5 — Images.** Drawn with the plot's style followed by `every legend
+image post` (`legend image post style`), inside the matrix: a line width
+set on the legend (`legend style={thick}`) reaches the images (b-sep).
+`line legend` (initial): one path (0,0)–(0.3cm,0)–(0.6cm,0) (three points,
+as documented) and the plot's mark at the middle point only (`mark
+repeat=2, mark phase=2`); `only marks` draws the mark alone. `area legend`:
+`(0cm,-0.1cm) rectangle (0.6cm,0.1cm)` filled/stroked per the plot style
+(PDF path ends with a moveto to the far corner). `empty legend`: nothing.
+Marks keep the cycle list's mark fill and the plot's `mark options`
+(`scale=` scales the mark geometry, b-markopts). Bar legends and `legend
+image code/.code` are diagnosed (image omitted; other agents' plot types
+plug into `LEGEND_IMAGE_BUILDERS`). VERIFIED (onlymarks, area, empty,
+postmark, marksize; fresh b-image, b-post, b-fill, b-markopts).
+
+**L6 — Text cells.** `\node[<cells>, <every odd/even column>, <nodes>,
+<entry options>]{text}`, i.e. anchor from `cells` (`legend cell align`
+= `cells={anchor=west|east|center}`), `inner sep=2pt`, `text depth=0.15em`
+with the em of the legend's font, `font`/`text` of `legend style` reaching
+the cells. `text depth` replaces only the depth: the entry text box is
+(natural height, 1.5 pt) — the editor's node layout replaced *both* height
+and depth when either was given (fixed in `semantic/nodes/layout.ts`;
+TikZ sets `\dp` of the text box only). VERIFIED (left, right, b-rounded's
+cells, entries; Tier 2 text boxes of legend-marks: depth 1.49994).
+
+**L7 — Paint order and bounding box.** After the axis descriptions (title,
+labels): legend fill, legend stroke, then per row and column the image
+paths (line, then mark fill/stroke) and the entry text. The legend node
+(border plus half its line width when drawn) counts for the axis' bounding
+box and `outer` anchors (pos-one: `current axis.outer east` = legend east).
+OBSERVED/VERIFIED (b-title paint order checked by the comparison;
+legend-marks fixture).
+
+**L8 — `legend to name`.** The legend is not drawn in the axis (manual);
+`\ref{name}` elsewhere is not rendered by the editor. Diagnosed.
+
+**OPEN — multi-line entries.** `legend style={nodes={text width=40pt}}`
+(b-textwidth): TeX's legend is 5.6 pt lower than ours. The manual notes the
+initial `text depth=0.15em` clips multi-line entries unless reset; how the
+editor's `text width` nodes report height/depth with a depth override needs
+its own experiment.
