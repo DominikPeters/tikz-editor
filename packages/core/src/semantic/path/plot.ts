@@ -5,6 +5,8 @@ import type { MacroBinding } from "../../macros/index.js";
 import { expandForeachList } from "../../foreach/list.js";
 import { parseLength, parseQuantityExpression } from "../coords/parse-length.js";
 import type { StyleChainEntry } from "../style-chain.js";
+import { parseStyleValueAsOptionList } from "../../options/parse.js";
+import { DEFAULT_PLOT_MARK_SIZE } from "./plot-marks.js";
 
 export type PlotSettings = {
   handler:
@@ -32,6 +34,19 @@ export type PlotSettings = {
   samplesAt: number[] | null;
   variable: string;
   mark: string | null;
+  /** `mark size` (`\pgfplotmarksize`), pt. */
+  markSize: number;
+  /** `mark options` / `every mark`: null while unset, so a `\tikzset` definition still applies. */
+  markOptions: OptionListAst[] | null;
+  markRepeat: number;
+  markPhase: number;
+  /** `mark indices` (1-based stream positions), or null for `mark repeat`/`mark phase` selection. */
+  markIndices: number[] | null;
+  /** Raw `/pgf/mark color` value, or null while unset. */
+  markColor: string | null;
+  textMark: string;
+  textMarkStyle: string;
+  textMarkAsNode: boolean;
   tension: number;
   barWidth: number;
   barShift: number;
@@ -48,6 +63,15 @@ export function createDefaultPlotSettings(): PlotSettings {
     samplesAt: null,
     variable: "\\x",
     mark: null,
+    markSize: DEFAULT_PLOT_MARK_SIZE,
+    markOptions: null,
+    markRepeat: 1,
+    markPhase: 1,
+    markIndices: null,
+    markColor: null,
+    textMark: "p",
+    textMarkStyle: "",
+    textMarkAsNode: false,
     tension: 0.55,
     barWidth: requireDefined(parseLength("10pt", "pt"), "Expected an internal plot value"),
     barShift: 0,
@@ -136,6 +160,10 @@ function applyPlotOptionList(
 
     if (key === "mark") {
       settings.mark = parsePlotMark(valueRaw);
+      continue;
+    }
+
+    if (applyPlotMarkOption(settings, key, valueRaw, entry.valueRaw)) {
       continue;
     }
 
@@ -254,6 +282,68 @@ function applyPlotFlag(settings: PlotSettings, rawKey: string): void {
   }
   if (key === "only marks") {
     settings.handler = "only-marks";
+    return;
+  }
+  if (key === "no marks" || key === "no markers") {
+    settings.mark = null;
+    return;
+  }
+  if (key === "text mark as node" || key === "/pgf/text mark as node") {
+    settings.textMarkAsNode = true;
+  }
+}
+
+/** Keys of `\tikz@plot@mark` and friends (tikz.code.tex) and of the plotmarks library. */
+function applyPlotMarkOption(settings: PlotSettings, key: string, valueRaw: string, unexpandedRaw: string): boolean {
+  const pgfKey = key.startsWith("/pgf/") ? key.slice("/pgf/".length) : key.startsWith("/tikz/") ? key.slice("/tikz/".length) : key;
+  switch (pgfKey) {
+    case "mark size": {
+      const parsed = parsePlotLength(valueRaw, "pt");
+      if (parsed != null && Number.isFinite(parsed)) settings.markSize = parsed;
+      return true;
+    }
+    case "mark options":
+    case "every mark/.style": {
+      const list = parseStyleValueAsOptionList(unexpandedRaw);
+      settings.markOptions = list ? [list] : [];
+      return true;
+    }
+    case "every mark/.append style": {
+      const list = parseStyleValueAsOptionList(unexpandedRaw);
+      if (list) settings.markOptions = [...(settings.markOptions ?? []), list];
+      return true;
+    }
+    case "mark repeat": {
+      const parsed = parsePlotScalar(valueRaw);
+      if (parsed != null && Number.isFinite(parsed)) settings.markRepeat = Math.trunc(parsed);
+      return true;
+    }
+    case "mark phase": {
+      const parsed = parsePlotScalar(valueRaw);
+      if (parsed != null && Number.isFinite(parsed)) settings.markPhase = Math.trunc(parsed);
+      return true;
+    }
+    case "mark indices": {
+      const normalized = stripBalancedOuterBraces(valueRaw);
+      settings.markIndices = normalized.length === 0 ? null : parsePlotSamplesAt(normalized).map((value) => Math.round(value));
+      return true;
+    }
+    case "mark color": {
+      const normalized = stripBalancedOuterBraces(valueRaw);
+      settings.markColor = normalized.length === 0 ? null : normalized;
+      return true;
+    }
+    case "text mark":
+      settings.textMark = stripBalancedOuterBraces(valueRaw);
+      return true;
+    case "text mark style":
+      settings.textMarkStyle = stripBalancedOuterBraces(valueRaw);
+      return true;
+    case "text mark as node":
+      settings.textMarkAsNode = stripBalancedOuterBraces(valueRaw).toLowerCase() !== "false";
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -312,8 +402,9 @@ function parsePlotVariable(raw: string): string | null {
 }
 
 function parsePlotMark(raw: string): string | null {
+  // \tikz@plot@mark: `mark=none` switches marks off; names are case- and space-sensitive.
   const normalized = stripBalancedOuterBraces(raw).trim();
-  return normalized.length > 0 ? normalized : null;
+  return normalized.length > 0 && normalized !== "none" ? normalized : null;
 }
 
 function parsePlotLength(raw: string, defaultUnit: "cm" | "pt"): number | null {

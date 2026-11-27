@@ -524,12 +524,13 @@ describe("semantic evaluator / coordinates and path ops", () => {
   
       expect(result.diagnostics.some((diagnostic) => diagnostic.code === "unsupported-option-flag:only marks")).toBe(false);
       const paths = elementsOfKind(result.scene.elements, "Path");
-      expect(paths.length).toBe(1);
-      const markerPath = paths[0];
-      if (markerPath?.kind === "Path") {
+      // One path per mark (PGF paints each mark separately), no polyline.
+      expect(paths.length).toBe(3);
+      for (const markerPath of paths) {
+        expect(markerPath.id).toContain(":mark:");
         expect(markerPath.commands.some((command) => command.kind === "C")).toBe(false);
         expect(markerPath.commands.some((command) => command.kind === "Z")).toBe(false);
-        expect(markerPath.commands.filter((command) => command.kind === "L").length).toBe(6);
+        expect(markerPath.commands.filter((command) => command.kind === "L").length).toBe(2);
       }
     });
 
@@ -541,29 +542,16 @@ describe("semantic evaluator / coordinates and path ops", () => {
       const result = evaluateSemantic(source);
   
       const paths = elementsOfKind(result.scene.elements, "Path");
-      expect(paths.length).toBeGreaterThanOrEqual(4);
-  
-      const plusMarkerPath = paths.find((element) => {
-        if (element.kind !== "Path") {
-          return false;
-        }
-        const hasArc = element.commands.some((command) => command.kind === "A");
-        const hasCurve = element.commands.some((command) => command.kind === "C");
-        const hasClose = element.commands.some((command) => command.kind === "Z");
-        const lineCount = element.commands.filter((command) => command.kind === "L").length;
-        return !hasArc && !hasCurve && !hasClose && lineCount >= 6;
-      });
-      const starMarkerPath = paths.find((element) => {
-        if (element.kind !== "Path") {
-          return false;
-        }
-        const arcCount = element.commands.filter((command) => command.kind === "A").length;
-        const closeCount = element.commands.filter((command) => command.kind === "Z").length;
-        return arcCount >= 6 && closeCount >= 3;
-      });
-  
-      expect(plusMarkerPath?.kind).toBe("Path");
-      expect(starMarkerPath?.kind).toBe("Path");
+      const marks = paths.filter((element) => element.id.includes(":mark:"));
+      expect(paths.length - marks.length).toBe(2);
+      // `+`: two strokes per mark; `*`: PGF's four-Bezier circle, filled and stroked.
+      const plusMarks = marks.filter((element) => element.commands.filter((command) => command.kind === "L").length === 2);
+      const starMarks = marks.filter((element) =>
+        element.commands.filter((command) => command.kind === "C").length === 4 &&
+        element.commands.some((command) => command.kind === "Z") &&
+        element.style.fill != null && element.style.stroke != null);
+      expect(plusMarks).toHaveLength(3);
+      expect(starMarks).toHaveLength(3);
     });
 
     it("emits explicit diagnostics for currently unsupported path keywords", () => {

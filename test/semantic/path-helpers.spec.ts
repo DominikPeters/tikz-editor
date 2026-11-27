@@ -1218,6 +1218,7 @@ describe("semantic evaluate-plot helpers", () => {
 
     for (const handler of handlers) {
       const geometryElements: SceneElement[] = [];
+      const markElements: SceneElement[] = [];
       const marked: string[] = [];
       const settings = {
         ...createDefaultPlotSettings(),
@@ -1240,7 +1241,11 @@ describe("semantic evaluate-plot helpers", () => {
         style: defaultStyle(),
         styleChain: [],
         geometryElements,
+        markElements,
+        context: createSemanticContext(defaultStyle(), identityTransform),
+        canvasTransform: identityTransform,
         markFeature: (feature, status) => marked.push(`${feature}:${status}`),
+        pushDiagnostic: () => undefined,
         activeRoundedCorners: 2,
         setCurrentPoint: (point) => currentPoints.push(point),
         setPathStartPoint: (point) => pathStarts.push(point)
@@ -1249,10 +1254,11 @@ describe("semantic evaluate-plot helpers", () => {
       expect(currentPoints.at(-1)).toEqual(p(9, 3));
       expect(pathStarts.length).toBe(1);
       expect(marked).toContain("svg_path:supported");
-      expect(geometryElements.length).toBeGreaterThanOrEqual(settings.mark ? 1 : 1);
+      // Marks go to the node box (painted after the path), one element per mark and paint operation.
+      expect(markElements).toHaveLength(settings.mark ? 3 : 0);
       if (handler === "only-marks") {
         expect(result.lastPlacementSegment).toBeNull();
-        expect(geometryElements).toHaveLength(1);
+        expect(geometryElements).toHaveLength(0);
       } else {
         expect(result.previousSegmentRoundedCorners).toBe(2);
       }
@@ -1276,7 +1282,11 @@ describe("semantic evaluate-plot helpers", () => {
         style: defaultStyle(),
         styleChain: [],
         geometryElements,
+        markElements: [],
+        context: createSemanticContext(defaultStyle(), identityTransform),
+        canvasTransform: identityTransform,
         markFeature: () => undefined,
+        pushDiagnostic: () => undefined,
         activeRoundedCorners: null,
         setCurrentPoint: () => undefined,
         setPathStartPoint: () => undefined
@@ -1300,7 +1310,11 @@ describe("semantic evaluate-plot helpers", () => {
       style: defaultStyle(),
       styleChain: [],
       geometryElements,
+      markElements: [],
+      context: createSemanticContext(defaultStyle(), identityTransform),
+      canvasTransform: identityTransform,
       markFeature: () => undefined,
+      pushDiagnostic: () => undefined,
       activeRoundedCorners: null,
       setCurrentPoint: (point) => {
         current = point;

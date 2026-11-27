@@ -439,6 +439,22 @@ export const capabilityMatrix: CapabilityMatrix = {
     edit: "none",
     fixtures: ["plot_operation"]
   },
+  plot_marks: {
+    parser: "stable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "none",
+    fixtures: ["plot_marks"],
+    notes: "Basic marks (*, x, +, ball) with mark size, mark options (style and local transform), mark repeat/phase/indices, mark=none and only marks, painted after the path under the canvas transform; geometry matches PGF within 0.01pt. ball uses an SVG radial-gradient approximation of the ball shading; the text mark is not rendered."
+  },
+  plot_marks_library: {
+    parser: "stable",
+    semantic: "stable",
+    svg: "stable",
+    edit: "none",
+    fixtures: ["plot_marks_library"],
+    notes: "Every mark of the PGF plotmarks library, including mark color for the half-filled marks; geometry matches PGF within 0.01pt. Export infers \\usetikzlibrary{plotmarks}."
+  },
   to_operation: {
     parser: "stable",
     semantic: "partial",

@@ -1,4 +1,3 @@
-import { requireDefined } from "../../utils/invariants.js";
 import { requireArrayValue } from "../../utils/collections.js";
 import { worldPoint } from "../../coords/points.js";
 import { pt } from "../../coords/scalars.js";
@@ -9,12 +8,13 @@ import type { MacroBinding } from "../../macros/index.js";
 import type { SemanticContext } from "../context.js";
 import { deleteContextMacroBinding, readContextMacroBinding, writeContextMacroBinding } from "../context.js";
 import { evaluateRawCoordinate } from "../coords/evaluate.js";
-import { parseLength } from "../coords/parse-length.js";
 import type { ResolvedStyle, SceneElement, ScenePath } from "../types.js";
 import type { StyleChainEntry } from "../style-chain.js";
-import { appendCircleSubpath, appendRectangleSubpath, hasDrawablePathSegments, makePath } from "./elements.js";
+import { appendRectangleSubpath, hasDrawablePathSegments, makePath } from "./elements.js";
+import { emitPlotMarks } from "./plot-mark-elements.js";
 import { formatPlotSampleValue, resolvePlotSampleValues, type PlotSettings } from "./plot.js";
 import type { DiagnosticPushFn, FeatureMarkFn, PlacementSegment } from "./types.js";
+import type { WorldTransform } from "../../coords/transforms.js";
 
 function wp(x: number, y: number): WorldPoint {
   return worldPoint(pt(x), pt(y));
@@ -119,57 +119,6 @@ export function evaluatePlotCoordinatePoints(params: {
   return points;
 }
 
-function appendPlotXMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const halfSize = requireDefined(parseLength("1.5pt", "pt"), "Expected an internal evaluate-plot value");
-  for (const point of points) {
-    commands.push({
-      kind: "M",
-      to: wp(point.x - halfSize, point.y - halfSize)
-    });
-    commands.push({
-      kind: "L",
-      to: wp(point.x + halfSize, point.y + halfSize)
-    });
-    commands.push({
-      kind: "M",
-      to: wp(point.x - halfSize, point.y + halfSize)
-    });
-    commands.push({
-      kind: "L",
-      to: wp(point.x + halfSize, point.y - halfSize)
-    });
-  }
-}
-
-function appendPlotPlusMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const halfSize = requireDefined(parseLength("2pt", "pt"), "Expected an internal evaluate-plot value");
-  for (const point of points) {
-    commands.push({
-      kind: "M",
-      to: wp(point.x - halfSize, point.y)
-    });
-    commands.push({
-      kind: "L",
-      to: wp(point.x + halfSize, point.y)
-    });
-    commands.push({
-      kind: "M",
-      to: wp(point.x, point.y - halfSize)
-    });
-    commands.push({
-      kind: "L",
-      to: wp(point.x, point.y + halfSize)
-    });
-  }
-}
-
-function appendPlotAsteriskMarks(commands: ScenePath["commands"], points: WorldPoint[]): void {
-  const radius = requireDefined(parseLength("2pt", "pt"), "Expected an internal evaluate-plot value");
-  for (const point of points) {
-    appendCircleSubpath(commands, point, radius);
-  }
-}
-
 function pointsClose(left: WorldPoint, right: WorldPoint): boolean {
   return Math.hypot(left.x - right.x, left.y - right.y) <= 1e-6;
 }
@@ -183,7 +132,12 @@ export function emitPlotPath(params: {
   style: ResolvedStyle;
   styleChain: StyleChainEntry[];
   geometryElements: SceneElement[];
+  /** Receives the marks: TikZ paints them from the node box, after the whole path. */
+  markElements: SceneElement[];
+  context: SemanticContext;
+  canvasTransform: WorldTransform;
   markFeature: FeatureMarkFn;
+  pushDiagnostic: DiagnosticPushFn;
   activeRoundedCorners: number | null;
   setCurrentPoint: (point: WorldPoint) => void;
   setPathStartPoint: (point: WorldPoint | null) => void;
@@ -197,7 +151,11 @@ export function emitPlotPath(params: {
     style,
     styleChain,
     geometryElements,
+    markElements,
+    context,
+    canvasTransform,
     markFeature,
+    pushDiagnostic,
     activeRoundedCorners,
     setCurrentPoint,
     setPathStartPoint
@@ -208,7 +166,6 @@ export function emitPlotPath(params: {
 
   const commands: ScenePath["commands"] = [];
   let lastSegment: { from: WorldPoint; to: WorldPoint } | null = null;
-  const markPoints: WorldPoint[] = [];
   const tensionFactor = 0.2775 * settings.tension;
 
   const addConnectionToFirstPoint = (source: WorldPoint, target: WorldPoint): void => {
@@ -243,7 +200,6 @@ export function emitPlotPath(params: {
     for (let pointIndex = 1; pointIndex < points.length; pointIndex += 1) {
       addLine(requireArrayValue(points, pointIndex - 1), requireArrayValue(points, pointIndex));
     }
-    markPoints.push(...points);
   } else if (settings.handler === "sharp-cycle") {
     const first = requireArrayValue(points, 0);
     if (connectFrom) {
@@ -257,7 +213,6 @@ export function emitPlotPath(params: {
       lastSegment = { from: requireArrayValue(points, points.length - 1), to: first };
     }
     commands.push({ kind: "Z" });
-    markPoints.push(...points);
   } else if (settings.handler === "smooth") {
     const first = requireArrayValue(points, 0);
     if (connectFrom) {
@@ -286,7 +241,6 @@ export function emitPlotPath(params: {
             );
       addCurve(current, c1, c2, next);
     }
-    markPoints.push(...points);
   } else if (settings.handler === "smooth-cycle") {
     const first = requireArrayValue(points, 0);
     if (connectFrom) {
@@ -313,7 +267,6 @@ export function emitPlotPath(params: {
       lastSegment = { from: requireArrayValue(points, count - 1), to: first };
       commands.push({ kind: "Z" });
     }
-    markPoints.push(...points);
   } else if (
     settings.handler === "const-left" ||
     settings.handler === "const-right" ||
@@ -371,29 +324,6 @@ export function emitPlotPath(params: {
       addLine(midTop, current);
     }
 
-    if (settings.handler === "const-left" || settings.handler === "jump-left") {
-      if (points.length > 1) {
-        markPoints.push(...points.slice(0, -1));
-      } else {
-        markPoints.push(...points);
-      }
-    } else if (settings.handler === "const-right" || settings.handler === "jump-right") {
-      if (points.length > 1) {
-        markPoints.push(...points.slice(1));
-      } else {
-        markPoints.push(...points);
-      }
-    } else {
-      if (points.length > 1) {
-        for (let pointIndex = 1; pointIndex < points.length; pointIndex += 1) {
-          const previous = requireArrayValue(points, pointIndex - 1);
-          const current = requireArrayValue(points, pointIndex);
-          markPoints.push(wp(0.5 * (previous.x + current.x), previous.y));
-        }
-      } else {
-        markPoints.push(...points);
-      }
-    }
   } else if (settings.handler === "ycomb") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -403,7 +333,6 @@ export function emitPlotPath(params: {
       commands.push({ kind: "M", to: base });
       addLine(base, point);
     }
-    markPoints.push(...points);
   } else if (settings.handler === "xcomb") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -413,7 +342,6 @@ export function emitPlotPath(params: {
       commands.push({ kind: "M", to: base });
       addLine(base, point);
     }
-    markPoints.push(...points);
   } else if (settings.handler === "polar-comb") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -423,7 +351,6 @@ export function emitPlotPath(params: {
       commands.push({ kind: "M", to: origin });
       addLine(origin, point);
     }
-    markPoints.push(...points);
   } else if (settings.handler === "ybar") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -437,7 +364,6 @@ export function emitPlotPath(params: {
         lastSegment = { from: wp(left, 0), to: wp(left, point.y) };
       }
     }
-    markPoints.push(...points);
   } else if (settings.handler === "xbar") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -451,7 +377,6 @@ export function emitPlotPath(params: {
         lastSegment = { from: wp(0, bottom), to: wp(point.x, bottom) };
       }
     }
-    markPoints.push(...points);
   } else if (settings.handler === "ybar-interval") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -470,7 +395,6 @@ export function emitPlotPath(params: {
         lastSegment = { from: wp(left, 0), to: wp(left, current.y) };
       }
     }
-    markPoints.push(...points);
   } else if (settings.handler === "xbar-interval") {
     if (connectFrom) {
       addConnectionToFirstPoint(connectFrom, requireArrayValue(points, 0));
@@ -489,9 +413,6 @@ export function emitPlotPath(params: {
         lastSegment = { from: wp(0, bottom), to: wp(current.x, bottom) };
       }
     }
-    markPoints.push(...points);
-  } else {
-    markPoints.push(...points);
   }
 
   const plotPath = makePath(statementId, item.id, style, styleChain, item.span);
@@ -502,32 +423,21 @@ export function emitPlotPath(params: {
     markFeature("svg_path", "supported");
   }
 
-  const markName = (settings.mark ?? "").trim().toLowerCase();
-  if (markPoints.length > 0 && (markName === "x" || markName === "+" || markName === "*")) {
-    const markerPathStyle: ResolvedStyle =
-      markName === "*"
-        ? {
-            ...style,
-            stroke: style.stroke ?? style.fill ?? style.textColor ?? "black",
-            fill: style.fill ?? style.stroke ?? style.textColor ?? "black"
-          }
-        : {
-            ...style,
-            fill: "none"
-          };
-    const markerPath = makePath(statementId, `${item.id}:mark`, markerPathStyle, styleChain, item.span);
-    if (markName === "x") {
-      appendPlotXMarks(markerPath.commands, markPoints);
-    } else if (markName === "+") {
-      appendPlotPlusMarks(markerPath.commands, markPoints);
-    } else {
-      appendPlotAsteriskMarks(markerPath.commands, markPoints);
-    }
-    if (hasDrawablePathSegments(markerPath)) {
-      geometryElements.push(markerPath);
-      markFeature("svg_path", "supported");
-    }
-  }
+  // \tikz@@@plot replays the stream through the mark handler: marks sit on
+  // the data points whatever the plot handler drew.
+  markElements.push(...emitPlotMarks({
+    statementId,
+    itemId: item.id,
+    span: item.span,
+    points,
+    settings,
+    pathStyle: style,
+    styleChain,
+    canvasTransform,
+    context,
+    markFeature,
+    pushDiagnostic
+  }));
 
   const finalPoint = requireArrayValue(points, points.length - 1);
   setCurrentPoint(finalPoint);

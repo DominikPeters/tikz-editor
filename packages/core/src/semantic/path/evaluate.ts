@@ -505,7 +505,11 @@ function evaluatePathInFrame(
             style: builder.style,
             styleChain: builder.statementStyleChain,
             geometryElements,
+            markElements: frontNodeElements,
+            context,
+            canvasTransform: currentFrame(context).transform,
             markFeature,
+            pushDiagnostic,
             activeRoundedCorners: builder.activeRoundedCorners,
             setCurrentPoint: (point) => { setCurrentPoint(point); },
             setPathStartPoint: (point) => {
@@ -561,7 +565,11 @@ function evaluatePathInFrame(
             style: builder.style,
             styleChain: builder.statementStyleChain,
             geometryElements,
+            markElements: frontNodeElements,
+            context,
+            canvasTransform: currentFrame(context).transform,
             markFeature,
+            pushDiagnostic,
             activeRoundedCorners: builder.activeRoundedCorners,
             setCurrentPoint: (point) => { setCurrentPoint(point); },
             setPathStartPoint: (point) => {

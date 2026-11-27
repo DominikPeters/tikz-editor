@@ -168,8 +168,9 @@ describe("svg emitter", () => {
     const emitted = emitSvg(semantic.scene);
 
     expect(semantic.diagnostics.some((diagnostic) => diagnostic.code === "invalid-plot-coordinates")).toBe(false);
-    expect(emitted.svg.match(/<path /g)?.length ?? 0).toBeGreaterThanOrEqual(4);
-    expect(emitted.svg).toContain(" A ");
+    // Two plot polylines plus one path per mark; `*` marks are PGF's Bezier circles.
+    expect(emitted.svg.match(/<path /g)?.length ?? 0).toBe(8);
+    expect(emitted.svg).toContain(" C ");
   });
 
   it("includes arc extrema in bounds so the viewBox does not clip half-circle arcs", () => {

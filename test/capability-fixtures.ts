@@ -221,6 +221,14 @@ export const capabilityFixtures: Record<string, string> = {
   \draw plot coordinates {(0,0) (1,1) (2,0)};
   \draw[domain=0:2,samples=5] plot (\x,{exp(\x/2)});
 \end{tikzpicture}`,
+  plot_marks: String.raw`\begin{tikzpicture}
+  \draw[mark=*, mark size=3pt, mark options={fill=white}] plot coordinates {(0,0) (1,1) (2,0)};
+  \draw[only marks, mark=x, mark repeat=2] plot coordinates {(0,-1) (1,-1) (2,-1)};
+\end{tikzpicture}`,
+  plot_marks_library: String.raw`\begin{tikzpicture}
+  \draw[mark=halfcircle*, mark color=red] plot coordinates {(0,0) (1,1)};
+  \draw[mark=pentagon*, mark options={rotate=90}] plot coordinates {(0,-1) (1,-1)};
+\end{tikzpicture}`,
   to_operation: String.raw`\begin{tikzpicture}
   \draw (0,0) to (1,1);
 \end{tikzpicture}`,

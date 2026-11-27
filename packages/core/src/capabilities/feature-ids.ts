@@ -60,6 +60,8 @@ export const FEATURE_IDS = [
   "calc_coordinates",
   "graph_operation",
   "plot_operation",
+  "plot_marks",
+  "plot_marks_library",
   "to_operation",
   "edge_operation",
   "child_operation",

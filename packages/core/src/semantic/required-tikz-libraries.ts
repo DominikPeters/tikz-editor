@@ -107,6 +107,9 @@ export function inferRequiredTikzLibraries(input: InferRequiredTikzLibrariesInpu
   if (isFeatureUsed(featureUsage, "graph_operation")) {
     required.add("graphs");
   }
+  if (isFeatureUsed(featureUsage, "plot_marks_library")) {
+    required.add("plotmarks");
+  }
   if (isFeatureUsed(featureUsage, "backgrounds_library") || elements.some((element) => element.layer === "background")) {
     required.add("backgrounds");
   }
