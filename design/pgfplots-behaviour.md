@@ -970,3 +970,129 @@ widening `originProjectionPt`.
 
 **Not done.** `cycle multi list`, `mark list*` (half marks), `mark=text`
 (`mark list` entries 9–10), `every axis plot` interactions with `\addplot3`.
+
+---
+
+## R. Axis lines
+
+Experiment E21 (`e21-axis-lines.mts`, 30 variants: `e21-base`, `e21-labels`),
+fixtures `axis-lines-*` (7, all Tier 1 and Tier 2 exact at the design
+tolerances). Manual: axisdescription.tex "Axis Lines".
+
+**R1 — Keys.** `axis lines=v` = `axis x line=vx, axis y line=vy` with
+left → (bottom, left), right → (top, right), middle/center → (middle,
+middle), box, none. `axis x line=none` = `hide x axis`; `hide axis` hides
+both. A hidden direction draws no line, no ticks, no tick labels and no axis
+label (E21 c12/c13, axis-lines-hide: the picture is only the plot marks).
+The unstarred keys also install `every non boxed x axis` (documented
+initial value `xtick align=center, enlarge x limits=false, x axis line
+style={-stealth}`) or `every boxed x axis` (empty), in place, so later
+options override them; the starred keys do not (E21 c7/c8: starred lines
+keep enlargement and inside ticks). CONFIRMED.
+
+**R2 — Lines.** `bottom`/`left` lie on the lower limit, `top`/`right` on
+the upper limit, `middle` on the other direction's 0, or its lower limit when
+0 is outside the limits (manual; axis-lines-center-offset). Each line spans
+the whole box side. Painted where the box is (C1: after the ticks): with
+both directions boxed, the one closed box path (C2); with one direction
+boxed and the other hidden, one path of the box with the hidden sides
+skipped by moves, `M(x0,y0) L(x0,y1) M(x1,y1) L(x1,y0) M(x0,y0) Z` for
+`hide x axis`; otherwise one path per line, x lines first (a boxed
+direction gives two lines, lower then upper). Styles: `every outer x axis
+line` for edge lines, `every inner x axis line` for `middle`; `axis line
+style` appends to all four, `x axis line style` to both x ones.
+`-stealth` is PGF's legacy `stealth` arrow (pgfcorearrows.code.tex): with
+d = 0.28pt + 0.3 × line width, the line is shortened by 5d and the tip is
+the filled, unclosed path (T), (T−8d, 4d), (T−5d, 0), (T−8d, −4d) — at 0.4 pt
+exactly the measured (195.0,0) (191.8,1.6) (193.0,0) (191.8,−1.6). The
+editor drew arrows.meta `Stealth` for it; fixed in the TikZ arrow code.
+Arrow tips count for the bounding box with their extent. CONFIRMED (E21,
+fixtures; Tier 2 exact).
+
+**R3 — Ticks.** With a single line (lower/upper/middle), the ticks of that
+direction are drawn once, on the line, centred by the non-boxed style
+(±2.134 pt); with `inside` (starred) they point into the box (upward and
+rightward for middle). Tick labels hang on the line with the D1 rule
+(anchor north/east below/left for lower and middle lines, south/west for
+upper ones, shifted by the centred half length). OBSERVED (E21 all
+variants, fixtures).
+
+**R4 — Obscured ticks.** `hide obscured x ticks` (initially true): the
+ticks (marks and labels) of a `middle` line at the position where the other
+line crosses it are removed — 0 on both axes for `axis lines=middle`, the
+lower limits when 0 is outside, x = xmax for x middle with y right. Ticks of
+edge lines are never removed (E21 c1, c7). `=false` keeps them.
+OBSERVED (E21 c2, c3, c6, c7, c11, labels/c11).
+
+**R5 — Labels.** Edge lines: `xlabel` near the tick labels on the line's
+side — E1 below for bottom, mirrored above the top tick labels (anchor south
+at their top edge) for top; `ylabel` E2 left, mirrored for right (rotate 90,
+anchor north at the right edge of the tick labels). Unstarred middle:
+`xlabel` at `right of origin`, anchor south east (at `left of origin`,
+south west, when the y line is on the right — manual); `ylabel` at `above
+origin`, anchor north west, **not rotated** (measured; the manual shows only
+the x case). Starred middle: labels stay E1/E2 relative to the tick labels at
+the line. The title stays at E3. The label of a box axis with `xtick
+pos=upper` also moves above its tick labels (tick-none-lengths).
+Harness: the middle styles redefine `every axis x label` with `.style`,
+which dropped the probe's `name=` (now appended in `every axis post`).
+OBSERVED (E21 labels, fixtures).
+
+Not done: `separate axis lines=true` (diagnosed), `axis line shift`,
+`every boxed`/`non boxed` for z, the y label for `middle` with an x line on
+top.
+
+## S. Axis scaling and direction
+
+**S1 — `x dir=reverse`** (manual specifyrange.tex): the map runs from the
+upper limit at the lower box edge (x canvas = x1 − W·(x − xmin)/(xmax − xmin));
+limits, ticks, tick labels follow the map, descriptions stay where they
+are. CONFIRMED (fixture dir-reverse, both directions reversed, with an
+`axis cs` node; exact).
+
+Not done: `axis equal`, `axis equal image`, `unit vector ratio(*)`, `scale
+mode`, `unit rescale keep size`, H4 (`enlargelimits={abs=<dimen>}`)
+exactness.
+
+## T. Tick variants
+
+Fixtures `tick-extra`, `tick-majorticks`, `tick-none-lengths`,
+`tick-rotated`, `log-extra-ticks` (all exact).
+
+**T1 — Major tick switches.** `xmajorticks=false` removes the major tick
+lines **and their labels** (tick-majorticks: no x labels, the bounding box
+shrinks to the box edge); `ticks=none` likewise for both directions, and an
+xlabel then hangs on the box edge (y0 − s). `yminorticks=false` left the
+minor ticks of `minor tick num=1` drawn in the same fixture — not
+understood; the evaluator diagnoses `xminorticks=false` instead of guessing.
+`tickwidth`/`subtickwidth` are `major/minor tick length`. CONFIRMED/OPEN.
+
+**T2 — Extra ticks.** `extra x ticks` are major-length marks on the same
+edges as the major ticks, labelled like major ticks (or by `extra x tick
+labels` in list order), numbered from 0 in list order, and painted **after
+all major tick labels**: extra x marks, extra x labels, extra y marks,
+extra y labels (tick-extra Tier 2 order). On log axes the initial `every
+extra x tick` style (`log identify minor tick positions=true`) labels
+m·10^k as `$m\cdot 10^{k}$` (log-extra-ticks: 3·10^1, 3·10^2). A uniform
+`xtickten` list (one decade apart) keeps the minor log ticks. Harness:
+extra tick labels also carry the major tick label style, so the probe now
+silences the major probe once `every extra x tick` is installed.
+CONFIRMED (manual + fixtures).
+
+**T3 — Tick label positions** follow `xtick pos` (labels on the upper
+edge when the ticks are only there) and `xticklabel pos`; the xlabel follows
+them (R5). OBSERVED (tick-none-lengths).
+
+**T4 — Rotated tick labels.** The document's `xticklabel style` comes after
+the default placement (`anchor=near ticklabel`), so its `anchor` wins
+(tick-rotated: `rotate=90, anchor=east` puts the east anchor on the tick at
+the box edge). A rotated label without an anchor hangs by the edge of the
+canvas bounding box of its rotated node (outer sep included) facing the
+axis, centred on the tick (`rotate=45` y labels: the box's right edge at the
+tick, centre at the tick height; not the 315° border anchor, which is
+0.51 pt off). The xlabel distance (E1) uses the bounding box of the rotated
+label nodes. CONFIRMED on the fixture (exact).
+
+Not done: `xticklabel={…}` custom code, `xticklabel shift`, `scaled x
+ticks=base 10:e|real|manual`, `xtick scale label code`, `minor xtick` with
+`xtick distance`, `xticklabels` with fewer entries than ticks beyond I4.
