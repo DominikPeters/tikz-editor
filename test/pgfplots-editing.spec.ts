@@ -329,6 +329,31 @@ describe("pgfplots editing: log and reversed axes", () => {
   });
 });
 
+describe("pgfplots editing: inserting and deleting data points", () => {
+  const SOURCE = picture(String.raw`\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=4]
+\addplot coordinates {(1,1) (2,3) (3,2)};
+\end{axis}`);
+  it("deletes the point a handle stands for", () => {
+    const id = AXIS_ID(SOURCE);
+    const result = evaluate(SOURCE);
+    const handles = result.editHandles.filter((h) => h.sourceRef.sourceId === `${id}:plot:0`);
+    for (const [index, expected] of [[0, "{(2,3) (3,2)}"], [1, "{(1,1) (3,2)}"], [2, "{(1,1) (2,3)}"]] as const) {
+      const handle = handles[index];
+      if (!handle) throw new Error("no handle");
+      const after = applyEditAction(SOURCE, result.editHandles, { kind: "deletePathPoint", elementId: `${id}:plot:0`, handleId: handle.id });
+      expect(after.kind === "success" && after.newSource).toBe(SOURCE.replace("{(1,1) (2,3) (3,2)}", expected));
+    }
+  });
+  it("inserts a point after a segment's first point, in data units", () => {
+    const id = AXIS_ID(SOURCE);
+    const result = evaluate(SOURCE);
+    const i = info(SOURCE, id);
+    const world = { x: i.frame.e + i.map.origin.x + 1.5 * i.map.xUnit.x, y: i.frame.f + i.map.origin.y + 2 * i.map.yUnit.y };
+    const after = applyEditAction(SOURCE, result.editHandles, { kind: "insertPathPoint", elementId: `${id}:plot:0`, segmentIndex: 0, point: world } as unknown as EditAction);
+    expect(after.kind === "success" && after.newSource).toBe(SOURCE.replace("(1,1) (2,3)", "(1,1) (1.5,2) (2,3)"));
+  });
+});
+
 describe("pgfplots editing: data points", () => {
   it("coordinates plots have point handles that write data units", () => {
     const source = picture(String.raw`\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=4]

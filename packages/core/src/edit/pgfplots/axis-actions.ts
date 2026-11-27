@@ -11,11 +11,12 @@ import type { WorldPoint } from "../../coords/points.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry } from "../../options/types.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
-import type { EvaluateOptions, PgfplotsAxisEditInfo, SceneElement } from "../../semantic/types.js";
+import type { EditHandle, EvaluateOptions, PgfplotsAxisEditInfo, SceneElement } from "../../semantic/types.js";
 import { LEGEND_POSITIONS } from "../../pgfplots/model.js";
 import { DEFAULT_HEIGHT, DEFAULT_WIDTH, DESCRIPTION_ALLOWANCE } from "../../pgfplots/layout.js";
 import { parseAxisDescriptionId, parseAxisPlotId } from "../../pgfplots/edit-ids.js";
-import { sourceSlice, unchangedSource, userText } from "../fragment.js";
+import { sourceSlice, tikz, unchangedSource, userText } from "../fragment.js";
+import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
 import type { SourcePatch } from "../types.js";
 import { coordinateText } from "../writer/coordinate-text.js";
@@ -442,6 +443,63 @@ export function applyReorderPlotsAction(
     kind: "success", newSource: current, patches, changedSourceIds: [axis.id],
     selectedSourceIds: plotIds.map((id) => `${axis.id}:plot:${String(next.indexOf(id))}`)
   };
+}
+
+function findCoordinatesPlot(source: string, plotId: string, parseOptions: EditParseOptions): AddPlotStatement | null {
+  const ref = parseAxisPlotId(plotId);
+  if (!ref) return null;
+  const axis = findAxisStatement(parseTikzForEdit(source, parseOptions).figure.body, ref.axisId);
+  const plot = axis?.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === plotId);
+  return plot?.input.kind === "coordinates" ? plot : null;
+}
+
+/** Deletes the data point a handle of a `coordinates` plot stands for, with the blank before it. */
+export function applyDeletePlotPointAction(
+  source: string,
+  editHandles: readonly EditHandle[],
+  plotId: string,
+  handleId: string,
+  parseOptions: EditParseOptions = {}
+): EditActionResultLike {
+  const handle = editHandles.find((candidate) => candidate.id === handleId && candidate.sourceRef.sourceId === plotId);
+  const plot = findCoordinatesPlot(source, plotId, parseOptions);
+  if (!handle || plot?.input.kind !== "coordinates") return { kind: "unsupported", reason: "Choose a data point of a coordinates plot." };
+  const point = plot.input.points.find((candidate) => candidate.coordinateSpan.from === handle.sourceRef.sourceSpan.from && candidate.coordinateSpan.to === handle.sourceRef.sourceSpan.to);
+  if (!point) return { kind: "unsupported", reason: "The data point was not found in the source." };
+  let from = point.span.from;
+  while (from > plot.input.bodySpan.from && /[ \t]/u.test(source[from - 1] ?? "")) from -= 1;
+  let to = point.span.to;
+  if (from === plot.input.bodySpan.from) while (to < plot.input.bodySpan.to && /[ \t]/u.test(source[to] ?? "")) to += 1;
+  const span = { from, to };
+  const updated = replaceSpan(source, span, sourceSlice(source, { from, to: from }));
+  return { kind: "success", newSource: updated.source, patches: [{ oldSpan: span, newSpan: updated.changedSpan, replacement: sourceSlice(source, { from, to: from }) }], changedSourceIds: [plot.axisId] };
+}
+
+/**
+ * Inserts a data point after point `segmentIndex` of a `coordinates` plot at a
+ * world position: written by the neighbouring point's handle, so the axis map
+ * (linear or logarithmic) is inverted as for a drag.
+ */
+export function applyInsertPlotPointAction(
+  source: string,
+  editHandles: readonly EditHandle[],
+  plotId: string,
+  segmentIndex: number,
+  world: WorldPoint,
+  parseOptions: EditParseOptions = {}
+): EditActionResultLike {
+  const plot = findCoordinatesPlot(source, plotId, parseOptions);
+  if (plot?.input.kind !== "coordinates") return { kind: "unsupported", reason: "Points can be added to coordinates plots only." };
+  const after = plot.input.points[segmentIndex];
+  const handle = after && editHandles.find((candidate) => candidate.sourceRef.sourceId === plotId &&
+    candidate.sourceRef.sourceSpan.from === after.coordinateSpan.from && candidate.sourceRef.sourceSpan.to === after.coordinateSpan.to);
+  if (!after || !handle) return { kind: "unsupported", reason: "No data point to insert after." };
+  const text = rewriteCoordinate(world, handle, source, true);
+  if (!text) return { kind: "unsupported", reason: "Cannot write a data point there." };
+  const at = { from: after.span.to, to: after.span.to };
+  const fragment = tikz` ${text}`;
+  const updated = replaceSpan(source, at, fragment);
+  return { kind: "success", newSource: updated.source, patches: [{ oldSpan: at, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [plot.axisId] };
 }
 
 function findUnitSpan(units: ReadonlyArray<{ id: string; span: Span }>, id: string): Span {

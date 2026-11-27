@@ -98,7 +98,7 @@ import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/fl
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
 import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
-import { applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
+import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
@@ -312,12 +312,14 @@ export function applyEditAction(
       case "toggleClosedPath":
         return applyToggleClosedPath(source, editHandles, action, parseOptions, evaluateOptions);
       case "deletePathPoint":
+        if (parseAxisPlotId(action.elementId.trim())) return applyDeletePlotPointAction(source, editHandles, action.elementId.trim(), action.handleId, parseOptions);
         return applyDeletePathPoint(source, editHandles, action, parseOptions, evaluateOptions);
       case "setPathPointKind":
         return applySetPathPointKind(source, editHandles, action, parseOptions, evaluateOptions);
       case "appendToPath":
         return applyAppendToPathAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "insertPathPoint":
+        if (parseAxisPlotId(action.elementId.trim())) return applyInsertPlotPointAction(source, editHandles, action.elementId.trim(), action.segmentIndex, action.point, parseOptions);
         return applyInsertPathPointAction(source, editHandles, action, parseOptions, evaluateOptions);
       case "moveElement":
         return applyMoveElements(source, editHandles, [action.elementId], action.delta, parseOptions, action.formatPrecision, undefined, geometry);

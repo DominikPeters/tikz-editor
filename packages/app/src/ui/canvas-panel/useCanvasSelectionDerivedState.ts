@@ -309,8 +309,12 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
     for (const nodeId of pathAttachedNodeSourceIds) {
       ids.add(nodeId);
     }
+    // A pgfplots legend moves by its `legend style` position.
+    for (const element of snapshot.scene?.elements ?? []) {
+      if (/^axis:\d+:legend$/u.test(element.sourceRef.sourceId)) ids.add(element.sourceRef.sourceId);
+    }
     return ids;
-  }, [adornmentTargetIds, dragCapability.draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, movableScopeSourceIds, pathAttachedNodeSourceIds, treeChildSourceIds, treeRootSourceIds]);
+  }, [adornmentTargetIds, dragCapability.draggableSourceIds, fitNodeSourceIds, matrixCellSourceIds, matrixSourceIds, movableScopeSourceIds, pathAttachedNodeSourceIds, snapshot.scene, treeChildSourceIds, treeRootSourceIds]);
 
   const selectionBounds = useMemo<SelectionBounds[]>(() => {
     const selected: SelectionBounds[] = [];

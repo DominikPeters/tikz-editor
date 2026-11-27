@@ -4,6 +4,7 @@ import os from "node:os";
 import {
   expectSourceCanvasConsistency,
   gotoApp,
+  openMenuCommand,
   readSelectedSourceIds,
   readSource,
   resetStorageBeforeNavigation,
@@ -241,4 +242,54 @@ test("drag a data point of the selected plot: rewrites that (x,y) in data units"
   expect(dragged.replace(/\(2\.\d+,[\d.]+\)/u, "(2,3)")).toBe(SOURCE);
   expect(await readSelectedSourceIds(page)).toEqual([`${AXIS}:plot:0`]);
   await shot(page, "08-point-dragged");
+});
+
+test("delete the selected data point with the Delete key", async ({ page }) => {
+  await page.evaluate((id) => (window as TestWindow).__TIKZ_EDITOR_APP_TEST_API__.selectSourceIds([id]), `${AXIS}:plot:0`);
+  const handle = page.locator(`[data-source-id="${AXIS}:plot:0"][data-handle-kind]`).nth(2);
+  await expect(handle).toBeVisible();
+  const box = await handle.boundingBox();
+  if (!box) throw new Error("no handle");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press("Delete");
+  await expect.poll(() => readSource(page)).toBe(SOURCE.replace(" (3,2)}", "}"));
+  await settled(page);
+});
+
+test("drag the legend: writes legend style at/anchor in axis description coordinates", async ({ page }) => {
+  await selectAxis(page);
+  const legend = page.locator(`[data-hit-region-target-id='${AXIS}:legend']`).first();
+  const box = await legend.boundingBox();
+  if (!box) throw new Error("no legend region");
+  // Drill into the legend, then drag it down and left.
+  await page.mouse.click(box.x + 4, box.y + 4);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:legend`]);
+  await page.mouse.move(box.x + 4, box.y + 4);
+  await page.mouse.down();
+  await page.keyboard.down("Control");
+  await page.mouse.move(box.x + 4 - 80, box.y + 4 + 90, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up("Control");
+  await settled(page);
+  const legendSource = await readSource(page);
+  await shot(page, "09-legend-dragged");
+  expect(legendSource).toMatch(/ymax=4, legend style=\{at=\{\(0\.\d+,0\.\d+\)\}, anchor=north east\}\]/u);
+});
+
+test("insert templates: function plot and bar chart, with compat added once", async ({ page }) => {
+  await setSource(page, "\\begin{tikzpicture}\n\\draw (0,0) -- (1,1);\n\\end{tikzpicture}");
+  await waitForHitRegions(page);
+  await openMenuCommand(page, "insert", "insert.function-plot");
+  await expect.poll(() => readSource(page)).toContain("\\addplot {x^2 - 1};");
+  await settled(page);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual(["axis:2"]);
+  await shot(page, "10-function-template");
+  await openMenuCommand(page, "insert", "insert.bar-chart");
+  await expect.poll(() => readSource(page)).toContain("\\begin{axis}[at=");
+  await settled(page);
+  const source = await readSource(page);
+  expect(source.match(/compat=1\.18/gu)).toHaveLength(1);
+  expect(source).toContain("ybar, ymin=0");
+  await setCanvasTransform(page, { translateX: 80, translateY: 120, scale: 0.8 });
+  await shot(page, "11-bar-template");
 });
