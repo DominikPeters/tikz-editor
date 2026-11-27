@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "log-xmode-discard",
   "sourceSha256": "574c2b1ab2a280031203c0690a01c6a4159f021e0bf1f5c6cd01d59110694bc1"

@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "negative-ranges",
   "sourceSha256": "3f3ad5b771b9186cfa81cba051550c563b3d883802afeb78cf017480db8cde28"

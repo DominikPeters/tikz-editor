@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "mark-selection",
   "sourceSha256": "1b77d18732bcfb1debc9ce3d9392bf7d97098bcdf3af96aa074ebc1a11a534c4"
@@ -966,6 +966,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

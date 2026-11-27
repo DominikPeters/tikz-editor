@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "log-pgfplotsset-mode",
   "sourceSha256": "23e681e06ede2a6bc2725c9f053616db6f7c0c76ff995adfad32d4955f2c0022"

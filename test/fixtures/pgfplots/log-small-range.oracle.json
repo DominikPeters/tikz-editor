@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "log-small-range",
   "sourceSha256": "38d7fdf5f536880f61be5290b1a1e77b879681cc955a506b5c676fb43e813566"

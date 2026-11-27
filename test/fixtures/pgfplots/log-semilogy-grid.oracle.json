@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "log-semilogy-grid",
   "sourceSha256": "b044eda1a8a109be9ffe1dee90a6fd64569f0fb1221984ca2ce05752f4d6ce29"

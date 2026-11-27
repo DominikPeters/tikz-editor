@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "xticklabels",
   "sourceSha256": "56bab9b9e5e4d79a7c9a72a23122973211baed4dc32c5a9589d4cf7daad4732e"

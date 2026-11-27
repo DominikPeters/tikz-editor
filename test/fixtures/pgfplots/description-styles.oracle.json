@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "description-styles",
   "sourceSha256": "754a7b7511ce602690507f6c4020394a585380556e286dc57751b4c6bd0843a1"

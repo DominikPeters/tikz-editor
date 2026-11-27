@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "cycle-list-custom",
   "sourceSha256": "35d002b55c9c103332668a43ab52c6ce4744d206dbd9bf898f00d2327f331823"
@@ -842,6 +842,10 @@
        }
       }
      ]
+    },
+    "scale": {
+     "x": "linear",
+     "y": "linear"
     }
    }
   ],

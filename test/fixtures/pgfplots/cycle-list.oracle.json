@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "cycle-list",
   "sourceSha256": "0242c0e813b625a87ca7d292d48c6bc26176ed4326a90247b95ca3fe25572fe3"

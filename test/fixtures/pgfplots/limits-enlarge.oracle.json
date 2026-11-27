@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "limits-enlarge",
   "sourceSha256": "a10d8633ff7f20e78199e7b7ea882c2b2f95053d19a12f3431bce30a864bc7d2"

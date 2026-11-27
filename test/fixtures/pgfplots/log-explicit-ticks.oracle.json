@@ -1,6 +1,6 @@
 {
  "schema": "pgfplots-oracle/v1",
- "harnessVersion": 3,
+ "harnessVersion": 4,
  "case": {
   "name": "log-explicit-ticks",
   "sourceSha256": "48ff96a7c7eca0aaf1d1730b58a6ff40bdddf2f7d0d995fe0e4a5227c13cdd3d"
