@@ -434,9 +434,13 @@ defineAxisKey("scale only axis", (ctx, v) => { const b = readBoolean(v); if (b =
 function readUnitVectorRatio(value: string | null): { x: number; y: number } | null | undefined {
   const text = stripBraces(value ?? "").trim();
   if (text === "") return undefined;
-  const parts = text.split(/\s+/u).map((part) => readPgfNumber(part));
-  if (parts.some((part) => part === null || !(part > 0))) return null;
-  const [x = 1, y = 1] = parts as number[];
+  const parts: number[] = [];
+  for (const part of text.split(/\s+/u)) {
+    const n = readPgfNumber(part);
+    if (n === null || !(n > 0)) return null;
+    parts.push(n);
+  }
+  const [x = 1, y = 1] = parts;
   return { x, y };
 }
 defineAxisKey(["axis equal", "axis equal image"], (ctx, v, use) => {
