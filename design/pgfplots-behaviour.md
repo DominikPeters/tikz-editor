@@ -996,3 +996,129 @@ length. VERIFIED on E18 (10 cases): max error **0.0035 pt**.
 (A1), so `0.8\axisdefaultwidth` is the text `0.8240pt` and pgfplots stops
 ("Plot width 0.824pt is too small"); `1\axisdefaultwidth` is 1240pt (E18
 `axisdefault-text`, box 1240.0028pt). The editor substitutes it as text.
+
+## U. Bars
+
+Experiment E19 (`e19-bars.mts`, 28 cases, digest in data units) and the
+fixtures bars-{ybar,xbar,stacked,options,interval,nodes-near} (all pass
+Tier 1 and Tier 2 at the design tolerances; max Tier 2 path error
+0.0048 pt, layout 0.02 pt except the documented origin anchors).
+
+**U1 — Base line.** A bar runs from 0 to its value, the 0 clamped into the
+axis limits: data 1…3 with automatic limits [0.8, 3.2] give bars from 0.8;
+`ymin=0.5` from 0.5; negative values from 0 down; with `clip=false` and
+`ymin=1.5` a value of 1 draws a bar from 1.5 down to 1 (only the base is
+clamped). The limits are those of the data (0 is not added, no extra
+enlargement). OBSERVED (E19 `ybar-axis`, `ybar-ymin-positive`,
+`ybar-negative`, `ybar-clip-false`), CONFIRMED by the fixtures.
+
+**U2 — Geometry and paint.** One path per plot, one closed subpath per
+point: (c − w/2, b) → (c + w/2, b) → (c + w/2, v) → (c − w/2, v) → close
+(xbar: (b, c − w/2) → (v, c − w/2) → (v, c + w/2) → (b, c + w/2)), filled
+and stroked with the plot style in one painting operation, under the axis
+clip. Marks (if any) at the data points, after the clip. OBSERVED (E19).
+
+**U3 — Width and shift.** `bar width` initially 10pt; a number without
+unit is in axis units (`bar width=0.3`: 0.3 data units). `bar shift=3pt`
+moves the bar centre. CONFIRMED (manual 2dplots.tex `bar width`, `bar
+shift`; E19, fixture bars-options).
+
+**U4 — Automatic shifts.** With the axis style `ybar=<sep>` (initially
+2pt), plot k (from 0) of the n bar plots of that type gets shift
+−(n·w + (n−1)·sep)/2 + (k + 0.5)·w + k·sep — the manual's `bar shift auto`
+formula. VERIFIED: proposed from the manual, checked on E19 (n = 2, 3; sep
+2pt, 5pt) and on the fresh fixtures bars-ybar (n = 2) and bars-xbar (n = 3,
+`xbar=4pt`, `bar width=6pt`): max error 0.003 pt.
+
+**U5 — Axis styles.** `ybar`/`xbar` given to the axis: `bar cycle list`
+(blue / red / brown!60!black / black lines with fill blue!30!white,
+red!30!white, brown!30!white, gray, no marks: colours measured exactly),
+`ybar legend`, and ticks **outside across the bars only** (ybar: x ticks
+outside, y ticks inside). `ybar stacked` leaves all ticks inside.
+`\addplot+[ybar]` without the axis style keeps the normal cycle list (marks,
+no fill); `\addplot[ybar]` is a black outline. OBSERVED (E19, fixtures).
+
+**U6 — Stacking.** `ybar stacked` (or `stack plots=y`): each plot adds to
+the sum of the stacked plots before it, coordinate by coordinate; positive
+and negative values have separate sums (x=3: +1 then −3 gives a bar from 0
+to −3, not 1 to −2; compat 1.13+). Bars start at the previous level (the
+first at 0, clamped). Stacked plots are painted **last plot first**. Limits
+use the stacked values. OBSERVED (E19 `stacked`, `stacked-negative`,
+`xbar-stacked`), fixture bars-stacked.
+
+**U7 — Intervals.** PGF's handler (pgflibraryplothandlers.code.tex): bar i
+spans from x_i + shift·Δ − w·Δ/2 with width w·Δ (Δ = x_{i+1} − x_i, `bar
+interval width` 1, `bar interval shift` 0.5); the last point only closes
+the last interval; the plot key `ybar interval` takes no value. The axis
+style `ybar interval=r` gives plot k of n the slot centred at
+(k + 0.5)/n of the interval, width r·Δ/n, and sets `xtick=data` and major x
+grid lines. OBSERVED (E19 `ybar-interval*`), fixture bars-interval. The
+axis style's interval tick labels (`xticklabel interval boundaries`-like
+behaviour: 3 labels for 4 ticks) are **not** reproduced.
+
+## W. Area, closed paths and trailing paths
+
+Experiment E20 (`e20-area-errors.mts`), fixtures area-closedcycle and
+area-trailing (pass both tiers; max path error 0.0095 pt).
+
+**W1 — `\closedcycle`** continues the plot path to (x_last, b), (x_first,
+b), close, with b = 0 clamped into the y limits (as U1): to ymin when the
+data are above 0, to 0 inside, to ymax when all data are negative. Fill and
+stroke in one operation, under the clip. OBSERVED (E20 `closed-*`).
+
+**W2 — Stacked areas.** With `stack plots=y`, `\closedcycle` of a later
+plot runs back along the stacked points of the plot below it (reversed),
+then closes; stacked plots are painted last first (as U6). OBSERVED (E20
+`closed-stacked`), fixture area-closedcycle.
+
+**W3 — `area style`** = the area cycle list (first entry measured equal to
+`bar cycle list`'s), `area legend`, `axis on top` (clip and content painted
+before the axis). OBSERVED (E20 `closed-area-style`, one case).
+
+**W4 — Trailing path operations.** `-- (axis cs:x,y) -- … -- cycle` after
+the input continue the plot's path in axis coordinates. OBSERVED (E20
+`trailing-cycle`). **W5 — `fill opacity`** applies to the fill only
+(alpha 0.3 on the fill, stroke opaque). OBSERVED.
+
+**W6 — `node[pos=p]` / `coordinate[pos=p] (name)`** after the input sit on
+the plot polyline at the fraction p of its **arc length measured in data
+units** (not canvas length, not index, not x): on (1,1)–(2,3)–(4,1), p =
+0.25, 0.5, 0.75 land at segment parameters 0.566, 0.105 (second segment),
+0.552, matching data-unit arc length to 1e-3 and not canvas arc length
+(0.563, 0.100, 0.550). OBSERVED (E20 `node-pos`, one polyline with equal
+x and y data scaling — pgfplots' internal data scaling may differ for data
+of very different magnitudes; not tested). The node text takes the plot
+colour; `name path` is recorded only by the other agents' work (not here).
+
+## X. Symbolic coordinates, error bars, nodes near coords
+
+**X1 — Symbolic coordinates.** `symbolic x coords={a,b,c}` maps the names
+to 0, 1, 2 (`symbolic-partial`: {a,b,c,d} with b, d gives the x range
+[1, 3], enlarged as usual); a name not in the list stops TeX. Tick labels
+are the names, in text; an automatic tick between positions shows the name
+at the nearest position rounding .5 up (ticks 1, 1.5, 2, 2.5, 3 read b, c,
+c, d, d). The harness' numeric map probe is switched off on symbolic axes.
+OBSERVED (E20 `symbolic*`), fixtures symbolic-coords, symbolic-partial.
+
+**X2 — Error bars.** Per point, x before y, plus before minus: a stroked
+bar from the point to the end (plot colour and width, then `error bar
+style`), then the error mark at the end. The mark (initially `-`, which PGF
+draws from (s,0) to (−s,0)) is rotated by the bar's direction plus its
+`rotate` (initially 90), so it lies across the bar; `error mark options`
+other than rotate style it (colour, `mark size`). Explicit values come from
+`+- (ex,ey)`, `+= `, `-= ` or the table's `y error`/`y error plus`/…
+columns; `explicit relative` and `fixed relative` multiply by |value|.
+Error bars are under the clip, after the plot's line and before its
+marks; their ends extend the automatic limits (`y fixed=2` on y 2…3 gives
+[−0.5, 5.5]). pgfplots puts each mark in an empty, rotated zero-width TeX
+box (Tier 2 text boxes the editor does not have; listed in the comparison
+spec). OBSERVED (E20 `err-*`), fixtures errorbars-explicit,
+errorbars-style (paths and marks match).
+
+**X3 — `nodes near coords`.** A node per point anchored `south` at the
+point (bars: at the bar's end, with the bar's shift; `west` for xbar;
+`north`/`east` for negative values), inner sep 0.3333em, text
+`$\pgfmathprintnumber{y}$` (x for xbar; the meta text with `point meta=
+explicit symbolic`), in the plot colour, `every node near coord` applied;
+painted after the plot. OBSERVED (E19 `nodes-near*`), fixture
+bars-nodes-near (glyphs 0.005 pt).
