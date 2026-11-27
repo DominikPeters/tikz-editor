@@ -285,6 +285,7 @@ export function createSemanticEvaluationRun(
     opts.sourceFingerprint,
     opts.graphicsResolver
   );
+  if (opts.documentLengths) context.documentLengths = opts.documentLengths;
   if (opts.currentPage) {
     defineCurrentPage(context, opts.currentPage);
   }

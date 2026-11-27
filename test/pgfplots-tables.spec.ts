@@ -168,3 +168,39 @@ legend style={legend cell align=left, align=left, draw=white!15!black}
     expect(elapsed).toBeLessThan(500);
   });
 });
+
+describe("pgfplots: document lengths in axis sizes (behaviour Y, experiment E18)", () => {
+  const box = (options: string, preamble = "") => {
+    const source = `${preamble}\\pgfplotsset{compat=1.18}\n\\begin{tikzpicture}\\begin{axis}[${options}]\\addplot coordinates {(0,0) (1,1)};\\end{axis}\\end{tikzpicture}`;
+    const parsed = parseTikz(source, { includeContextDefinitions: true });
+    const semantic = evaluateTikzFigure(parsed.figure, source);
+    const b = getAxisEvaluations(semantic.scene)[0]?.layout.box;
+    return { width: b ? b.x1 - b.x0 : Number.NaN, codes: semantic.diagnostics.map((d) => d.code ?? "") };
+  };
+
+  it.each([
+    ["width=0.5\\textwidth", 127.5],
+    ["width=0.48\\linewidth", 120.6],
+    ["width={0.9\\columnwidth}", 265.5],
+    ["width=\\textwidth/2.3", 345 / 2.3 - 45],
+    ["width=0.5*\\columnwidth", 127.5],
+    ["width=\\axisdefaultwidth", 195],
+    ["scale only axis, width=1\\axisdefaultwidth", 1240]
+  ])("%s (the LuaLaTeX box width, within 0.004pt)", (options, width) => {
+    expect(box(options).width).toBeCloseTo(width, 2);
+  });
+
+  it("reads \\setlength registers and macros from the preamble", () => {
+    const preamble = "\\documentclass{article}\n\\newlength\\figw\\setlength{\\figw}{0.45\\textwidth}\\def\\figwidth{6cm}\n";
+    expect(box("width=\\figw", preamble).width).toBeCloseTo(0.45 * 345 - 45, 2);
+    expect(box("width=\\figwidth", preamble).width).toBeCloseTo((6 * 72.27) / 2.54 - 45, 2);
+  });
+
+  it("uses the class options and says when it assumes article 10pt", () => {
+    const twocolumn = box("width=\\columnwidth, scale only axis", "\\documentclass[twocolumn,a4paper]{article}\n");
+    expect(twocolumn.width).toBeCloseTo(221, 3);
+    expect(twocolumn.codes).not.toContain("pgfplots-assumed-document-length");
+    expect(box("width=\\textwidth").codes).toContain("pgfplots-assumed-document-length");
+    expect(box("width=\\textwidth", "\\documentclass{IEEEtran}\n").codes).toContain("pgfplots-assumed-document-length");
+  });
+});

@@ -4,16 +4,21 @@
  * and reports how many axes render without unsupported-key/plot
  * diagnostics, and the unsupported keys/features ranked by distinct paper.
  *
- *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-root] [--out file.json]
+ *   node --import tsx scripts/pgfplots-oracle/corpus-run.mts [corpus-root] [--out file.json] [--files dir]
  *
+ * `--files dir`: extracted e-prints, `dir/<paper>/…`; table files the
+ * snippets name are read from there (relative to the snippet's source file),
+ * as the app reads them from the document's folder. Without it every file
+ * table reports `pgfplots-table-file-unavailable`.
  * `corpus-root` is the directory holding `axes/` (default
  * artifacts/pgfplots-corpus of this checkout; a worktree passes the main
  * checkout's absolute path). Output: `<corpus-root>/editor-run.json` (or
  * `--out`) and a summary on stdout.
  */
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, normalize, resolve } from "node:path";
 
+import type { DocumentGraphicsResolver } from "../../packages/core/src/graphics/types.js";
 import { getAxisEvaluations } from "../../packages/core/src/pgfplots/evaluate-axis.js";
 import { renderTikzToSvgAsync } from "../../packages/core/src/render/index.js";
 import { createTexNodeTextEngine } from "../../packages/core/src/text/tex-node-text-engine.js";
@@ -22,7 +27,9 @@ const root = resolve(import.meta.dirname, "..", "..");
 const args = process.argv.slice(2);
 const outIndex = args.indexOf("--out");
 const outFile = outIndex >= 0 ? args[outIndex + 1] : undefined;
-const positional = args.filter((arg, index) => !arg.startsWith("--") && (outIndex < 0 || index !== outIndex + 1));
+const filesIndex = args.indexOf("--files");
+const filesDir = filesIndex >= 0 && args[filesIndex + 1] ? resolve(args[filesIndex + 1] ?? "") : undefined;
+const positional = args.filter((arg, index) => !arg.startsWith("--") && (outIndex < 0 || index !== outIndex + 1) && (filesIndex < 0 || index !== filesIndex + 1));
 const corpusRoot = resolve(positional[0] ?? join(root, "artifacts", "pgfplots-corpus"));
 const corpus = join(corpusRoot, "axes");
 
@@ -42,9 +49,30 @@ function feature(code: string | undefined, message: string): string | null {
     const reason = /not drawn: (.*) is not supported yet/u.exec(message)?.[1] ?? message;
     return `plot: ${reason.replace(/`[^`]*`/gu, (m) => (/^`(table|col sep|x expr|y expr|x|y)/u.test(m) ? m.replace(/=.*`$/u, "`") : "`…`")).replace(/\s+/gu, " ").slice(0, 60)}`;
   }
+  if (code === "pgfplots-table-file-unavailable") return "plot: table file not available";
   if (code.startsWith("unsupported-pgfplots-") || code === "unsupported-pgfplots-axis") return `feature: ${code.slice("unsupported-pgfplots-".length)}`;
   if (code.startsWith("unknown-plot-mark") || code.startsWith("unsupported-plot-mark")) return `mark: ${code.split(":")[1] ?? ""}`;
   return null;
+}
+
+/** Table files of a snippet's paper, found next to the paper's source file that held the axis. */
+function corpusFiles(paper: string, snippet: string): DocumentGraphicsResolver {
+  const meta = /% meta: (\{.*\})/u.exec(snippet)?.[1];
+  let file = "";
+  try { file = meta ? String((JSON.parse(meta) as { file?: string }).file ?? "") : ""; } catch { file = ""; }
+  const base = join(filesDir ?? "", paper);
+  return {
+    cacheKey: `corpus:${paper}`,
+    resolve: () => ({ status: "missing" }),
+    readTextFile: (name) => {
+      for (const dir of [join(base, dirname(file)), base]) {
+        const path = normalize(join(dir, name));
+        if (!path.startsWith(base)) continue;
+        if (existsSync(path) && statSync(path).isFile()) return { status: "resolved", text: readFileSync(path, "utf8") };
+      }
+      return { status: "missing" };
+    }
+  };
 }
 
 const textEngine = await createTexNodeTextEngine();
@@ -58,7 +86,7 @@ for (const file of files) {
   const paper = file.slice(corpus.length + 1).split("/")[0] ?? file;
   const source = readFileSync(file, "utf8");
   try {
-    const result = await renderTikzToSvgAsync(source, { textEngine, parse: { includeContextDefinitions: true } });
+    const result = await renderTikzToSvgAsync(source, { textEngine, parse: { includeContextDefinitions: true }, ...(filesDir ? { graphicsResolver: corpusFiles(paper, source) } : {}) });
     parsed += 1;
     const evaluations = getAxisEvaluations(result.semantic.scene);
     const axisCount = (source.match(/\\begin\{(?:axis|semilogxaxis|semilogyaxis|loglogaxis)\}/gu) ?? []).length;

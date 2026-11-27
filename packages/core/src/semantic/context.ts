@@ -197,6 +197,8 @@ export type SemanticContext = {
   pathStartPoint: WorldPoint | null;
   textEngine: NodeTextEngine | null;
   graphicsResolver?: DocumentGraphicsResolver;
+  /** Document lengths the host knows for this picture (`\textwidth` where it is set), pt. */
+  documentLengths?: Readonly<Partial<Record<"textwidth" | "textheight" | "linewidth" | "columnwidth" | "paperwidth" | "paperheight", number>>>;
   macroTraceCollector: MacroExpansionTraceEvent[] | null;
   picEvaluationStack: string[];
   editHandles: EditHandle[];

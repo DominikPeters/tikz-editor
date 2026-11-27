@@ -8,7 +8,7 @@ import type { AddPlotStatement, AxisStatement, Span } from "../ast/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
 import { parseLength } from "../semantic/coords/parse-length.js";
-import { evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
+import { convertQuantityToLength, evaluatePgfMathExpression } from "../semantic/pgfmath/evaluator.js";
 import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
 import {
   cloneStyleRegistry,
@@ -138,8 +138,12 @@ export function readPgfNumber(raw: string): number | null {
 }
 
 export function readLength(raw: string): number | null {
-  const value = parseLength(stripBraces(raw), "pt");
-  return value ?? null;
+  const text = stripBraces(raw);
+  const value = parseLength(text, "pt");
+  if (value !== null && value !== undefined) return value;
+  // pgfplots reads dimensions with pgfmath (`width=345pt/2.3`, `2*\columnwidth` once substituted).
+  const result = evaluatePgfMathExpression(text);
+  return result.ok ? convertQuantityToLength(result.quantity, "pt") : null;
 }
 
 export function stripBraces(raw: string): string {

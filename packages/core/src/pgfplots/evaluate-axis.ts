@@ -51,6 +51,7 @@ import { boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayo
 import { computeLimits } from "./limits.js";
 import { readPgfNumber, resolveAxisModel, resolvePlotModel, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { readPgfplotsTableFile, readPgfplotsTableMacro } from "./table-io.js";
+import { documentClassLengths, scanLengthRegisters, substituteDocumentLengths, type DocumentLengthEnvironment } from "./document-lengths.js";
 import { computeTicks, dataTickValues, type DirectionTicks } from "./ticks.js";
 
 /** The macro binding that carries `\pgfplotsset` payloads in scope (like the number format state). */
@@ -196,8 +197,21 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   } finally {
     popFrame(context);
   }
-  // Option values may use macros (`width=\figwidth`), expanded as TikZ options are.
-  const expandWith = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => expandOptionListMacros([list], bindings, context.macroTraceCollector ?? undefined)[0] ?? list;
+  // Option values may use macros (`width=\figwidth`), expanded as TikZ options are,
+  // and document lengths (`width=0.48\linewidth`, behaviour Y).
+  const lengthsEnv = documentLengthEnvironment(context, source.span.from);
+  const usedLengths = new Set<string>();
+  const withLengths = (list: OptionListAst): OptionListAst => {
+    if (!list.raw.includes("\\")) return list;
+    const entries = list.entries.map((entry) => {
+      if (entry.kind !== "kv") return entry;
+      const { text, used } = substituteDocumentLengths(entry.valueRaw, lengthsEnv);
+      for (const name of used) usedLengths.add(name);
+      return text === entry.valueRaw ? entry : { ...entry, valueRaw: text, raw: `${entry.key}=${text}` };
+    });
+    return { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+  };
+  const expandWith = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => withLengths(expandOptionListMacros([list], bindings, context.macroTraceCollector ?? undefined)[0] ?? list);
   const expand = (list: OptionListAst): OptionListAst => expandWith(list, outer.macroBindings);
   const expandedPlotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const axis: AxisStatement = {
@@ -217,6 +231,10 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   };
   const bindingsOf = (statement: AddPlotStatement) => expandedPlotBindings.get(statement) ?? parent.macroBindings;
   const settings = readPgfplotsSettings(context).map(expand);
+  if (usedLengths.size > 0 && lengthsEnv.assumption) {
+    const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(lengthsEnv.lengths[name as keyof typeof lengthsEnv.lengths])}pt`).join(", ");
+    diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Document lengths are assumed: ${named} (${lengthsEnv.assumption}).`, span: axis.optionsSpan ?? axis.beginSpan });
+  }
   const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));
   markFeature("pgfplots_axis", "supported");
 
@@ -612,6 +630,21 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   list.push(evaluation);
   axisEvaluations.set(context, list);
   return elements;
+}
+
+/** The document lengths for an axis starting at `from` (behaviour Y): the host's, else the class's; registers set before it. */
+function documentLengthEnvironment(context: SemanticContext, from: number): DocumentLengthEnvironment {
+  const known = context.documentLengths ?? {};
+  const fromClass = documentClassLengths(context.source);
+  const lengths = { ...fromClass.lengths, ...known };
+  // The host's text width also fixes the line and column widths, unless it gave them.
+  if (known.textwidth !== undefined) {
+    lengths.linewidth = known.linewidth ?? known.textwidth;
+    lengths.columnwidth = known.columnwidth ?? known.textwidth;
+  }
+  const registers = scanLengthRegisters(context.source, from, lengths);
+  const assumption = known.textwidth === undefined ? fromClass.assumption : undefined;
+  return { lengths, registers, ...(assumption ? { assumption } : {}) };
 }
 
 /** Body statements that only define macros: applied in body order, before the plots read their data. */
