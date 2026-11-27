@@ -1,0 +1,6 @@
+% A tiny range far from 0: tick labels at the default precision (what TeX prints).
+\begin{tikzpicture}
+\begin{axis}[xmin=1, xmax=1.0003, ymin=0, ymax=1]
+  \addplot coordinates {(1,0) (1.0003,1)};
+\end{axis}
+\end{tikzpicture}

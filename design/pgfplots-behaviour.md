@@ -724,6 +724,15 @@ fixtures.
 samples are also taken linearly in x and then mapped (implemented, not
 separately measured).
 
+**Q7 — Bars and `\closedcycle` on a log direction** start at internal 0
+(data 1), **not** clamped into the limits: fixture log-bars-base (ybar and
+an area on `semilogyaxis`, limits 10^0.5…10^2.9) puts the base 21.83 pt below
+the box, where data 1 lies, clipped by the axis clip. This is `log origin=0`,
+the default since compat 1.5 (manual preliminaries.tex; the reference entry
+still says `infty`). On linear directions the base stays 0 clamped (U1/W1).
+Stacked plots on log axes (sums of logarithms) are not handled. CONFIRMED on
+the fixture (Tier 2 exact).
+
 ## M. Function plots (2026-11-27)
 
 Experiment `e16-functions.mts` (sets `a` discovery, `b` fresh): one
@@ -1092,6 +1101,12 @@ axis, centred on the tick (`rotate=45` y labels: the box's right edge at the
 tick, centre at the tick height; not the 315° border anchor, which is
 0.51 pt off). The xlabel distance (E1) uses the bounding box of the rotated
 label nodes. CONFIRMED on the fixture (exact).
+
+**T5 — Tiny ranges far from 0** keep the default precision: limits
+[1, 1.0003] give seven ticks 1, 1.00005, …, 1.0003 that TeX itself labels
+"1" every time (fixture tick-tiny-range; J1 does not scale, e = 0, and
+`std` precision 2 rounds). The editor matches; the repeated labels are
+pgfplots' behaviour, not a bug. CONFIRMED (fixture, exact).
 
 Not done: `xticklabel={…}` custom code, `xticklabel shift`, `scaled x
 ticks=base 10:e|real|manual`, `xtick scale label code`, `minor xtick` with

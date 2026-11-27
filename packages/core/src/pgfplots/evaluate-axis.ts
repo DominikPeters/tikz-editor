@@ -810,7 +810,8 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
           const group = groups.get(plotIndex - 1);
           const rects = barRects(plot.points, bar, {
             mapX: (x) => mapPoint(x, 0).x, mapY: (y) => mapPoint(0, y).y,
-            unitX: layout.map.xUnit.x, unitY: layout.map.yUnit.y, limits: layout.limits
+            unitX: layout.map.xUnit.x, unitY: layout.map.yUnit.y, limits: layout.limits,
+            log: { x: model.x.mode === "log", y: model.y.mode === "log" }
           }, { ...(stack ? { base: stack.base } : {}), ...(group ? { group } : {}) });
           barTops = rects.map((rect) => (rect.vertical ? { x: (rect.x0 + rect.x1) / 2, y: rect.y1 } : { x: rect.x1, y: (rect.y0 + rect.y1) / 2 }));
           const commands: ScenePathCommand[] = rects.flatMap((rect): ScenePathCommand[] => {
@@ -844,7 +845,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
           if (statement.trailingPath) {
             // W1-W4: \closedcycle and path operations continue the plot's path.
             const previous = stacks.get(stackIndex) ? previousStackedPoints(plots, stacks, stackIndex) : null;
-            commands.push(...trailingCommands(statement.trailingPath, plot.points, previous, plot.model.stack, layout, mapPoint, toWorld));
+            commands.push(...trailingCommands(statement.trailingPath, plot.points, previous, plot.model.stack, layout, mapPoint, toWorld, { x: model.x.mode === "log", y: model.y.mode === "log" }));
           }
           if (commands.some((command) => command.kind !== "M")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
@@ -1097,7 +1098,8 @@ function trailingCommands(
   stack: "x" | "y" | undefined,
   layout: AxisLayout,
   mapPoint: (x: number, y: number) => Point,
-  toWorld: (q: Point) => WorldPoint
+  toWorld: (q: Point) => WorldPoint,
+  log: { x: boolean; y: boolean } = { x: false, y: false }
 ): ScenePathCommand[] {
   const commands: ScenePathCommand[] = [];
   const finite = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
@@ -1110,10 +1112,11 @@ function trailingCommands(
       if (previous && previous.length > 0) {
         for (const point of [...previous].reverse()) commands.push({ kind: "L", to: toWorld(mapPoint(point.x, point.y)) });
       } else if (stack === "x") {
-        const base = Math.min(Math.max(0, limits.xmin), limits.xmax);
+        // Q7: on a log direction the base is log origin 0 (data 1), not clamped.
+        const base = log.x ? 0 : Math.min(Math.max(0, limits.xmin), limits.xmax);
         commands.push({ kind: "L", to: toWorld(mapPoint(base, last.y)) }, { kind: "L", to: toWorld(mapPoint(base, first.y)) });
       } else {
-        const base = Math.min(Math.max(0, limits.ymin), limits.ymax);
+        const base = log.y ? 0 : Math.min(Math.max(0, limits.ymin), limits.ymax);
         commands.push({ kind: "L", to: toWorld(mapPoint(last.x, base)) }, { kind: "L", to: toWorld(mapPoint(first.x, base)) });
       }
       commands.push({ kind: "Z" });

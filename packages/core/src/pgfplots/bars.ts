@@ -42,6 +42,8 @@ export type BarMap = {
   /** pt per data unit along x and y (for widths given in axis units). */
   unitX: number;
   unitY: number;
+  /** Log directions: the base is log origin 0 (data 1), unclamped (behaviour Q7). */
+  log?: { x: boolean; y: boolean };
   limits: { xmin: number; xmax: number; ymin: number; ymax: number };
 };
 
@@ -81,9 +83,9 @@ export function barRects(
 ): BarRect[] {
   const vertical = bar.kind.startsWith("y");
   const { limits } = map;
-  const clampBase = (v: number): number => vertical
+  const clampBase = (v: number): number => ((vertical ? map.log?.y : map.log?.x) ? v : vertical
     ? Math.min(Math.max(v, limits.ymin), limits.ymax)
-    : Math.min(Math.max(v, limits.xmin), limits.xmax);
+    : Math.min(Math.max(v, limits.xmin), limits.xmax));
   const rects: BarRect[] = [];
   if (bar.kind.endsWith("interval")) {
     // PGF's handler (pgflibraryplothandlers.code.tex): centre x_i + shift·Δ, width w·Δ
