@@ -609,3 +609,117 @@ editor's text engine has the font. Found on the way:
 - Minor tick rules beyond the observed cases (e.g. with `xtick distance`).
 - Number formatting edge cases (rounding ties) — follow PGF source.
 - `extra x ticks` (harness limitation).
+
+---
+
+## Q. Log axes
+
+Experiments E16–E20 (`e16-log-explore.mts`, `e17-log-ticks.mts <sweep> [seed]`
+with checker `check-log-ticks.py`, `e18-log-probe.mts`, `e19-log-bisect.mts`,
+`e20-log-minor-bisect.mts`), fixtures `log-*`. Harness version 3 records
+the scale per direction; on a log direction Tier 1 limits, `\tick` and the
+map are internal coordinates (below).
+
+**Q1 — Internal coordinate and modes.** A log direction works in the
+logarithm of the data value: natural log by default, log_b with
+`log basis x=b`. `\pgfkeysvalueof{/pgfplots/xmin}` and `\tick` are that
+logarithm (e.g. `xmin=1e-10` reads −23.02582; with `log basis x=2`,
+`xmax=64` reads 6.00073, i.e. TeX's fixed-point ln 2 — 0.024 pt on a 195 pt
+axis, not emulated). The data-to-canvas map is B1 applied to internal
+coordinates. `semilogxaxis`/`semilogyaxis`/`loglogaxis` are `xmode`/`ymode`
+`=log` (manual axis-addplot.tex); **every axis environment sets both modes
+at its start**, after `\pgfplotsset` defaults: a bare
+`\pgfplotsset{xmode=log}` before `\begin{axis}` changes nothing (fixture
+log-pgfplotsset-mode: the x axis stays linear on [−51.1, 550.1]), while
+`every axis/.append style={xmode=log}` and axis options do (log-xmode-discard).
+`\pgfkeysvalueof{/pgfplots/xmode}` has no stored value (reads `\pgfkeys@relax`).
+CONFIRMED (manual + 3 fixtures, exact).
+
+**Q2 — Limits.** Automatic limits and `enlargelimits` (H1) act on internal
+coordinates: data 1…1000 → ln range [0, 6.90775] → enlarged
+[−0.69081, 7.59856] (E16 `ll-1-1000`; fixtures log-loglog-default,
+log-semilogy-grid, log-xmode-discard to < 0.003 pt). A point whose
+coordinate on a log direction is ≤ 0 is discarded as a whole (also its other
+coordinate drops out of the other direction's range: E16 `sy-neg` x range
+from the kept points only), and the line joins its neighbours
+(`unbounded coords=discard`, initially; log-xmode-discard Tier 2).
+`enlarge x limits={abs=v}` adds log v (manual specifyrange.tex,
+"multiplicatively"; implemented, not measured). Degenerate ranges on log
+axes: not measured. CONFIRMED/OBSERVED.
+
+**Q3 — Automatic ticks** (display exponents d = internal/ln 10, or the
+internal value itself when `log basis` is set; lo, hi the limits in d; L the
+axis length; f = floor(L / `max space between ticks`)):
+```
+R     = hi − lo + δ                δ = 0.001 internal units (0.000434 decades)
+k     = max(1, floor(R / max(f, 2)))
+s     = floor(lo') + 1             lo' = lo nudged away from 0 (exact decades: 1e2 → 2, 1e-3 → below −3)
+c     = #{ s + j·k ≤ hi + δ, j ≥ 0 }
+if c ≥ (k = 1 ? 2 : 3):            decade mode
+   k ≥ 2: ticks s + j·k inside [lo − tol, hi + tol], \ticknum j (from 0).
+          The decade at an exact positive lower limit is skipped (lo = 0 → 1, 1+k, …).
+   k = 1: every integer d inside [lo − tol, hi + tol]
+else:                               fractional mode
+   step = nice(R / max(f − 1, 2))   nice: {1,2,5}·10^n with thresholds 1.5/3.5/7.5 (as I1)
+   while #{j : trunc(lo/step) ≤ j, j·step ≤ hi} < 2: step = next smaller nice value (as I1b)
+   ticks j·step inside [lo − tol, hi + tol]
+\ticknum (k = 1 and fractional) = j − floor(lo'/step)
+```
+tol = 0.05 pt in internal units (D3). Thresholds bisected (E19, 16
+transitions at L = 120, 195, 300): fractional steps switch at
+R·(f−1)^{-1} = 1.5/3.5/7.5·10^n, decade mode starts where c reaches 2
+(L = 195: R = 2), integer k at R = n·k (195 pt: 10, 15 …; 300 pt: 16); every
+transition sits 0.00043 decades = 0.001 internal units early (δ). The
+manual's prose ("if log plots contain just one (or two) positions 10^i …
+feasible step sizes as in the linear case", tickoptions.tex) is the
+fractional mode; the c ≥ 2 / c ≥ 3 acceptance and s = floor(lo')+1 are
+undocumented. `try min ticks` (linear) has no effect on log directions.
+Discovery: E17 `range`, `offset`, `length`, `smallL` (1162 axes), fresh
+validation: E17 `random` seed 1 (326 axes, L 25–625, exponents ±30, R 0.05–60)
+and `msbt` seed 2 (249 axes, msbt 20–100, try min ticks 2–8): **0 mismatches in
+decade mode; 19 of 575 axes in fractional mode differ** — all by the
+fixed-point drift of Q3b (an edge tick in or out, `\ticknum` shifted by
+it). VERIFIED for decade mode; step choice VERIFIED for fractional mode,
+tick values approximate (Q3b).
+- **Q3b — Fractional-step drift (OPEN).** TeX's fractional ticks are not exact
+  multiples: tick_j = d₀(1+ε) + j·step·ln10 with `step·ln10` rounded to 5
+  decimals (0.02 → 0.04605) and an offset growing with |d|: ε ≈ +2e-4
+  (step 0.02), +6e-5 (0.05, 0.1), −1.7e-5 (0.2), −5.6e-4 (0.01), ~0 (0.5);
+  e.g. 10^{8.14} sits at d = 8.14172 (`h.tex` probe: `\tick` 18.747 for
+  8.14·ln 10 = 18.7430). Not emulated: on fixtures with |d| ≲ 1 it stays
+  below 0.01 pt (log-small-range); at |d| ≈ 10 a narrow axis is off by up to
+  ~1 pt. The cause looks like pgfplots' fixed-point arithmetic; pgfmath
+  candidates (`10^…`, `exp`, `ln`) did not reproduce it.
+- **Q3c — `try min ticks log`** (manual, initially 3) changes the fractional
+  step in a way not yet captured (E17 `tmtlog` seed 3: with 5 the effective
+  divisor is 3 at f = 3; with 7 it is 5; with 2 it is 1 at f = 1). OPEN;
+  the evaluator implements only the initial value and diagnoses others.
+
+**Q4 — Minor ticks and labels.** In decade mode with k = 1 and display
+basis 10, minor ticks are at d = i + log10(m), m = 1…9 (m = 1 coincides
+with a major tick and is drawn as a minor mark too), for decades
+i = floor(lo') … floor(hi + δ + 0.5) − 1, inside [lo − tol, hi + tol]: the
+decade above the last major tick gets its minor ticks only when
+hi + δ ≥ last + 0.5 (E20, bisected at 6 configurations to 1e-5: always
+last + 0.49958). No minor ticks in fractional mode, for k ≥ 2, with
+`log basis x=2`, or for explicit tick lists. `minor tick num` does not apply
+(manual tickoptions.tex). Labels: `$10^{\pgfmathprintnumber{d}}$` (manual
+numberformatting.tex, `log number format basis`), `$b^{…}$` with
+`log basis x=b`; explicit values print their exponent (`xtick={5}` →
+10^{0.7}). `log ticks with fixed point` prints the value in fixed notation
+(1, 10, 1,000; 0.01) — log-explicit-ticks. Grids on log axes use the same
+major/minor positions (log-semilogy-grid). VERIFIED on E17 (minor counts in
+all sweeps, same pass rate as Q3) and the fixtures.
+
+**Q5 — Coordinates in a log axis.** `axis cs:` and bare coordinates take
+data values; their logarithm goes through the map (log-explicit-ticks: a
+`\draw` from (10,0.1) and a node at `axis cs:300,0.05`, Tier 2 exact). The
+`origin` anchor of a log direction is internal 0 (data 1) **not** clamped
+into the box (log-small-range: origin at (−97.48, −77.29), 97 pt outside;
+its four projections lie on the box edges as in A7a). CONFIRMED on 2
+fixtures.
+
+**Q6 — Expression plots** on a log y direction sample x linearly over
+`domain` (log-semilogy-grid, Tier 2 path exact). On a log x direction the
+samples are also taken linearly in x and then mapped (implemented, not
+separately measured).
