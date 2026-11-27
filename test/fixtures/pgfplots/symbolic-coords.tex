@@ -1,0 +1,8 @@
+% symbolic x coords with ybar and xtick=data: names map to their
+% positions; tick labels are the names. Behaviour X1.
+\begin{tikzpicture}
+\begin{axis}[ybar, symbolic x coords={low,mid,high}, xtick=data, ymin=0]
+  \addplot coordinates {(low,2) (mid,3) (high,1)};
+  \addplot coordinates {(low,1) (mid,2.5) (high,2)};
+\end{axis}
+\end{tikzpicture}

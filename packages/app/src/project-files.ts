@@ -1,7 +1,7 @@
 import "./harfbuzz-loader";
 import {
   beamerFontFileRequests, beamerInputFileRequests, beamerThemeFileName, buildRuntimeTexFont, collectBeamerProjectFiles, createBeamerProjectFiles,
-  loadRuntimeHarfBuzz, registerRuntimeTexFont, registerRuntimeTexFontTransfer, scanBeamerDocument,
+  loadRuntimeHarfBuzz, mayReadPgfplotsTableFiles, pgfplotsTableFileNames, registerRuntimeTexFont, registerRuntimeTexFontTransfer, scanBeamerDocument,
   type BeamerProjectFiles, type RuntimeTexFontData, type RuntimeTexFontTransfer,
 } from "@tikz-editor/core/beamer";
 import { runtimeTexFontFileId } from "@tikz-editor/core/text/tex/fonts/runtime-registry";
@@ -38,7 +38,7 @@ const NONE: PreparedProjectFiles = { files: undefined, entries: [], fonts: [], f
 
 /** Whether a document may load project files at all; callers skip the asynchronous step otherwise. */
 export function documentUsesProjectFiles(source: string): boolean {
-  return THEME_USE.test(source) || FONTSPEC.test(source) || INPUT_USE.test(source);
+  return THEME_USE.test(source) || FONTSPEC.test(source) || INPUT_USE.test(source) || mayReadPgfplotsTableFiles(source);
 }
 
 export const NO_PROJECT_FILES = NONE;
@@ -50,7 +50,7 @@ export async function prepareBeamerProjectFiles(params: {
   readonly findFont?: ((names: readonly string[], byFileName: boolean) => Promise<string | null>) | undefined;
 }): Promise<PreparedProjectFiles> {
   const { readLocalAsset } = params;
-  if (!readLocalAsset || (!THEME_USE.test(params.source) && !FONTSPEC.test(params.source) && !INPUT_USE.test(params.source))) return NONE;
+  if (!readLocalAsset || !documentUsesProjectFiles(params.source)) return NONE;
   const dependencies = new Set<string>();
   const read = async (name: string): Promise<string | null> => {
     const path = params.resolvePath(name);
@@ -62,7 +62,7 @@ export async function prepareBeamerProjectFiles(params: {
     textCache.set(path, text);
     return text;
   };
-  const collected = THEME_USE.test(params.source) || INPUT_USE.test(params.source) ? await collectBeamerProjectFiles(params.source, read) : new Map<string, string>();
+  const collected = THEME_USE.test(params.source) || INPUT_USE.test(params.source) || mayReadPgfplotsTableFiles(params.source) ? await collectBeamerProjectFiles(params.source, read) : new Map<string, string>();
   const entries = [...collected].sort(([left], [right]) => left.localeCompare(right));
   const fonts = await loadProjectFonts(params, collected, readLocalAsset, dependencies);
   if (collected.size === 0 && fonts.names.size === 0) return dependencies.size === 0 ? NONE : { ...NONE, dependencies: [...dependencies] };
@@ -146,11 +146,11 @@ export function beamerProjectFilesCacheKey(entries: readonly (readonly [string, 
  * preparation's `dependencies`.
  */
 export function beamerProjectFileWatchPaths(source: string, resolvePath: (name: string) => string | null): string[] {
-  if (!THEME_USE.test(source) && !FONTSPEC.test(source) && !INPUT_USE.test(source)) return [];
+  if (!documentUsesProjectFiles(source)) return [];
   const names = scanBeamerDocument(source).preamble.themes.flatMap(use => use.name.value.split(",")
     .map(name => name.trim()).filter(name => /^[A-Za-z0-9_-]+$/u.test(name))
     .map(name => beamerThemeFileName(use.kind, name)));
-  names.push(...beamerInputFileRequests(source).flat());
+  names.push(...beamerInputFileRequests(source).flat(), ...pgfplotsTableFileNames(source));
   return [...new Set([...new Set(names)].flatMap(name => resolvePath(name) ?? []))];
 }
 

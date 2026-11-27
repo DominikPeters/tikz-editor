@@ -36,7 +36,7 @@ import type {
   TikzStyleStatement
 } from "../../ast/types.js";
 import { mapOverlaySpec, mapPathStatement } from "../paths/parse.js";
-import { mapAxisStatement, mapPgfplotsLibraryStatement, mapPgfplotsSetStatement } from "../pgfplots/parse.js";
+import { mapAxisStatement, mapPgfplotsLibraryStatement, mapPgfplotsSetStatement, mapPgfplotsTableReadStatement } from "../pgfplots/parse.js";
 import { mapUnknownEnvironmentStatement, mapUnknownStatement } from "../../transform/unknown.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import { parseForeachHeaderRaw } from "../../foreach/header.js";
@@ -202,6 +202,14 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
     return mapPgfplotsLibraryStatement(node, source, state);
   }
 
+  if (node.type.name === "TexLengthStatement") {
+    return mapUnknownStatement(node, source, allocateStatementIndex(state));
+  }
+
+  if (node.type.name === "PgfplotsTableReadStatement") {
+    return mapPgfplotsTableReadStatement(node, source, state);
+  }
+
   return null;
 }
 
@@ -220,7 +228,8 @@ function mapScopeStatement(node: SyntaxNode, source: string, state: StatementMap
 
 function mapForeachStatement(node: SyntaxNode, source: string, state: StatementMappingState): ForeachStatement {
   const statementIndex = allocateStatementIndex(state);
-  const foreachCmdNode = findFirstChildByName(node, "ForeachCmd");
+  const ungroupedNode = findFirstChildByName(node, "PgfplotsForeachUngroupedCmd");
+  const foreachCmdNode = findFirstChildByName(node, "ForeachCmd") ?? ungroupedNode;
   const foreachBodyNode = findFirstChildByName(node, "ForeachBody");
 
   const prefixFrom = foreachCmdNode ? foreachCmdNode.to : node.from;
@@ -263,7 +272,8 @@ function mapForeachStatement(node: SyntaxNode, source: string, state: StatementM
     listRaw: parsedHeader.listRaw,
     prefixRaw: parsedHeader.headerRaw,
     bodyRaw,
-    ...(bodySpan !== undefined ? { bodySpan } : {})
+    ...(bodySpan !== undefined ? { bodySpan } : {}),
+    ...(ungroupedNode ? { pgfplots: "ungrouped" as const } : {})
   };
 }
 
@@ -411,15 +421,18 @@ function toDeclareMathOperatorBody(operatorNameRaw: string, starred: boolean): s
 
 function mapPgfMathStatement(node: SyntaxNode, source: string, state: StatementMappingState): PgfMathStatement {
   const statementIndex = allocateStatementIndex(state);
-  const setMacroNode = findFirstChildByName(node, "PgfMathSetMacroCmd");
+  const setMacroNode = findFirstChildByName(node, "PgfMathSetMacroCmd") ?? findFirstChildByName(node, "PgfMathTruncateMacroCmd");
   const parseNode = findFirstChildByName(node, "PgfMathParseCmd");
   const commandNode = setMacroNode
     ?? parseNode
     ?? findFirstChildByName(node, "PgfMathSetSeedCmd");
+  // `\pgfmathsetmacro\name{…}`: the target may be an unbraced control sequence.
   const groups = findChildrenByName(node, "Group");
+  const target = findFirstChildByName(node, "CommandName");
   const rawCommand = commandNode ? source.slice(commandNode.from, commandNode.to) : "\\pgfmathparse";
-  const commandRaw = rawCommand === "\\pgfmathsetmacro" || rawCommand === "\\pgfmathsetseed"
+  const commandRaw = rawCommand === "\\pgfmathsetmacro" || rawCommand === "\\pgfmathtruncatemacro" || rawCommand === "\\pgfmathsetseed"
     ? rawCommand : "\\pgfmathparse";
+  const targetArg = setMacroNode && target ? [{ raw: source.slice(target.from, target.to), span: { from: target.from, to: target.to } }] : [];
 
   return {
     kind: "PgfMath",
@@ -427,8 +440,8 @@ function mapPgfMathStatement(node: SyntaxNode, source: string, state: StatementM
     span: { from: node.from, to: node.to },
     raw: source.slice(node.from, node.to),
     commandRaw,
-    argsRaw: groups.map((group) => extractGroupInnerRaw(group, source)),
-    argsSpan: groups.map((group) => toGroupInnerSpan(group, source))
+    argsRaw: [...targetArg.map((arg) => arg.raw), ...groups.map((group) => extractGroupInnerRaw(group, source))],
+    argsSpan: [...targetArg.map((arg) => arg.span), ...groups.map((group) => toGroupInnerSpan(group, source))]
   };
 }
 

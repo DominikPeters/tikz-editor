@@ -4,6 +4,7 @@ import type {
   DocumentGraphicsResolution,
   DocumentGraphicsResolveRequest,
   DocumentGraphicsResolver,
+  DocumentTextFileResolution,
 } from "@tikz-editor/core/graphics";
 import { documentGraphicsPreviewRequestKey, texGraphicsPathPrefixes } from "@tikz-editor/core/graphics";
 import {
@@ -138,8 +139,18 @@ export async function prepareDocumentGraphicsContext(params: {
     entries: [...entries.values()],
   });
   const cacheKey = project.files ? `${graphicsKey}|${project.files.cacheKey}` : graphicsKey;
+  // Text files (pgfplots tables) are read with the project files; without a
+  // readable document folder the resolver has no reader, and the plot says why.
+  const projectFiles = project.files;
+  const canReadFolder = Boolean(platform.files?.readLocalAsset) && baseDirectory !== null;
   const resolver: DocumentGraphicsResolver = {
     cacheKey,
+    ...(canReadFolder ? {
+      readTextFile(filename: string): DocumentTextFileResolution {
+        const text = projectFiles?.readText(filename) ?? null;
+        return text === null ? { status: "missing" } : { status: "resolved", text };
+      },
+    } : {}),
     resolve(request: DocumentGraphicsResolveRequest): DocumentGraphicsResolution {
       const requestKey = includeGraphicsRequestKey({
         filename: request.filename,

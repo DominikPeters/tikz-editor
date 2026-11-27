@@ -493,6 +493,37 @@ Alpha.\newpage Beta.\par\framebreak Gamma.
     \addplot+[const plot] coordinates {(0,1) (1,2) (2,1)};
   \end{axis}
 \end{tikzpicture}`,
+  pgfplots_bars: String.raw`\begin{tikzpicture}
+  \begin{axis}[ybar]
+    \addplot coordinates {(1,2) (2,3)};
+    \addplot coordinates {(1,1) (2,2)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_area: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot[fill=blue!20] coordinates {(1,2) (2,3) (4,1)} \closedcycle;
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_error_bars: String.raw`\begin{tikzpicture}
+  \begin{axis}
+    \addplot+[error bars/.cd, y dir=both, y explicit] coordinates {(1,2) +- (0,0.5) (2,3) +- (0,1)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_symbolic_coords: String.raw`\begin{tikzpicture}
+  \begin{axis}[symbolic x coords={a,b,c}, xtick=data]
+    \addplot coordinates {(a,1) (b,3) (c,2)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_nodes_near_coords: String.raw`\begin{tikzpicture}
+  \begin{axis}[ybar, nodes near coords]
+    \addplot coordinates {(1,2) (2,3)};
+  \end{axis}
+\end{tikzpicture}`,
+  pgfplots_document_lengths: String.raw`\begin{tikzpicture}
+  \begin{axis}[width=0.5\textwidth]
+    \addplot coordinates {(0,0) (1,1)};
+  \end{axis}
+\end{tikzpicture}`,
   pgfplots_pgfplotsset: String.raw`\begin{tikzpicture}
   \pgfplotsset{every axis/.append style={thick}}
   \begin{axis}

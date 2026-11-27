@@ -1,0 +1,10 @@
+% Bar options per plot: a width in axis units, an explicit shift, a plot
+% option ybar without the axis style, explicit fill and draw, ymin above
+% zero (bars from the lower limit). Behaviour U1-U3.
+\begin{tikzpicture}
+\begin{axis}[ymin=0.5, xmin=0, xmax=5]
+  \addplot+[ybar, bar width=0.4, mark=none] coordinates {(1,2) (2,3)};
+  \addplot[ybar, bar shift=-6pt, fill=green!40, draw=black] coordinates {(3,1.5) (4,2.5)};
+  \addplot+[ybar, bar shift=6pt] coordinates {(3,2) (4,1)};
+\end{axis}
+\end{tikzpicture}

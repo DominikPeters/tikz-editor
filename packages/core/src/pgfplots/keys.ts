@@ -46,7 +46,8 @@ const SHORT_STYLE_KEYS: Record<string, string> = {
   "forget plot style": "every forget plot",
   "legend image post style": "every legend image post",
   "colorbar style": "every colorbar",
-  "extra tick style": "every extra tick"
+  "extra tick style": "every extra tick",
+  "nodes near coords style": "every node near coord"
 };
 for (const a of ["x", "y", "z"]) {
   Object.assign(SHORT_STYLE_KEYS, {
@@ -128,7 +129,9 @@ const INITIAL_STYLES: Record<string, string> = {
   "every boxed x axis": "",
   "every boxed y axis": "",
   "every non boxed x axis": "xtick align=center,enlarge x limits=false,x axis line style={-stealth}",
-  "every non boxed y axis": "ytick align=center,enlarge y limits=false,y axis line style={-stealth}"
+  "every non boxed y axis": "ytick align=center,enlarge y limits=false,y axis line style={-stealth}",
+  "every node near coord": "",
+  "axis background": ""
 };
 
 export function createInitialStyleRegistry(): PgfplotsStyleRegistry {

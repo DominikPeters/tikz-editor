@@ -1,0 +1,9 @@
+% \closedcycle down to the base line (0 clamped into the limits), a
+% stacked area running back along the plot below it, painted last first.
+% Behaviour W1, W2.
+\begin{tikzpicture}
+\begin{axis}[stack plots=y, ymin=0.5]
+  \addplot[fill=blue!20] coordinates {(1,2) (2,3) (4,1)} \closedcycle;
+  \addplot[fill=red!20, draw=red] coordinates {(1,1) (2,1) (4,2)} \closedcycle;
+\end{axis}
+\end{tikzpicture}

@@ -1,3 +1,4 @@
+import { pgfplotsTableFileNames } from "../pgfplots/table-files.js";
 import { beamerInputFileCandidates, findBeamerInputUses } from "./input-files.js";
 import { applyBeamerModes } from "./modes.js";
 import { scanBeamerDocument } from "./scan.js";
@@ -72,7 +73,9 @@ export async function collectBeamerProjectFiles(
 ): Promise<ReadonlyMap<string, string>> {
   const files = new Map<string, string>();
   const tried = new Set<string>();
-  let pending: string[][] = [...beamerThemeFileRequests(scanBeamerDocument(source)).map(name => [name]), ...beamerInputFileRequests(source)];
+  // pgfplots table files are data: read, never scanned for further files.
+  const tables = new Set(pgfplotsTableFileNames(source));
+  let pending: string[][] = [...beamerThemeFileRequests(scanBeamerDocument(source)).map(name => [name]), ...beamerInputFileRequests(source), ...[...tables].map(name => [name])];
   for (let depth = 0; depth < PROJECT_FILE_SEARCH_DEPTH && pending.length > 0; depth += 1) {
     const next: string[][] = [];
     for (const alternatives of pending) {
@@ -82,6 +85,10 @@ export async function collectBeamerProjectFiles(
         const text = await read(name);
         if (text === null) continue;
         files.set(name, text);
+        if (tables.has(name)) break;
+        for (const table of pgfplotsTableFileNames(text)) {
+          if (!tables.has(table)) { tables.add(table); next.push([table]); }
+        }
         if (/\\use(?:color|font|inner|outer)?theme(?![A-Za-z@])/u.test(text)) {
           next.push(...beamerThemeFileRequests(scanBeamerThemeFileDocument(text).document).map(theme => [theme]));
         }

@@ -1,0 +1,35 @@
+% Coordinate filters and unbounded coordinates: each nth point, restrict
+% expr to domain (with its jump), unbounded coords=jump, x expr with
+% \coordindex. Behaviour V4, V6, V10.
+\begin{tikzpicture}
+\begin{axis}[xmin=-1, xmax=9, ymin=-1, ymax=9]
+  \addplot+[each nth point=2] table {
+    x y
+    0 0
+    1 1
+    2 4
+    3 2
+    4 5
+    5 3
+    6 6
+  };
+  \addplot+[restrict expr to domain={\thisrow{x}}{1:5}, mark=none] table {
+    x y
+    0 8
+    1 7
+    2 7.5
+    3 6.5
+    4 7
+    5 6
+    6 8
+  };
+  \addplot+[unbounded coords=jump] table [x expr=\coordindex, y=y] {
+    x y
+    9 1
+    9 2
+    9 nan
+    9 1.5
+    9 3
+  };
+\end{axis}
+\end{tikzpicture}

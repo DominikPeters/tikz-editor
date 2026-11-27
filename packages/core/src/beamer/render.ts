@@ -4004,6 +4004,8 @@ async function prepareEmbeddedTikz(params: {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
+        // \textwidth and \linewidth where the picture is set (a column's width inside columns).
+        documentLengths: { textwidth: params.width },
         ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
         ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },

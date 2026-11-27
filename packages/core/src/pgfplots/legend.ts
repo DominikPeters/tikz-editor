@@ -114,6 +114,30 @@ export type LegendImageGeometry = { pieces: LegendImagePiece[] };
 
 const CM = 72.27 / 2.54;
 
+const EM = 10;
+const EX = 4.30554;
+
+/**
+ * `ybar legend`, `xbar legend` (manual axisdescription.tex): a bar plot of
+ * (0cm, 0.8em) and (2 bar width, 0.6em) with `bar width=3pt, bar shift=0pt,
+ * yshift=-0.2em`; bars start at 0 in the image's own frame (em, ex of the
+ * normal 10pt font). `single ybar legend`: one 6pt bar at (0pt, 0.8em).
+ */
+function barLegend(points: Array<{ x: number; y: number }>, width: number, vertical: boolean, shift: number): LegendImageGeometry {
+  return {
+    pieces: points.map((p) => vertical
+      ? { kind: "rectangle" as const, from: { x: p.x - width / 2, y: shift }, to: { x: p.x + width / 2, y: p.y + shift } }
+      : { kind: "rectangle" as const, from: { x: 0, y: p.y + shift - width / 2 }, to: { x: p.x, y: p.y + shift + width / 2 } })
+  };
+}
+
+const BAR_LEGEND_IMAGES: Record<string, (plot: { onlyMarks: boolean; hasMarks: boolean }) => LegendImageGeometry> = {
+  "ybar legend": () => barLegend([{ x: 0, y: 0.8 * EM }, { x: 6, y: 0.6 * EM }], 3, true, -0.2 * EM),
+  "xbar legend": () => barLegend([{ x: 0, y: 0.8 * EM }, { x: 6, y: 0.6 * EM }], 3, false, -0.2 * EM),
+  "single ybar legend": () => barLegend([{ x: 0, y: 0.8 * EM }], 6, true, -0.2 * EM),
+  "single xbar legend": () => barLegend([{ x: 0.8 * EM, y: 0 }], 6, false, 0.2 * EX)
+};
+
 /**
  * Legend image kinds (manual "Legend Appearance"): the documented
  * `legend image code` of each style, as geometry. Pluggable: a plot type
@@ -129,7 +153,8 @@ export const LEGEND_IMAGE_BUILDERS: Record<string, (plot: { onlyMarks: boolean; 
   }),
   // `\draw[#1] (0cm,-0.1cm) rectangle (0.6cm,0.1cm);`
   "area legend": () => ({ pieces: [{ kind: "rectangle", from: { x: 0, y: -0.1 * CM }, to: { x: 0.6 * CM, y: 0.1 * CM } }] }),
-  "empty legend": () => ({ pieces: [] })
+  "empty legend": () => ({ pieces: [] }),
+  ...BAR_LEGEND_IMAGES
 };
 
 /** Bounding box of an image cell (PGF: stroked paths grow by half the line width, marks count geometrically). */

@@ -78,6 +78,7 @@ import type {
 import { buildForeachIterations, expandForeachMacroList } from "./options.js";
 import {
   parsePathItemsFromFragmentWithSyntheticMapping,
+  parseAxisBodyFromBodyWithMapping,
   parseStatementsFromBody,
   parseStatementsFromBodyWithMapping,
   type ForeachStatementBodyParseResult,
@@ -237,7 +238,9 @@ function expandStatement(
       ...statement,
       body: statement.body.flatMap((item): AxisBodyItem[] => isAxisCommand(item)
         ? [item]
-        : expandStatements([item], stack, inheritedBindings, context, templateSource))
+        : item.kind === "Foreach"
+          ? expandAxisForeachStatement(item, stack, inheritedBindings, context)
+          : expandStatements([item], stack, inheritedBindings, context, templateSource))
     };
     maybeRecordStatementAttribution(expandedAxis, stack, context, templateSource);
     return [expandedAxis];
@@ -352,6 +355,101 @@ function expandForeachStatement(
   }
 
   return expanded;
+}
+
+/** The loop variable `\pgfplotsinvokeforeach` bodies are expanded with (their `#1`). */
+const INVOKE_VARIABLE = "\\pgfplotsinvokeforeachelement";
+
+/**
+ * A loop inside a pgfplots axis (`\foreach`, `\pgfplotsforeachungrouped`,
+ * `\pgfplotsinvokeforeach`): each iteration's body is read as axis body
+ * items, so `\addplot` in it is a plot of the axis (cycle list position
+ * included). Measured in experiment E16 (behaviour V0): with `\foreach` and
+ * `\pgfplotsforeachungrouped`, a plot's input (expression, coordinates,
+ * table) sees the iteration's value, but its options and any TikZ statement
+ * are evaluated after the loop, where TeX stops with an undefined control
+ * sequence; `\pgfplotsinvokeforeach` substitutes `#1` everywhere.
+ */
+function expandAxisForeachStatement(
+  statement: ForeachStatement,
+  stack: ForeachOriginFrame[],
+  inheritedBindings: Record<string, string>,
+  context: ExpandContext
+): AxisBodyItem[] {
+  const invoke = statement.pgfplots === "invoke";
+  const variablesRaw = invoke ? INVOKE_VARIABLE : statement.variablesRaw?.trim() ?? "";
+  const listRaw = statement.listRaw?.trim() ?? "";
+  if (variablesRaw.length === 0 || listRaw.length === 0) {
+    context.diagnostics.push({ severity: "warning", code: "invalid-foreach-header", message: "Could not parse foreach loop header.", span: statement.span });
+    return [];
+  }
+  const { iterations, diagnostics } = buildForeachIterations({
+    variablesRaw,
+    listRaw: expandForeachMacroList(listRaw, context.macroBindings),
+    options: statement.options,
+    baseBindings: inheritedBindings,
+    loopSpan: statement.span
+  });
+  context.diagnostics.push(...diagnostics);
+  const variables = invoke ? [] : (statement.variablesRaw ?? "").split("/").map((name) => name.trim()).filter((name) => /^\\[A-Za-z@]+$/u.test(name));
+  const late = (raw: string): boolean => variables.some((name) => new RegExp(`${name.replace(/\\/gu, "\\\\")}(?![A-Za-z@])`, "u").test(raw));
+  let warnedLate = false;
+  const warnLate = (): void => {
+    if (warnedLate) return;
+    warnedLate = true;
+    context.diagnostics.push({
+      severity: "warning",
+      code: "pgfplots-foreach-late-variable",
+      message: "Inside an axis, pgfplots evaluates plot options and TikZ statements after the loop has ended, so TeX stops here with an undefined control sequence. Use `\\pgfplotsinvokeforeach{list}{… #1 …}` instead; the editor draws each iteration.",
+      span: statement.span
+    });
+  };
+  const expanded: AxisBodyItem[] = [];
+  for (const iteration of iterations) {
+    if (!consumeExpansionBudget(context, statement.span)) break;
+    const combinedBindings = { ...inheritedBindings, ...iteration.bindings };
+    const frame: ForeachOriginFrame = { loopId: statement.id, loopSpan: statement.span, iterationIndex: iteration.index, bindings: { ...iteration.bindings } };
+    const nextStack = [...stack, frame];
+    const value = iteration.bindings[INVOKE_VARIABLE] ?? "";
+    const template = invoke ? statement.bodyRaw.split("#1").join(value) : statement.bodyRaw;
+    const fragment = expandSubstitutedFragment(template, invoke ? inheritedBindings : combinedBindings, context, parseAxisLoopBody, { retryWithoutMacroExpansionOnParseError: true });
+    const parsed = fragment.parsed;
+    if (parsed.hasParseError) {
+      context.diagnostics.push({ severity: "warning", code: "foreach-body-parse-error", message: "Could not parse expanded foreach body.", span: statement.span });
+    }
+    if (!invoke && late(statement.bodyRaw)) {
+      // Plot inputs see the value; options and TikZ statements would not (TeX error).
+      const template = parseAxisLoopBody(statement.bodyRaw, { from: 0, to: statement.bodyRaw.length });
+      if (template.items.some((item) => (item.kind === "AddPlot" ? late([item.options?.raw ?? "", ...(item.extraOptions ?? []).map((extra) => extra.options.raw)].join("")) : !isAxisCommand(item) && late(sliceSpan(statement.bodyRaw, template.sourceMapper.mapSpan(item.span)))))) warnLate();
+    }
+    const items = parsed.items.flatMap((item): AxisBodyItem[] => isAxisCommand(item)
+      ? [item]
+      : item.kind === "Foreach"
+        ? expandAxisForeachStatement(item, nextStack, combinedBindings, context)
+        : expandStatements([item], nextStack, combinedBindings, context, { sourceId: statement.id, sourceSpan: statement.span }));
+    recordStatementSourceMaps(items.filter((item): item is Statement => !isAxisCommand(item)), {
+      sourceId: statement.id,
+      sourceSpan: statement.span,
+      sourceKind: "foreach",
+      mapSpan: (span) => {
+        if (invoke) return null;
+        const generatedSpan = parsed.sourceMapper.mapSpan(span);
+        if (!generatedSpan) return null;
+        return statement.bodySpan ? offsetSpan(fragment.mapSpan(generatedSpan), statement.bodySpan.from) : null;
+      }
+    }, context);
+    expanded.push(...items);
+  }
+  return expanded;
+}
+
+function sliceSpan(text: string, span: Span | null): string {
+  return span ? text.slice(span.from, span.to) : "";
+}
+
+function parseAxisLoopBody(raw: string, span: Span): ReturnType<typeof parseAxisBodyFromBodyWithMapping> {
+  const parsed = parseAxisBodyFromBodyWithMapping(raw, span);
+  return { ...parsed, items: structuredClone(parsed.items) };
 }
 
 function expandPathStatement(

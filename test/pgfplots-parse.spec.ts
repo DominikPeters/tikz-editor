@@ -15,8 +15,8 @@ import { createMinimalTikzSourceArtifact, createStandaloneLatexExportArtifact } 
 import { findPathStatementById } from "../packages/core/src/edit/statement-find.js";
 import { parseStatementSnapshot } from "../packages/core/src/edit/statement-ops.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
-import { getAxisEvaluations } from "../packages/core/src/pgfplots/evaluate-axis.js";
 import { readCoordinateList } from "../packages/core/src/pgfplots/coordinate-list.js";
+import { getAxisEvaluations } from "../packages/core/src/pgfplots/evaluate-axis.js";
 import { readInlineTable } from "../packages/core/src/pgfplots/inline-table.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
@@ -341,7 +341,7 @@ describe("pgfplots \\addplot", () => {
 \mymacro{a}
 \addlegendentry{b}`);
     const axis = axisAt(source);
-    expect(axis.body.map((item) => item.kind)).toEqual(["UnknownStatement", "AddPlot", "UnknownStatement", "AddLegendEntry"]);
+    expect(axis.body.map((item) => item.kind)).toEqual(["Foreach", "AddPlot", "UnknownStatement", "AddLegendEntry"]);
     expect(parseTikz(source).diagnostics.filter((diagnostic) => diagnostic.code === "missing-semicolon")).toEqual([]);
     expect(errors(source)).toEqual([]);
   });
@@ -465,6 +465,110 @@ describe("pgfplots: evaluation entry", () => {
   });
 });
 
+describe("pgfplots: idioms from real documents (corpus parse gaps)", () => {
+  const render = (body: string) => {
+    const source = `\\pgfplotsset{compat=1.18}\n${picture(`\\begin{axis}[xmin=0,xmax=3,ymin=0,ymax=4]\n${body}\n\\end{axis}`)}`;
+    const parsed = parseTikz(source, { includeContextDefinitions: true });
+    return { source, parsed, semantic: evaluateTikzFigure(parsed.figure, source) };
+  };
+  const plotLines = (semantic: ReturnType<typeof evaluateTikzFigure>) => semantic.scene.elements
+    .filter((element) => element.kind === "Path" && /:plot:\d+$/u.test(element.sourceRef.sourceId) && element.id.endsWith(":line"));
+
+  it("reads `;`, `<`, `>` in braced option values and comparison operators in expressions", () => {
+    const source = picture(String.raw`\begin{axis}[ylabel={$I(X;L_\text{out})$}, title={$f(x<1)$}]
+  \addplot[domain=0:3] {(x<=1)*1 + (x>2)*(-1) + (x==1.5) + and(x>0.6, x<0.9) + (x>=0 && x<3)};
+  \addplot {0.4 + 1.1*(x-0.8 };
+\end{axis}`);
+    expect(errors(source)).toEqual([]);
+    const [first, second] = plots(axisAt(source));
+    expect(first?.input.kind === "expression" && first.input.expression).toBe("(x<=1)*1 + (x>2)*(-1) + (x==1.5) + and(x>0.6, x<0.9) + (x>=0 && x<3)");
+    // pgfmath accepts an unclosed parenthesis at the end (measured, E16 notes).
+    expect(second?.input.kind).toBe("expression");
+  });
+
+  it("applies a second option list after the first, as TeX does", () => {
+    const source = picture("\\begin{axis}\n\\addplot [red] [domain=0:1, samples=3] {x};\n\\end{axis}");
+    expect(errors(source)).toEqual([]);
+    const plot = onlyPlot(source);
+    expect(plot.options?.raw).toBe("[red]");
+    expect(plot.extraOptions?.map((extra) => slice(source, extra.span))).toEqual(["[domain=0:1, samples=3]"]);
+    const { semantic } = render("\\addplot [red] [domain=0:1, samples=3] {x+1};");
+    const [line] = plotLines(semantic);
+    expect(line?.kind === "Path" && line.commands.length).toBe(3);
+    expect(line?.style.stroke).toBe("#ff0000");
+  });
+
+  it("evaluates \\pgfmathsetmacro, \\pgfmathtruncatemacro and \\def in the body in order for plots; TikZ sees the final values", () => {
+    const { parsed, semantic } = render(String.raw`\pgfmathsetmacro\va{1.5}
+\addplot[domain=0:1,samples=2] {x+\va};
+\draw (axis cs:\va,0) -- (axis cs:\va,1);
+\pgfmathtruncatemacro{\va}{2.7}
+\def\vb{0.5}
+\addplot coordinates {(0,\va) (1,\vb)};`);
+    expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(semantic.diagnostics).toEqual([]);
+    const evaluation = getAxisEvaluations(semantic.scene)[0];
+    if (!evaluation) throw new Error("no axis");
+    const map = evaluation.layout.map;
+    const toData = (q: { x: number; y: number }) => ({ x: (q.x - map.origin.x) / map.xUnit.x, y: (q.y - map.origin.y) / map.yUnit.y });
+    const lines = plotLines(semantic).map((line) => (line.kind === "Path" ? line.commands.map((c) => (c.kind === "Z" ? null : toData(c.to))) : []));
+    expect(lines[0]?.[0]?.y).toBeCloseTo(1.5, 6);
+    expect(lines[1]?.map((q) => q && Number(q.y.toFixed(6)))).toEqual([2, 0.5]);
+    const draw = semantic.scene.elements.find((element) => element.kind === "Path" && element.sourceRef.sourceId.startsWith("path:"));
+    // Embedded TikZ runs at \end{axis}: it sees \va = 2 (behaviour V0).
+    expect(draw?.kind === "Path" && toData(draw.commands[0]?.kind === "M" ? draw.commands[0].to : { x: 0, y: 0 }).x).toBeCloseTo(2, 6);
+  });
+
+  it("reads \\foreach, \\pgfplotsforeachungrouped and \\pgfplotsinvokeforeach bodies as plots of the axis", () => {
+    for (const loop of [
+      "\\foreach \\n in {1,2} {\\addplot[domain=0:1,samples=2] {x+\\n};}",
+      "\\pgfplotsforeachungrouped \\n in {1,2} {\\addplot[domain=0:1,samples=2] {x+\\n};}",
+      "\\pgfplotsinvokeforeach{1,2}{\\addplot[domain=0:1,samples=2] {x+#1};}"
+    ]) {
+      const { parsed, semantic } = render(loop);
+      expect(parsed.diagnostics.filter((d) => d.severity === "error"), loop).toEqual([]);
+      expect(semantic.diagnostics.filter((d) => d.code === "unsupported-statement"), loop).toEqual([]);
+      const lines = plotLines(semantic);
+      expect(lines, loop).toHaveLength(2);
+      expect(new Set(lines.map((line) => line.sourceRef.sourceId)).size, loop).toBe(2);
+    }
+  });
+
+  it("warns when a \\foreach variable reaches a plot option or a TikZ statement (TeX evaluates them after the loop)", () => {
+    const { semantic } = render("\\foreach \\n in {1,2} {\\addplot[red!\\n0] {x};}");
+    expect(semantic.diagnostics.some((d) => d.code === "pgfplots-foreach-late-variable")).toBe(true);
+    const invoke = render("\\pgfplotsinvokeforeach{1,2}{\\draw (axis cs:#1,0) -- (axis cs:#1,1);}");
+    expect(invoke.semantic.diagnostics.some((d) => d.code === "pgfplots-foreach-late-variable")).toBe(false);
+    expect(invoke.semantic.scene.elements.filter((element) => element.kind === "Path" && !element.sourceRef.sourceId.startsWith("axis:")).map((element) => element.sourceRef.sourceId)).toHaveLength(2);
+  });
+
+  it("accepts \\label after a plot, font size environments, brace groups and stray text in an axis", () => {
+    const { parsed, semantic } = render(String.raw`\begin{scriptsize}
+  \addplot[domain=0:1,samples=2] {x+1};\label{pl:a}
+  \draw (axis cs:0,0) -- (axis cs:1,1);
+\end{scriptsize}
+{ \addplot[domain=0:1,samples=2] {x+2}; }
+\addplot[domain=0:1,samples=2] {x} [yshift=3pt];
+],`);
+    expect(parsed.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(parsed.diagnostics.filter((d) => d.code === "stray-token").map((d) => d.severity)).toEqual(["warning"]);
+    expect(semantic.diagnostics.filter((d) => d.code === "unsupported-statement" || d.code === "unsupported-environment")).toEqual([]);
+    expect(plotLines(semantic)).toHaveLength(3);
+    expect(semantic.scene.elements.some((element) => element.kind === "Path" && element.sourceRef.sourceId.startsWith("path:"))).toBe(true);
+  });
+
+  it("accepts a semicolon after \\tikzset in a picture", () => {
+    expect(errors(picture("\\tikzset{M1/.style={blue}};\n\\draw[M1] (0,0) -- (1,1);"))).toEqual([]);
+  });
+
+  it("diagnoses \\addplot outside an axis", () => {
+    const source = picture("\\addplot coordinates {(0,0) (1,1)};\n\\draw (0,0) -- (1,1);");
+    const semantic = evaluateTikzFigure(parseTikz(source).figure, source);
+    expect(semantic.diagnostics.map((d) => d.code)).toContain("pgfplots-command-outside-axis");
+    expect(semantic.scene.elements.filter((element) => element.kind === "Path")).toHaveLength(1);
+  });
+});
+
 describe("pgfplots: traversal, lookup and source-preserving edits", () => {
   const AXIS = String.raw`\begin{axis}[xmin=0]
     \addplot coordinates {(0,0) (1,1)};
@@ -561,7 +665,12 @@ describe("pgfplots: incremental parsing matches a full parse", () => {
     { name: "the axis environment renamed", next: BASE.replace("{axis}[", "{loglogaxis}[").replace("\\end{axis}", "\\end{loglogaxis}") },
     { name: "the axis end deleted", next: BASE.replace("  \\end{axis}\n", "") },
     { name: "a semicolon deleted", next: BASE.replace("[2]};", "[2]}") },
-    { name: "a nested end typed into the body", next: BASE.replace("\\addlegendentry", "\\end{axis} \\addlegendentry") }
+    { name: "a nested end typed into the body", next: BASE.replace("\\addlegendentry", "\\end{axis} \\addlegendentry") },
+    { name: "a second option list added", next: BASE.replace("+[red]", "+[red][thick]") },
+    { name: "an expression with comparisons added", next: BASE.replace("\\addlegendentry{data}", "\\addlegendentry{data}\n    \\addplot {(x<=1)*(x>0)};") },
+    { name: "a loop of plots added", next: BASE.replace("\\addlegendentry{data}", "\\addlegendentry{data}\n    \\pgfplotsinvokeforeach{1,2}{\\addplot {x+#1};}\\label{a}") },
+    { name: "a font environment wrapped around a plot", next: BASE.replace("\\addlegendentry{data}", "\\begin{small}\\addlegendentry{data}\\end{small}") },
+    { name: "a macro definition typed into the body", next: BASE.replace("\\node at", "\\pgfmathsetmacro\\v{2}\n    \\node at") }
   ];
 
   for (const edit of edits) {

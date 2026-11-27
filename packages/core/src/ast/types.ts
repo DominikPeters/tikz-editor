@@ -88,6 +88,7 @@ export type Statement = (
   | AxisStatement
   | PgfplotsSetStatement
   | PgfplotsLibraryStatement
+  | PgfplotsTableReadStatement
   | UnknownStatement
 ) & OverlayGroupMember;
 
@@ -179,6 +180,12 @@ export type ForeachStatement = {
   prefixRaw: string;
   bodyRaw: string;
   bodySpan?: Span;
+  /**
+   * pgfplots' loops inside an axis: `\pgfplotsforeachungrouped` (a `\foreach`
+   * without groups) and `\pgfplotsinvokeforeach{list}{body}`, whose body uses
+   * `#1` (its `variablesRaw` is `#1`).
+   */
+  pgfplots?: "ungrouped" | "invoke";
 };
 
 export type MacroDefinitionStatement = {
@@ -231,7 +238,7 @@ export type PgfMathStatement = {
   id: string;
   span: Span;
   raw: string;
-  commandRaw: "\\pgfmathsetmacro" | "\\pgfmathparse" | "\\pgfmathsetseed";
+  commandRaw: "\\pgfmathsetmacro" | "\\pgfmathtruncatemacro" | "\\pgfmathparse" | "\\pgfmathsetseed";
   argsRaw: string[];
   argsSpan: Span[];
 };
@@ -744,6 +751,11 @@ export type AddPlotStatement = {
   incrementSpan?: Span;
   optionsSpan?: Span;
   options?: OptionListAst;
+  /**
+   * Further option lists right after the first (`\addplot[red][domain=0:1]`):
+   * TeX applies them after the first, as if they were one list (behaviour V0).
+   */
+  extraOptions?: Array<{ span: Span; options: OptionListAst }>;
   /** The older `\addplot[style] plot[options] <input>`: the `plot` keyword and its own options. */
   legacyPlot?: { keywordSpan: Span; optionsSpan?: Span; options?: OptionListAst };
   input: PlotInput;
@@ -929,6 +941,25 @@ export type PgfplotsSetStatement = {
   optionList: OptionListAst;
   /** `compat=…`, the last one when there are several. */
   compat?: PlotSourceText;
+};
+
+/**
+ * `\pgfplotstableread[options]{data}\macro`: reads a table (a file name, or
+ * inline rows when the argument holds a row separator) into `\macro` for
+ * `\addplot table {\macro}` (manual: pgfplotstable, `\pgfplotstableread`).
+ */
+export type PgfplotsTableReadStatement = {
+  kind: "PgfplotsTableRead";
+  id: string;
+  span: Span;
+  raw: string;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** The braces' content, whitespace and newlines kept. */
+  dataRaw: string;
+  dataSpan: Span;
+  macroName: string;
+  macroSpan: Span;
 };
 
 /** `\usepgfplotslibrary{a,b}`. */

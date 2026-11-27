@@ -49,13 +49,13 @@ describe("pgfplots key tree", () => {
   });
 
   it("warns once per unsupported key name and reads documented keys", () => {
-    const m = model("xmin=-1, xmax=pi, ybar, ybar, legend to name=x, colorbar, width=8cm, scale only axis");
+    const m = model("xmin=-1, xmax=pi, colorbar, colorbar, legend to name=x, width=8cm, scale only axis");
     expect(m.x.min).toBe(-1);
     expect(m.x.max).toBeCloseTo(Math.PI, 6);
     expect(m.width).toBeCloseTo(8 * 72.27 / 2.54, 6);
-    expect(m.unsupported.map((u) => u.key)).toEqual(["ybar", "ybar", "colorbar"]);
-    const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}[ybar, ybar, legend pos=north west]\addplot coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`);
-    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-key:ybar")).toHaveLength(1);
+    expect(m.unsupported.map((u) => u.key)).toEqual(["colorbar", "colorbar"]);
+    const result = evaluate(String.raw`\begin{tikzpicture}\begin{axis}[colorbar, colorbar, legend pos=north west]\addplot coordinates {(0,0) (1,1)};\end{axis}\end{tikzpicture}`);
+    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-key:colorbar")).toHaveLength(1);
   });
 });
 
@@ -139,7 +139,9 @@ a b
 \addplot table {data.dat};
 \addplot ({cos(x)},{sin(x)},{x});
 \end{axis}\end{tikzpicture}`);
-    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(3);
+    expect(result.diagnostics.filter((d) => d.code === "unsupported-pgfplots-plot")).toHaveLength(2);
+    // Without a document folder the table file cannot be read; the diagnostic names it.
+    expect(result.diagnostics.filter((d) => d.code === "pgfplots-table-file-unavailable").map((d) => d.message)).toEqual([expect.stringContaining("`data.dat`")]);
     expect(result.scene.elements.some((e) => e.sourceRef.sourceId.includes(":plot:"))).toBe(false);
   });
 

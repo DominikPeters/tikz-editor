@@ -1,62 +1,127 @@
 /**
  * Stage 2 of the axis pipeline: the coordinates of each plot, in data units.
- * Pure: reads the AST and the plot model only.
+ * Pure: reads the AST, the plot model and what the host supplies through
+ * `PlotDataIo` (table files, tables read by `\pgfplotstableread`).
  */
 import type { AddPlotStatement, PlotTableInput, Span } from "../ast/types.js";
+import type { OptionEntry } from "../options/types.js";
 import { expandForeachList } from "../foreach/list.js";
 import { compilePgfMathExpression, type PgfMathDeclaredFunction, type PgfMathTrigFormat } from "../semantic/pgfmath/evaluator.js";
-import { readInlineTable, type InlineTableColumnSeparator } from "./inline-table.js";
-import { readPgfFloat, readPgfNumber, stripBraces, type PlotModel } from "./model.js";
+import { readPgfFloat, readPgfNumber, stripBraces, type PlotFilter, type PlotModel } from "./model.js";
+import { compileTableExpression, type CompiledTableExpression } from "./table-expr.js";
+import { applyTableKeys, defaultTableSettings, readTableNumber, readTableText, resolveColumn, type ColumnSource, type TableSettings } from "./table.js";
 
 export type PlotPoint = {
   x: number;
   y: number;
   /** An empty line precedes the point: the plot jumps here (compat 1.4+). */
   jump: boolean;
+  /** `[meta]` or the table's `meta` column, as written (stored for later use: scatter, nodes near coords). */
+  meta?: string;
+  /** Explicit error values from `+- (ex,ey)` or table error columns: plus/minus amounts per direction. */
+  error?: { xPlus?: number; xMinus?: number; yPlus?: number; yMinus?: number };
+};
+
+/** A table file as the host could provide it (design open question: file-backed tables). */
+export type TableFileRead =
+  | { status: "resolved"; text: string }
+  /** The document has a folder the editor reads, but the file is not there. */
+  | { status: "missing" }
+  /** The editor cannot read the document's folder at all (browser, unsaved document). */
+  | { status: "unavailable" };
+
+/** A table read by `\pgfplotstableread[options]{data}\macro`. */
+export type ReadTableMacro = { data: string; offset: number; inline: boolean; options: OptionEntry[] };
+
+export type PlotDataIo = {
+  /** `table/…` keys in effect before the table's own options: settings, axis options, plot options, in order. */
+  tableKeys: readonly OptionEntry[];
+  readFile: (name: string) => TableFileRead;
+  tableMacro: (name: string) => ReadTableMacro | null;
+  /** `symbolic x coords` / `symbolic y coords` of the axis (behaviour X1): a name reads as its position. */
+  symbolic?: { x?: readonly string[]; y?: readonly string[] };
 };
 
 export type PlotData =
-  | { kind: "points"; points: PlotPoint[] }
-  | { kind: "unsupported"; reason: string; span: Span };
+  | { kind: "points"; points: PlotPoint[]; notes?: PlotDataNote[] }
+  | { kind: "unsupported"; reason: string; span: Span }
+  /** The input is fine but its data cannot be read (a missing file): diagnosed by its own code. */
+  | { kind: "unavailable"; code: string; message: string; span: Span };
+
+/** Things worth a diagnostic that do not stop the plot (unknown table keys). */
+export type PlotDataNote = { code: string; message: string; span: Span };
 
 /** Default `domain` and `samples` of expression plots (manual: -5:5, 25). */
 export const DEFAULT_DOMAIN = { from: -5, to: 5 };
 export const DEFAULT_SAMPLES = 25;
 
+const NO_IO: PlotDataIo = { tableKeys: [], readFile: () => ({ status: "unavailable" }), tableMacro: () => null };
+
 /** `expand` expands macros in coordinate and table text (identity when there are none). */
-export function collectPlotData(statement: AddPlotStatement, plot: PlotModel, source: string, expand: (text: string) => string = (text) => text, env: PlotMathEnvironment = DEFAULT_MATH_ENVIRONMENT): PlotData {
+export function collectPlotData(statement: AddPlotStatement, plot: PlotModel, source: string, expand: (text: string) => string = (text) => text, env: PlotMathEnvironment = DEFAULT_MATH_ENVIRONMENT, io: PlotDataIo = NO_IO): PlotData {
   const input = statement.input;
   if (statement.dimension === 3) return { kind: "unsupported", reason: "\\addplot3 (3D plots)", span: statement.commandSpan };
-  if (input.kind === "coordinates") {
-    const points: PlotPoint[] = [];
-    for (const point of input.points) {
-      const [xRaw, yRaw] = point.components;
-      if (!xRaw || !yRaw || point.components.length > 2) {
-        return { kind: "unsupported", reason: "coordinates other than (x,y)", span: point.span };
-      }
-      const x = readCoordinateNumber(expand(xRaw.raw));
-      const y = readCoordinateNumber(expand(yRaw.raw));
-      if (x === null || y === null) {
-        return { kind: "unsupported", reason: `non-numeric coordinate \`(${xRaw.raw},${yRaw.raw})\` (symbolic coordinates)`, span: point.span };
-      }
-      points.push({ x, y, jump: point.afterEmptyLine });
-    }
-    if (input.unparsed.length > 0) {
-      const first = input.unparsed[0];
-      if (first) return { kind: "unsupported", reason: `unreadable coordinate text \`${first.raw.trim()}\``, span: first.span };
-    }
-    return { kind: "points", points };
-  }
-  if (input.kind === "table") return collectTable(input, source);
-  if (input.kind === "expression") {
-    return sampleExpressions(null, expand(input.expression), plot, input.expressionSpan, env);
-  }
-  if (input.kind === "parametric") {
+  let raw: PlotData;
+  if (input.kind === "coordinates") raw = collectCoordinates(statement, expand, io.symbolic ?? {});
+  else if (input.kind === "table") raw = collectTable(input, source, plot, io, expand);
+  else if (input.kind === "expression") raw = sampleExpressions(null, expand(input.expression), plot, input.expressionSpan, env);
+  else if (input.kind === "parametric") {
     const [xc, yc, ...rest] = input.components;
     if (!xc || !yc || rest.length > 0) return { kind: "unsupported", reason: "parametric plots other than (x expr, y expr)", span: input.span };
-    return sampleExpressions(expand(stripBraces(xc.raw)), expand(stripBraces(yc.raw)), plot, input.span, env);
+    raw = sampleExpressions(expand(stripBraces(xc.raw)), expand(stripBraces(yc.raw)), plot, input.span, env);
   }
-  return { kind: "unsupported", reason: `\`${input.name}\` input`, span: input.nameSpan };
+  else return { kind: "unsupported", reason: `\`${input.name}\` input`, span: input.nameSpan };
+  if (raw.kind !== "points") return raw;
+  if (input.kind !== "table") {
+    const filtered = applyFilters(raw.points.map((point, index) => ({ point, coordindex: index, lineno: index, cells: [] })), plot, null);
+    if (filtered.kind !== "points") return filtered;
+    return { ...raw, points: normalizeUnbounded(filtered.points, plot.unboundedCoords) };
+  }
+  return { ...raw, points: normalizeUnbounded(raw.points, plot.unboundedCoords) };
+}
+
+/** X1: a symbolic coordinate is its position in the list; a name not in it is a TeX error. */
+function symbolicIndex(raw: string, names: readonly string[] | undefined): number | null {
+  if (!names) return null;
+  const at = names.indexOf(raw.trim().replace(/^\{([\s\S]*)\}$/u, "$1").trim());
+  return at >= 0 ? at : null;
+}
+
+function collectCoordinates(statement: AddPlotStatement, expand: (text: string) => string, symbolic: NonNullable<PlotDataIo["symbolic"]>): PlotData {
+  const input = statement.input;
+  if (input.kind !== "coordinates") throw new Error("coordinates expected");
+  const points: PlotPoint[] = [];
+  for (const point of input.points) {
+    const [xRaw, yRaw] = point.components;
+    if (!xRaw || !yRaw || point.components.length > 2) {
+      return { kind: "unsupported", reason: "coordinates other than (x,y)", span: point.span };
+    }
+    const x = symbolic.x ? symbolicIndex(expand(xRaw.raw), symbolic.x) : readCoordinateNumber(expand(xRaw.raw));
+    const y = symbolic.y ? symbolicIndex(expand(yRaw.raw), symbolic.y) : readCoordinateNumber(expand(yRaw.raw));
+    if (x === null || y === null) {
+      const missing = (symbolic.x !== undefined && x === null) || (symbolic.y !== undefined && y === null);
+      return { kind: "unsupported", reason: missing ? `coordinate \`(${xRaw.raw},${yRaw.raw})\` outside the symbolic coordinate list (TeX stops: "the input coordinate has not been defined")` : `non-numeric coordinate \`(${xRaw.raw},${yRaw.raw})\` (symbolic coordinates without \`symbolic x coords\`)`, span: point.span };
+    }
+    const entry: PlotPoint = { x, y, jump: point.afterEmptyLine };
+    if (point.meta) entry.meta = point.meta.raw;
+    if (point.errors.length > 0) {
+      const error: NonNullable<PlotPoint["error"]> = {};
+      for (const part of point.errors) {
+        const ex = readCoordinateNumber(expand(part.components[0]?.raw ?? "0")) ?? 0;
+        const ey = readCoordinateNumber(expand(part.components[1]?.raw ?? "0")) ?? 0;
+        // `+-` both sides, `+=` upper, `-=` lower (manual errorbars.tex).
+        if (part.kind !== "-=") { error.xPlus = ex; error.yPlus = ey; }
+        if (part.kind !== "+=") { error.xMinus = ex; error.yMinus = ey; }
+      }
+      entry.error = error;
+    }
+    points.push(entry);
+  }
+  if (input.unparsed.length > 0) {
+    const first = input.unparsed[0];
+    if (first) return { kind: "unsupported", reason: `unreadable coordinate text \`${first.raw.trim()}\``, span: first.span };
+  }
+  return { kind: "points", points };
 }
 
 /** `1`, `-2.5e3`, `inf`, `nan`; a braced pgfmath expression is evaluated (float mode, as pgfplots reads coordinates). */
@@ -71,69 +136,200 @@ function readCoordinateNumber(raw: string): number | null {
   return null;
 }
 
-function tableOption(input: PlotTableInput, names: readonly string[]): { value: string; span: Span } | undefined {
-  let found: { value: string; span: Span } | undefined;
-  for (const entry of input.options?.entries ?? []) {
-    if (entry.kind !== "kv") continue;
-    const key = entry.key.replace(/^\/pgfplots\/table\//u, "").replace(/^table\//u, "").trim();
-    if (names.includes(key)) found = { value: stripBraces(entry.valueRaw), span: entry.span };
+/**
+ * V4 (manual `unbounded coords`, E17 `nan-*`): an unbounded coordinate
+ * (`nan`, `±inf`, or a filtered point) removes the point; with
+ * `unbounded coords=jump` the line also jumps over it. Limits never see it.
+ */
+export function normalizeUnbounded(points: readonly PlotPoint[], mode: "discard" | "jump"): PlotPoint[] {
+  const out: PlotPoint[] = [];
+  let pendingJump = false;
+  for (const point of points) {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      if (mode === "jump") pendingJump = true;
+      continue;
+    }
+    out.push(pendingJump || point.jump ? { ...point, jump: true } : point);
+    pendingJump = false;
   }
-  return found;
+  return out;
 }
 
-const SEPARATORS: Record<string, InlineTableColumnSeparator> = {
-  space: "space", tab: "tab", comma: "comma", colon: "colon", semicolon: "semicolon", ampersand: "ampersand"
-};
+type FilterRow = { point: PlotPoint; coordindex: number; lineno: number; cells: readonly number[] };
 
-const KNOWN_TABLE_KEYS = new Set(["x", "y", "x index", "y index", "col sep", "header", "row sep"]);
-
-function collectTable(input: PlotTableInput, source: string): PlotData {
-  if (input.source.kind !== "inline") {
-    return { kind: "unsupported", reason: input.source.kind === "file" ? `table from file \`${input.source.name}\`` : `table from macro \`${input.source.name}\``, span: input.source.span };
+/**
+ * The documented coordinate filters, in the order given (coordfiltering.tex):
+ * `each nth point` keeps `\coordindex` 0, n, 2n, … (E17 `each-nth`);
+ * `skip coords between index={b}{e}` drops b ≤ i < e; `restrict x/y/expr to
+ * domain` sets x (or y) to ±inf outside [min, max] (the starred forms clamp
+ * x, or y, to the bound instead; E17 `restrict-expr*`).
+ */
+function applyFilters(rows: readonly FilterRow[], plot: PlotModel, names: readonly string[] | null): PlotData & { kind: "points" } | PlotData {
+  if (plot.filters.length === 0) return { kind: "points", points: rows.map((row) => row.point) };
+  const compiled = new Map<PlotFilter, CompiledTableExpression>();
+  for (const filter of plot.filters) {
+    if (filter.kind === "restrict expr") {
+      const c = compileTableExpression(filter.expr, names);
+      if (!c.ok) return { kind: "unsupported", reason: `\`restrict expr to domain\` expression \`${filter.expr}\` (${c.message})`, span: filter.span };
+      compiled.set(filter, c);
+    }
   }
-  for (const entry of input.options?.entries ?? []) {
-    const key = entry.kind === "unknown" ? entry.raw : entry.key.replace(/^\/pgfplots\/table\//u, "").replace(/^table\//u, "").trim();
-    if (!KNOWN_TABLE_KEYS.has(key)) return { kind: "unsupported", reason: `table option \`${key}\``, span: entry.span };
-  }
-  const colSep = tableOption(input, ["col sep"]);
-  const separator = colSep ? SEPARATORS[colSep.value] : "space";
-  if (!separator) return { kind: "unsupported", reason: `col sep=${colSep?.value ?? ""}`, span: colSep?.span ?? input.span };
-  const header = tableOption(input, ["header"]);
-  const rowSep = tableOption(input, ["row sep"]);
-  const reading = readInlineTable(source, input.source.span.from, input.source.span.to, {
-    columnSeparator: separator,
-    ...(header ? { header: header.value === "true" ? true : header.value === "false" ? false : "auto" } : {}),
-    ...(rowSep?.value === "\\\\" || rowSep?.value === "crcr" ? { rowSeparator: "\\\\" } : {})
+  const points = rows.map((row) => {
+    const point = { ...row.point };
+    for (const filter of plot.filters) {
+      if (filter.kind === "each nth point") {
+        if (row.coordindex % filter.n !== 0) point.x = Number.NaN;
+      } else if (filter.kind === "skip coords between index") {
+        if (row.coordindex >= filter.from && row.coordindex < filter.to) point.x = Number.NaN;
+      } else {
+        let value: number;
+        if (filter.kind === "restrict expr") {
+          const c = compiled.get(filter);
+          value = c?.ok ? c.evaluate({ cells: row.cells, coordindex: row.coordindex, lineno: row.lineno }) : Number.NaN;
+        } else value = filter.axis === "x" ? point.x : point.y;
+        const target = filter.kind === "restrict expr" ? "x" : filter.axis;
+        if (Number.isNaN(value)) continue;
+        if (value < filter.min) point[target] = filter.clamp ? filter.min : -Infinity;
+        else if (value > filter.max) point[target] = filter.clamp ? filter.max : Infinity;
+      }
+    }
+    return point;
   });
-  const names = reading.header?.cells.map((cell) => stripBraces(cell.raw)) ?? [];
-  const column = (axis: "x" | "y"): number | string => {
-    const index = tableOption(input, [`${axis} index`]);
-    const named = tableOption(input, [axis]);
-    if (named) {
-      const at = names.indexOf(named.value);
-      return at >= 0 ? at : `no column named \`${named.value}\``;
-    }
-    if (index) {
-      const n = Number(index.value);
-      return Number.isInteger(n) && n >= 0 ? n : `bad ${axis} index \`${index.value}\``;
-    }
-    return axis === "x" ? 0 : 1;
-  };
-  const xColumn = column("x");
-  const yColumn = column("y");
-  if (typeof xColumn === "string") return { kind: "unsupported", reason: xColumn, span: input.span };
-  if (typeof yColumn === "string") return { kind: "unsupported", reason: yColumn, span: input.span };
-  const points: PlotPoint[] = [];
-  for (const row of reading.rows) {
-    const xCell = row.cells[xColumn];
-    const yCell = row.cells[yColumn];
-    if (!xCell || !yCell) return { kind: "unsupported", reason: "table row without the selected columns", span: row.span };
-    const x = readCoordinateNumber(xCell.raw);
-    const y = readCoordinateNumber(yCell.raw);
-    if (x === null || y === null) return { kind: "unsupported", reason: `non-numeric table cell in \`${source.slice(row.span.from, row.span.to).trim()}\``, span: row.span };
-    points.push({ x, y, jump: row.afterEmptyLine });
-  }
   return { kind: "points", points };
+}
+
+const TABLE_UNREADABLE = "pgfplots-table-file-unavailable";
+
+/** Table input (behaviour V): inline rows, a file through the host, or a table read by `\pgfplotstableread`. */
+function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io: PlotDataIo, expand: (text: string) => string): PlotData {
+  const settings: TableSettings = defaultTableSettings();
+  const notes: PlotDataNote[] = [];
+  const note = (problems: ReturnType<typeof applyTableKeys>): void => {
+    for (const problem of problems) {
+      notes.push({
+        code: problem.reason === "unsupported" ? `unsupported-pgfplots-key:table/${problem.key}` : `invalid-pgfplots-value:table/${problem.key}`,
+        message: problem.reason === "unsupported" ? `Table key \`${problem.key}\` is not supported yet; it is ignored.` : `Cannot read \`${problem.key}=${problem.value}\`; it is ignored.`,
+        span: problem.span
+      });
+    }
+  };
+  // A table read by \pgfplotstableread keeps the format it was read with; later format keys only select columns.
+  const macroSource = input.source.kind === "macro";
+  note(applyTableKeys(settings, macroSource ? io.tableKeys.filter((entry) => entry.kind !== "unknown" && /^(?:\/pgfplots\/)?table\/(?:x|y|meta)(?: |$)/u.test(entry.key.trim())) : io.tableKeys, false));
+  let text: string;
+  let offset: number;
+  let inline: boolean;
+  const tableSource = input.source;
+  if (tableSource.kind === "inline") {
+    text = tableSource.raw;
+    offset = tableSource.span.from;
+    inline = true;
+  } else if (tableSource.kind === "file") {
+    const name = expand(tableSource.name).trim();
+    const read = io.readFile(name);
+    if (read.status !== "resolved") {
+      return {
+        kind: "unavailable",
+        code: TABLE_UNREADABLE,
+        message: read.status === "missing"
+          ? `This plot is not drawn: the table file \`${name}\` was not found next to the document.`
+          : `This plot is not drawn: the table file \`${name}\` cannot be read here (the editor has no access to the document's folder, e.g. in the browser or before the document is saved).`,
+        span: tableSource.span
+      };
+    }
+    text = read.text;
+    offset = 0;
+    inline = false;
+  } else {
+    const table = io.tableMacro(tableSource.name);
+    if (!table) {
+      return { kind: "unsupported", reason: `table from macro \`${tableSource.name}\` (no \`\\pgfplotstableread\` defines it before the picture)`, span: tableSource.span };
+    }
+    note(applyTableKeys(settings, table.options, true));
+    if (table.inline) {
+      text = table.data;
+      offset = table.offset;
+      inline = true;
+    } else {
+      const read = io.readFile(table.data.trim());
+      if (read.status !== "resolved") {
+        return {
+          kind: "unavailable",
+          code: TABLE_UNREADABLE,
+          message: `This plot is not drawn: the table file \`${table.data.trim()}\` read into \`${tableSource.name}\` ${read.status === "missing" ? "was not found next to the document" : "cannot be read here (the editor has no access to the document's folder)"}.`,
+          span: tableSource.span
+        };
+      }
+      text = read.text;
+      offset = 0;
+      inline = false;
+    }
+  }
+  note(applyTableKeys(settings, input.options?.entries ?? [], true));
+  for (const n of notes) if (n.code.startsWith("unsupported-pgfplots-key:table/")) {
+    // A selector key the reader does not know may change which data is plotted: do not guess.
+    if (/table\/(?:x|y|z)(?: |$)/u.test(n.code)) return { kind: "unsupported", reason: `table option \`${n.code.slice("unsupported-pgfplots-key:table/".length)}\``, span: n.span };
+  }
+  const table = readTableText(text, offset, inline, settings);
+  const names = table.names;
+  type Getter = (cells: readonly number[], coordindex: number, lineno: number) => number;
+  const getter = (letter: "x" | "y", sourceSpec: ColumnSource): Getter | string => {
+    if (sourceSpec.expr !== undefined) {
+      const compiled = compileTableExpression(expand(sourceSpec.expr), names);
+      if (!compiled.ok) return `\`${letter} expr=${sourceSpec.expr}\` (${compiled.message})`;
+      return (cells, coordindex, lineno) => compiled.evaluate({ cells, coordindex, lineno });
+    }
+    const column = resolveColumn(sourceSpec, names);
+    if (column === null) return `no ${letter} column`;
+    if (typeof column !== "number") return `the table has no column \`${column.missing}\``;
+    return (cells) => cells[column] ?? Number.NaN;
+  };
+  const xColumn = settings.x.expr === undefined ? resolveColumn(settings.x, names) : null;
+  const yColumn = settings.y.expr === undefined ? resolveColumn(settings.y, names) : null;
+  const getX = getter("x", settings.x);
+  const getY = getter("y", settings.y);
+  if (typeof getX === "string") return { kind: "unsupported", reason: getX, span: input.span };
+  if (typeof getY === "string") return { kind: "unsupported", reason: getY, span: input.span };
+  const errorGetters: Array<[keyof NonNullable<PlotPoint["error"]>, Getter]> = [];
+  for (const [key, spec] of Object.entries(settings.errors)) {
+    const g = getter(key.startsWith("x") ? "x" : "y", spec);
+    if (typeof g === "string") return { kind: "unsupported", reason: `error column: ${g}`, span: input.span };
+    const field = key === "x plus" ? "xPlus" : key === "x minus" ? "xMinus" : key === "y plus" ? "yPlus" : "yMinus";
+    errorGetters.push([field, g]);
+  }
+  const metaColumn = settings.meta && settings.meta.expr === undefined ? resolveColumn(settings.meta, names) : null;
+  const filterRows: FilterRow[] = [];
+  // A cell missing from a short row keeps the value of the row before (E17 `short-row`).
+  let previous: number[] = [];
+  const width = names?.length ?? 0;
+  for (let coordindex = 0; coordindex < table.rows.length; coordindex += 1) {
+    const row = table.rows[coordindex];
+    if (!row) continue;
+    const count = Math.max(width, row.cells.length, previous.length);
+    const cells = Array.from({ length: count }, () => Number.NaN);
+    for (let i = 0; i < count; i += 1) {
+      const cell = row.cells[i];
+      cells[i] = cell === undefined ? previous[i] ?? Number.NaN : readTableNumber(cell);
+    }
+    previous = cells;
+    const point: PlotPoint = { x: getX(cells, coordindex, row.lineno), y: getY(cells, coordindex, row.lineno), jump: row.afterEmptyLine };
+    if (io.symbolic?.x && typeof xColumn === "number") point.x = symbolicIndex(row.cells[xColumn] ?? "", io.symbolic.x) ?? Number.NaN;
+    if (io.symbolic?.y && typeof yColumn === "number") point.y = symbolicIndex(row.cells[yColumn] ?? "", io.symbolic.y) ?? Number.NaN;
+    if (typeof metaColumn === "number") {
+      const meta = row.cells[metaColumn];
+      if (meta !== undefined) point.meta = meta;
+    }
+    if (errorGetters.length > 0) {
+      const error: NonNullable<PlotPoint["error"]> = {};
+      for (const [field, g] of errorGetters) error[field] = g(cells, coordindex, row.lineno);
+      point.error = error;
+    }
+    filterRows.push({ point, coordindex, lineno: row.lineno, cells });
+  }
+  const tableFilters = settings.eachNthPoint !== undefined ? { ...plot, filters: [{ kind: "each nth point" as const, n: settings.eachNthPoint, span: input.span }, ...plot.filters] } : plot;
+  const filtered = applyFilters(filterRows, tableFilters, names);
+  if (filtered.kind !== "points") return filtered;
+  return notes.length > 0 ? { kind: "points", points: filtered.points, notes } : { kind: "points", points: filtered.points };
 }
 
 /** What plot expressions see: functions from `declare function`, the trig format (`trig format plots` applied by the caller). */
@@ -250,7 +446,7 @@ export function filterPlotPoints(points: readonly PlotPoint[], plot: PlotModel):
       if (plot.unboundedCoords === "jump") pendingJump = true;
       continue;
     }
-    out.push({ x, y, jump: point.jump || pendingJump });
+    out.push({ ...point, x, y, jump: point.jump || pendingJump });
     pendingJump = false;
   }
   return out;
