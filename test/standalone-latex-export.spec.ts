@@ -174,3 +174,128 @@ This paragraph belongs to the paper, not the figure.
     expect(artifact.diagnostics).toEqual([]);
   });
 });
+
+describe("standalone latex export: definitions the picture needs", () => {
+  const exportFirst = (source: string) => createStandaloneLatexExportArtifact({ source, activeFigureId: "figure:0" });
+  const preambleOf = (text: string) => text.slice(0, text.indexOf("\\begin{document}"));
+
+  it("carries a preamble \\pgfplotstableread, after the \\pgfplotstableset that formats it", () => {
+    const source = String.raw`\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\pgfplotstableset{col sep=comma}
+\pgfplotstableread{
+x,y
+0,1
+1,2
+}\mytable
+\pgfplotstableread{
+x,y
+5,5
+}\unusedtable
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}
+\addplot table [x=x, y=y] {\mytable};
+\end{axis}
+\end{tikzpicture}
+\end{document}`;
+    const artifact = exportFirst(source);
+    const preamble = preambleOf(artifact.text);
+    expect(artifact.complete).toBe(true);
+    expect(artifact.diagnostics.filter((diagnostic) => diagnostic.severity === "error")).toEqual([]);
+    expect(preamble).toContain("\\pgfplotstableset{col sep=comma}\n\\pgfplotstableread{\nx,y\n0,1\n1,2\n}\\mytable");
+    expect(artifact.text).not.toContain("\\unusedtable");
+  });
+
+  it("reports a table read from a file: the export references it by name and is incomplete", () => {
+    const source = String.raw`\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\pgfplotstableread{measurements.dat}\measured
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}
+\addplot table {\measured};
+\addplot table {other.csv};
+\end{axis}
+\end{tikzpicture}
+\end{document}`;
+    const artifact = exportFirst(source);
+    expect(artifact.text).toContain("\\pgfplotstableread{measurements.dat}\\measured");
+    expect(artifact.complete).toBe(false);
+    const files = artifact.diagnostics.filter((diagnostic) => diagnostic.code === "standalone-export-external-file");
+    expect(files.map((diagnostic) => diagnostic.symbolName)).toEqual(["measurements.dat", "other.csv"]);
+    expect(artifact.text).toMatch(/% - \(warning\) standalone-export-external-file: The picture reads the data file 'measurements\.dat'/u);
+  });
+
+  it("carries \\pgfmathsetmacro, length registers, colours and declared functions the axis uses, and nothing unused", () => {
+    const source = String.raw`\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\definecolor{brand}{RGB}{200,40,40}
+\definecolor{unusedcolor}{RGB}{0,0,0}
+\pgfmathsetmacro{\yupper}{3*2}
+\newlength{\plotwidth}
+\setlength{\plotwidth}{6cm}
+\newlength{\unusedlength}
+\pgfmathdeclarefunction{sq}{1}{\pgfmathparse{(#1)^2}}
+\pgfplotsset{cycle list={{brand}}}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[width=\plotwidth, ymax=\yupper]
+\addplot {sq(x)};
+\end{axis}
+\end{tikzpicture}
+\end{document}`;
+    const preamble = preambleOf(exportFirst(source).text);
+    for (const line of ["\\definecolor{brand}{RGB}{200,40,40}", "\\pgfmathsetmacro{\\yupper}{3*2}", "\\newlength{\\plotwidth}\n\\setlength{\\plotwidth}{6cm}", "\\pgfmathdeclarefunction{sq}{1}{\\pgfmathparse{(#1)^2}}", "\\pgfplotsset{cycle list={{brand}}}"]) {
+      expect(preamble).toContain(line);
+    }
+    expect(preamble).not.toContain("unusedcolor");
+    expect(preamble).not.toContain("\\unusedlength");
+  });
+
+  it("carries a preamble macro whose statement id equals one in the picture, and does not repeat the picture's own", () => {
+    const source = String.raw`\documentclass{article}
+\usepackage{tikz}
+\def\b{2}
+\begin{document}
+\begin{tikzpicture}
+\def\a{1}
+\draw (0,0) -- (\a,\b);
+\end{tikzpicture}
+\end{document}`;
+    const artifact = exportFirst(source);
+    expect(preambleOf(artifact.text)).toContain("\\def\\b{2}");
+    expect(artifact.text.split("\\def\\a{1}").length - 1).toBe(1);
+  });
+
+  it("does not carry definitions local to another picture", () => {
+    const source = String.raw`\documentclass{article}
+\usepackage{tikz}
+\begin{document}
+\begin{tikzpicture}
+\def\a{1}
+\draw (0,0) -- (\a,0);
+\end{tikzpicture}
+\begin{tikzpicture}
+\draw (0,0) -- (\a,1);
+\end{tikzpicture}
+\end{document}`;
+    const artifact = createStandaloneLatexExportArtifact({ source, activeFigureId: "figure:1" });
+    expect(preambleOf(artifact.text)).not.toContain("\\def\\a");
+  });
+
+  it("never reports internal state bindings as macros", () => {
+    const plot = exportFirst(String.raw`\begin{tikzpicture}\begin{axis}\addplot {x^2};\end{axis}\end{tikzpicture}`);
+    const numbers = exportFirst(String.raw`\begin{tikzpicture}
+\pgfkeys{/pgf/number format/precision=1}
+\node {\pgfmathprintnumber{3.14159}};
+\end{tikzpicture}`);
+    for (const artifact of [plot, numbers]) {
+      expect(artifact.diagnostics.filter((diagnostic) => diagnostic.code === "unresolved-symbol")).toEqual([]);
+      expect(artifact.complete).toBe(true);
+    }
+  });
+});

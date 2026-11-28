@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   convertQuantityToLength,
   evaluatePgfMathExpression,
+  evaluatePgfMathText,
   formatPgfMathNumber
 } from "../../packages/core/src/semantic/pgfmath/evaluator.js";
 import { createPgfRandom } from "../../packages/core/src/semantic/pgfmath/rng.js";
@@ -211,8 +212,8 @@ describe("semantic evaluator / pgfmath", () => {
       ["sqrt(-1)", "invalid-domain"],
       ["asin(2)", "invalid-domain"],
       ["exp(1000)", "overflow"],
+      // Only a value that cannot be drawn is still an overflow error; see the warning test below.
       ["171!", "overflow"],
-      ["20000+0", "overflow"],
       ["atan2(1)", "invalid-arity"],
       ["mod(1,0)", "division-by-zero"],
       ["scalar()", "non-numeric-result"],
@@ -232,6 +233,56 @@ describe("semantic evaluator / pgfmath", () => {
         expect(result.code).toBe("unsupported-random");
       }
     }
+  });
+
+  it("computes values past TeX's dimension range in fixed mode and flags them with the overflow warning", () => {
+    expect(evaluatePgfMathExpression("20000+0")).toEqual({ ok: true, quantity: { kind: "scalar", value: 20000 }, warnings: ["overflow"] });
+    // An intermediate past the range is enough, as in TeX.
+    expect(evaluatePgfMathExpression("200*100/1000")).toEqual({ ok: true, quantity: { kind: "scalar", value: 20 }, warnings: ["overflow"] });
+    expect(evaluatePgfMathText("2^14")).toMatchObject({ ok: true, text: "16384", warnings: ["overflow"] });
+    expect(evaluatePgfMathExpression("16383+0")).toEqual({ ok: true, quantity: { kind: "scalar", value: 16383 } });
+    // Float mode (fpu) has no range limit and no warning.
+    expect(evaluatePgfMathExpression("200*100/1000", { mode: "float" })).toEqual({ ok: true, quantity: { kind: "scalar", value: 20 } });
+    // The runtime hears about it too, for the statement's diagnostic.
+    const heard: string[] = [];
+    withPgfMathRuntime({ rng: createPgfRandom(1), onWarning: (warning, expression) => heard.push(`${warning}:${expression}`) }, () => {
+      evaluatePgfMathExpression("{100*200}");
+      evaluatePgfMathExpression("1+1");
+    });
+    expect(heard).toEqual(["overflow:100*200"]);
+  });
+
+  it("draws a coordinate past TeX's range and warns exactly once for the statement", () => {
+    const result = evaluateSemantic(String.raw`\begin{tikzpicture}
+  \draw (0,0) -- ({200*100/1000},1) -- ({300*100/1000},2);
+\end{tikzpicture}`);
+    const warnings = result.diagnostics.filter((diagnostic) => diagnostic.code === "pgfmath-dimension-too-large");
+    expect(result.diagnostics).toEqual(warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.severity).toBe("warning");
+    expect(warnings[0]?.message).toContain("`200*100/1000`");
+    expect(warnings[0]?.message).toContain("Dimension too large");
+    const path = elementsOfKind(result.scene.elements, "Path")[0];
+    const lines = path?.commands.filter((command) => command.kind === "L") ?? [];
+    expect(lines).toHaveLength(2);
+    const first = lines[0];
+    if (first?.kind === "L") expect(Number(first.to.x)).toBeCloseTo(20 * 28.45274, 2);
+  });
+
+  it("keeps \\pgfmathsetmacro past TeX's range, with one warning per statement", () => {
+    const result = evaluateSemantic(String.raw`\begin{tikzpicture}
+  \pgfmathsetmacro{\big}{100*200}
+  \pgfmathsetmacro{\small}{\big/10000}
+  \draw (0,0) -- (\small,0);
+\end{tikzpicture}`);
+    // `\big` holds 20000, so the second statement reads a literal past the range as well.
+    expect(result.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.message.slice(0, 15)])).toEqual([
+      ["pgfmath-dimension-too-large", "`100*200` reach"],
+      ["pgfmath-dimension-too-large", "`20000/10000` r"]
+    ]);
+    const line = elementsOfKind(result.scene.elements, "Path")[0]?.commands.find((command) => command.kind === "L");
+    if (line?.kind === "L") expect(Number(line.to.x)).toBeCloseTo(2 * 28.45274, 2);
+    expect(line?.kind).toBe("L");
   });
 
   it("supports pgfmath standalone commands and seeded foreach evaluation", () => {

@@ -14,6 +14,12 @@ export type PgfMathRuntime = {
   /** Read at each evaluation, so it follows the current scope. */
   scope?: () => PgfMathScope | null;
   measureText?: PgfMathTextMeasurer;
+  /**
+   * Called when an evaluation computed a value TeX would reject (fixed mode
+   * past ±16384: "Dimension too large"), with the expression. It may be
+   * called many times per expression (once per plot sample).
+   */
+  onWarning?: (warning: "overflow", expression: string) => void;
 };
 
 let currentRuntime: PgfMathRuntime | null = null;

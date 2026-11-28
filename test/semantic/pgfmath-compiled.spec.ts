@@ -46,7 +46,10 @@ describe("pgfmath PGF semantics", () => {
   });
 
   it("separates the fixed and float engines", () => {
-    expect(evaluatePgfMathExpression("100*200")).toMatchObject({ ok: false, code: "overflow" });
+    // Past TeX's range fixed mode keeps the double and warns (TeX: "Dimension too large"); float has no limit.
+    expect(evaluatePgfMathExpression("100*200")).toEqual({ ok: true, quantity: { kind: "scalar", value: 20000 }, warnings: ["overflow"] });
+    expect(evaluatePgfMathExpression("100*200", { mode: "float" })).toEqual({ ok: true, quantity: { kind: "scalar", value: 20000 } });
+    expect(evaluatePgfMathExpression("100*100")).toEqual({ ok: true, quantity: { kind: "scalar", value: 10000 } });
     expect(scalar("100*200", "float")).toBe(20000);
     expect(evaluatePgfMathExpression("1/0")).toMatchObject({ ok: false, code: "division-by-zero" });
     expect(scalar("1/0", "float")).toBe(Number.POSITIVE_INFINITY);

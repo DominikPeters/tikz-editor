@@ -17,11 +17,17 @@
  * documented in `test/pgfmath-oracle.spec.ts`). The modes differ in what TeX
  * treats as an error and in a few discrete rules:
  *
- * - `fixed` (default, what TikZ uses): results outside ±16384 raise
- *   `overflow` ("Dimension too large"), division by zero and domain errors
- *   raise errors, comparisons and truth tests use values rounded to sp
- *   (`\ifdim`), and a whole expression made only of digits and periods is
- *   returned as written (PGF's number fast path).
+ * - `fixed` (default, what TikZ uses): a value (literal, intermediate or
+ *   result) reaching ±16384 is where TeX stops with "Dimension too large".
+ *   The editor does not stop: it keeps computing in doubles, so the picture
+ *   shows what the user meant, and flags the evaluation with the `overflow`
+ *   warning (`warnings: ["overflow"]` on the result, and the runtime's
+ *   `onWarning`), which the semantic evaluator reports once per statement as
+ *   `pgfmath-dimension-too-large`. Only a value that cannot be drawn (±∞) is
+ *   still the `overflow` error. Division by zero and domain errors raise
+ *   errors, comparisons and truth tests use values rounded to sp (`\ifdim`),
+ *   and a whole expression made only of digits and periods is returned as
+ *   written (PGF's number fast path).
  * - `float` (the `fpu` library): no range limit; division by zero, `sqrt` and
  *   `ln` of out-of-domain values give ±Infinity/NaN like fpu's `inf`/`nan`;
  *   `mod` truncates both operands first as fpu does; degree trig is exact at
@@ -78,8 +84,11 @@ export type PgfMathEvalErrorCode =
   | "non-numeric-result"
   | "invalid-operation";
 
+/** What TeX would reject although the editor computes a value (see the mode notes above). */
+export type PgfMathEvalWarning = "overflow";
+
 export type PgfMathEvalResult =
-  | { ok: true; quantity: PgfMathQuantity }
+  | { ok: true; quantity: PgfMathQuantity; warnings?: PgfMathEvalWarning[] }
   | { ok: false; code: PgfMathEvalErrorCode; message: string };
 export type PgfMathEvalFailure = Extract<PgfMathEvalResult, { ok: false }>;
 
@@ -122,7 +131,7 @@ export type EvaluatePgfMathOptions = {
 };
 
 export type PgfMathTextResult =
-  | { ok: true; text: string; value: PgfMathValue; quantity: PgfMathQuantity | null }
+  | { ok: true; text: string; value: PgfMathValue; quantity: PgfMathQuantity | null; warnings?: PgfMathEvalWarning[] }
   | PgfMathEvalFailure;
 
 /** Evaluate to a number (a length in pt when units were declared). */
@@ -131,7 +140,7 @@ export function evaluatePgfMathExpression(input: string, options: EvaluatePgfMat
   if (evaluated.ok === false) {
     return evaluated;
   }
-  return toQuantityResult(evaluated.value, evaluated.units, evaluated.float);
+  return withWarnings(toQuantityResult(evaluated.value, evaluated.units, evaluated.float), evaluated.warnings);
 }
 
 /** Evaluate to `\pgfmathresult` text; strings and arrays are allowed. */
@@ -145,7 +154,8 @@ export function evaluatePgfMathText(input: string, options: EvaluatePgfMathOptio
     ok: true,
     text: formatPgfMathValue(evaluated.value, formatPgfMathNumber),
     value: evaluated.value,
-    quantity: quantity.ok ? quantity.quantity : null
+    quantity: quantity.ok ? quantity.quantity : null,
+    ...(evaluated.warnings ? { warnings: evaluated.warnings } : {})
   };
 }
 
@@ -199,7 +209,11 @@ export type PgfMathCompileEnvironment = {
 };
 
 export type CompiledPgfMathExpression = {
-  /** Evaluate with bindings by name or by position; a number (NaN/±Infinity only in float mode) or a failure. */
+  /**
+   * Evaluate with bindings by name or by position; a number (NaN/±Infinity
+   * only in float mode) or a failure. An `overflow` warning goes to the
+   * runtime's `onWarning`; `evaluate` also returns it.
+   */
   (bindings?: PgfMathBindings): number | PgfMathEvalFailure;
   readonly variables: readonly string[];
   readonly mode: PgfMathMode;
@@ -252,8 +266,11 @@ export function compilePgfMathExpression(source: string, env: PgfMathCompileEnvi
     bind(bindings);
     state.units = false;
     state.depth = 0;
+    state.overflow = false;
     try {
-      return program(state);
+      const value = program(state);
+      if (overflowed(state)) reportWarning("overflow", normalized);
+      return value;
     } catch (error) {
       return toFailure(error);
     }
@@ -277,7 +294,7 @@ export function compilePgfMathExpression(source: string, env: PgfMathCompileEnvi
       if (isFailure(value)) {
         return value;
       }
-      return toQuantityResult(value, state.units, float);
+      return withWarnings(toQuantityResult(value, state.units, float), overflowed(state) ? ["overflow"] : undefined);
     }
   });
   return { ok: true, fn };
@@ -382,7 +399,7 @@ function compileDeclaredFunction(definition: PgfMathDeclaredFunction, key: Compi
   return entry.program;
 }
 
-type ValueResult = { ok: true; value: PgfMathValue; units: boolean; float: boolean } | PgfMathEvalFailure;
+type ValueResult = { ok: true; value: PgfMathValue; units: boolean; float: boolean; warnings?: PgfMathEvalWarning[] } | PgfMathEvalFailure;
 
 function evaluateValue(input: string, options: EvaluatePgfMathOptions): ValueResult {
   const float = options.mode === "float";
@@ -419,10 +436,27 @@ function evaluateValue(input: string, options: EvaluatePgfMathOptions): ValueRes
   };
   try {
     const value = compiled.program(state);
+    if (overflowed(state)) {
+      reportWarning("overflow", normalizedInput);
+      return { ok: true, value, units: state.units, float, warnings: ["overflow"] };
+    }
     return { ok: true, value, units: state.units, float };
   } catch (error) {
     return toFailure(error);
   }
+}
+
+/** Whether the evaluation passed TeX's fixed-point range (set by the compiled program). */
+function overflowed(state: PgfMathEvalState): boolean {
+  return state.overflow === true;
+}
+
+function reportWarning(warning: PgfMathEvalWarning, expression: string): void {
+  getCurrentPgfMathRuntime()?.onWarning?.(warning, expression.trim());
+}
+
+function withWarnings(result: PgfMathEvalResult, warnings: PgfMathEvalWarning[] | undefined): PgfMathEvalResult {
+  return result.ok && warnings ? { ...result, warnings } : result;
 }
 
 function toQuantityResult(value: PgfMathValue, units: boolean, float: boolean): PgfMathEvalResult {

@@ -23,7 +23,7 @@ import {
   extendPictureBounds,
   popFrame,
   pushFrame,
-  readContextMacroBinding,
+  readContextStateBinding,
   resolveContextColorAliasValue,
   writeNamedCoordinate,
   writeNamedNodeGeometry,
@@ -146,9 +146,9 @@ export function listAxisEvaluations(context: SemanticContext): readonly AxisEval
 
 /** The `\pgfplotsset` payloads in scope, oldest first. */
 export function readPgfplotsSettings(context: SemanticContext): OptionListAst[] {
-  const binding = readContextMacroBinding(context, PGFPLOTS_SETTINGS_BINDING);
-  if (binding?.kind !== "text" || binding.value.length === 0) return [];
-  return binding.value.split("\u0000").map((raw) => parseOptionListRaw(`[${raw}]`));
+  const value = readContextStateBinding(context, PGFPLOTS_SETTINGS_BINDING);
+  if (value === undefined || value.length === 0) return [];
+  return value.split("\u0000").map((raw) => parseOptionListRaw(`[${raw}]`));
 }
 
 /** The last `compat=` in the settings, if any. */
