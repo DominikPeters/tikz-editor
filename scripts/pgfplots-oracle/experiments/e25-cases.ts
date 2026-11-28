@@ -134,6 +134,29 @@ export const c: Array<[string, string]> = [
   ["c-scope-dashed-opacity", rich("", "", "", "", ["\\begin{scope}[dashed,opacity=0.5,text=red]\n", "\n\\end{scope}"])]
 ];
 
-const set = process.env.E25_SET === "b" ? b : process.env.E25_SET === "s" ? s : process.env.E25_SET === "t" ? t : process.env.E25_SET === "c" ? c : a;
+/** Second fresh validation set (u): new values and combinations of all AC rules, after the fixes found on t. */
+export const u: Array<[string, string]> = [
+  ["u-pic-ultra-teal", rich("", "ultra thick,teal,font=\\footnotesize")],
+  ["u-scope-every-path", rich("", "", "", "", ["\\begin{scope}[every path/.style={red,densely dotted}]\n", "\n\\end{scope}"])],
+  ["u-pic-every-mark", rich("", "every mark/.append style={scale=0.5,draw=red}")],
+  ["u-every-picture-axislines", rich("\\tikzset{every picture/.style={very thick}}%\n", "", "axis lines=left")],
+  ["u-scope-rotate-draw", sAxis("\\begin{scope}[rotate=20]\n\\addplot[blue,mark=triangle*] coordinates {(1,1) (2,2)};\n\\draw[red] (axis cs:0,0) -- (axis cs:1,3);\n\\end{scope}", "xmin=-2,ymin=-3")],
+  ["u-scope-yshift-node", sAxis("\\begin{scope}[yshift=4mm]\n\\addplot coordinates {(1,3) (3,5)};\n\\node at (axis cs:2,2) {Q};\n\\end{scope}")],
+  ["u-scope-nested-transforms", sAxis("\\begin{scope}[xshift=5mm]\n\\begin{scope}[yscale=1.5]\n\\addplot[mark=*] coordinates {(1,2) (2,3)};\n\\draw (axis cs:0,1) -- (axis cs:1,1);\n\\end{scope}\n\\end{scope}", "xmin=-1,ymin=-2")],
+  ["u-scope-clip-legend", sAxis("\\begin{scope}[blue,thick]\n\\clip (axis cs:0.5,0) rectangle (axis cs:3.5,10);\n\\addplot coordinates {(0,2) (4,6)};\n\\addlegendentry{in}\n\\end{scope}\n\\addplot coordinates {(0,6) (4,2)};\n\\addlegendentry{out}")],
+  ["u-group-scope", sAxis("{\\pgfplotsset{samples=3}\n\\begin{scope}[orange]\n\\addplot[domain=0:2] {x^2};\n\\end{scope}}\n\\addplot[domain=0:2,samples=2] {x};")]
+];
+
+/** Follow-up (v): the colour a legend image inherits (the legend's `draw`, not the picture's colour). */
+const LV = "\\addplot[domain=0:3,samples=3] {x};\n\\addlegendentry{p}\n\\addplot+[no marks] coordinates {(0,2) (3,3)};\n\\addlegendentry{q}";
+export const v: Array<[string, string]> = [
+  ["v-red-default", sAxis(LV, "", "red")],
+  ["v-legend-draw-blue", sAxis(LV, "legend style={draw=blue}", "red")],
+  ["v-legend-draw-none", sAxis(LV, "legend style={draw=none}", "red")],
+  ["v-legend-green-text", sAxis(LV, "legend style={green}")],
+  ["v-plain", sAxis(LV, "legend style={draw=orange}")]
+];
+
+const set = process.env.E25_SET === "v" ? v : process.env.E25_SET === "b" ? b : process.env.E25_SET === "s" ? s : process.env.E25_SET === "t" ? t : process.env.E25_SET === "c" ? c : process.env.E25_SET === "u" ? u : a;
 export const NAME = `e25-tikz-context${process.env.E25_SET ? `-${process.env.E25_SET}` : ""}`;
 export const CASES = set.map(([id, body]) => ({ id, body }));

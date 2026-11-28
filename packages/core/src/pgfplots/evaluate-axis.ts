@@ -826,11 +826,12 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     }
     const markBase: ResolvedStyle = { ...base, stroke: base.stroke ?? base.textColor ?? "black", fill: base.fill ?? base.textColor ?? "black", drawExplicit: true, markerStart: null, markerEnd: null };
     // AC3: TikZ's `every mark` first, then the plot's mark options (pgfplots appends them to it).
-    const lists = [...everyMark, ...(plotModel.markKeys.length > 0 ? [keyUsesToOptionList(plotModel.markKeys)] : [])];
+    const frameMarks = plotModel.markOptionsReplace ? [] : everyMark;
+    const lists = [...frameMarks, ...(plotModel.markKeys.length > 0 ? [keyUsesToOptionList(plotModel.markKeys)] : [])];
     const resolved = resolveStyle(context, axisFrame, markBase, lists, plotModel.statement.id, plotModel.statement.span);
     const style = { ...resolved.style, stroke: resolved.style.stroke ?? resolved.style.textColor ?? markBase.stroke, fill: resolved.style.fill ?? resolved.style.textColor ?? markBase.fill };
     // `mark options={scale=…}` scales the mark's geometry (PGF transforms the mark; line widths stay).
-    const everyMarkScale = everyMark.flatMap((list) => list.entries).reduce((f, entry) => (entry.kind === "kv" && entry.key.trim() === "scale" ? f * (readPgfNumber(entry.valueRaw) ?? 1) : f), 1);
+    const everyMarkScale = frameMarks.flatMap((list) => list.entries).reduce((f, entry) => (entry.kind === "kv" && entry.key.trim() === "scale" ? f * (readPgfNumber(entry.valueRaw) ?? 1) : f), 1);
     const markScale = plotModel.markKeys.reduce((f, use) => (use.key === "scale" ? f * (readPgfNumber(use.value ?? "") ?? 1) : f), everyMarkScale);
     const primitives = plotMarkPrimitives(mark, { size: plotModel.markSize ?? 2, strokeColor: style.stroke ?? "black", fillColor: style.fill ?? "black" })
       ?.map((primitive) => (primitive.kind === "path" && markScale !== 1 ? { ...primitive, segments: primitive.segments.map((seg) => scaleMarkSegment(seg, markScale)) } : primitive));
@@ -913,8 +914,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const rotateText = markParts.find((part) => /^rotate\s*=/u.test(part));
     const markRotate = rotateText ? readPgfNumber(rotateText.replace(/^rotate\s*=/u, "")) ?? 0 : 0;
     const markOther = markParts.filter((part) => part !== rotateText);
-    // AC2: the error mark is a mark, not a path: `every path` does not reach it.
-    const markStyleBase: ResolvedStyle = { ...markBaseStyle, markerStart: null, markerEnd: null, stroke: markBaseStyle.stroke ?? "black", fill: markBaseStyle.stroke ?? "black", drawExplicit: true };
+    // AC2: the error mark takes the colour of its bar's path (`every path` included) but not its line width.
+    const markColour = plotStyle.stroke ?? markBaseStyle.stroke ?? "black";
+    const markStyleBase: ResolvedStyle = { ...markBaseStyle, markerStart: null, markerEnd: null, stroke: markColour, fill: markColour, drawExplicit: true };
     const markStyle = markOther.length > 0 ? resolveStyle(context, axisFrame, markStyleBase, [parseOptionListRaw(`[${markOther.join(",")}]`)], statement.id, statement.span).style : markStyleBase;
     const sizeText = markOther.find((part) => /^mark size\s*=/u.test(part));
     const markSize = sizeText ? readLength(sizeText.replace(/^mark size\s*=/u, "")) ?? 2 : plotModel.markSize ?? 2;
@@ -1324,7 +1326,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const legendResult = emitLegend({
     axis, model, images: legendImages, diagnostics,
     // AC2: a legend image is a path drawn with the plot's style; `every path` wins over it, and its marks follow it.
-    pathStyle: (plotModel, legendKeys) => withEveryPath(resolveStyle(context, axisFrame, drawBase(axisScope.style), [...legendKeys, ...plotModel.pathKeys].length > 0 ? [keyUsesToOptionList([...legendKeys, ...plotModel.pathKeys])] : [], plotModel.statement.id, plotModel.statement.span).style, plotModel.statement.id, plotModel.statement.span),
+    // AC1 (E25 set v): not the picture's colour: black unless the legend's style or the plot sets one.
+    pathStyle: (plotModel, legendKeys) => withEveryPath(resolveStyle(context, axisFrame, { ...drawBase(axisScope.style), stroke: "black" }, [...legendKeys, ...plotModel.pathKeys].length > 0 ? [keyUsesToOptionList([...legendKeys, ...plotModel.pathKeys])] : [], plotModel.statement.id, plotModel.statement.span).style, plotModel.statement.id, plotModel.statement.span),
     marks: (plotModel, base) => marksFor(plotModel, base, false),
     frameWith: (uses) => uses.length === 0 ? labelFrame : childFrame(labelFrame, { style: resolveStyle(context, labelFrame, labelFrame.style, [keyUsesToOptionList(uses)], axis.id, axis.span).style }),
     node: (request, frame, emit) => {

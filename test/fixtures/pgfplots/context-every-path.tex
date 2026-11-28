@@ -1,0 +1,13 @@
+% pgfplots oracle fixture (hand-written): TikZ's `every path` reaches every
+% path pgfplots draws (behaviour AC2): after the plot styles (it wins over
+% the cycle list and `\addplot` options), before the grid, tick, box and
+% legend box styles; not the plot marks, but the legend's marks.
+\begin{tikzpicture}[every path/.style={line width=0.9pt, orange}]
+\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=5, grid=major, legend pos=north west]
+\addplot+[error bars/.cd, y dir=both, y explicit] coordinates {(1,1) +- (0,0.5) (2,2) +- (0,0.4) (3,1.5) +- (0,0.3)};
+\addlegendentry{data}
+\addplot[blue, dashed] coordinates {(0,4) (4,3)};
+\addlegendentry{fit}
+\draw (axis cs:0.5,0.3) -- (axis cs:3.5,0.3);
+\end{axis}
+\end{tikzpicture}

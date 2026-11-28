@@ -18,6 +18,7 @@ import type { OptionListAst } from "../options/types.js";
 import type { NodeGeometryProbe, SemanticContextFrame } from "../semantic/context.js";
 import type { PlotMarkPrimitive } from "../semantic/path/plot-marks.js";
 import type { ResolvedStyle, SceneElement } from "../semantic/types.js";
+import { normalizeColor } from "../semantic/style/colors.js";
 import { plotHandlerCommands } from "./plot-handlers.js";
 import { cloneStyleRegistry, expandPgfplotsOptions, type PgfplotsKeyUse, type PgfplotsStyleRegistry } from "./keys.js";
 import type { Box, LabelGeometry, LabelRequest, Point } from "./layout.js";
@@ -114,13 +115,23 @@ function readLegendStyle(model: AxisModel): LegendStyle {
       if (parsed) { style.at = parsed[1] ?? style.at; style.anchor = parsed[2] ?? style.anchor; }
     } else {
       if (!MATRIX_KEYS.has(key)) style.node.push(use);
-      if (CASCADING_KEYS.has(key)) style.cascade.push(use);
+      if (CASCADING_KEYS.has(key) || (value === null && isColorName(key))) style.cascade.push(use);
       // The line width reaches the images and the entry nodes (their outer sep: legend-entries-key).
       if (IMAGE_KEYS.has(key)) { style.image.push(use); style.cascade.push(use); }
+      // AC1 (E25 set v): the images are drawn in the legend, with its stroke colour (`draw=…`, a colour) unless the plot has its own.
+      if ((key === "draw" && stripBraces(value ?? "").trim() !== "none") || key === "color" || (value === null && isColorName(key))) style.image.push(use);
       if (key === "inner sep" || key === "inner xsep") style.innerXSep = readLength(value ?? "") ?? style.innerXSep;
     }
   }, {});
   return style;
+}
+
+function isColorName(name: string): boolean {
+  try {
+    return /^#[0-9a-f]{6}$/iu.test(normalizeColor(name));
+  } catch {
+    return false;
+  }
 }
 
 /** `column sep` set by `every odd/even column` (TikZ matrix): it separates that column from the next. */

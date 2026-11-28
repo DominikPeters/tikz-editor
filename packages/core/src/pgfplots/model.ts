@@ -1082,6 +1082,8 @@ export type PlotModel = {
   /** The legend image kind (`line legend` initially; `area legend`, `empty legend`, …; L5). */
   legendImage: string;
   forget: boolean;
+  /** A `mark options` key replaced `every mark` (TikZ), so the frame's `every mark` no longer applies (AC3). */
+  markOptionsReplace?: boolean;
   filters: PlotFilter[];
   /** `table/…` keys given to the plot, in order. */
   tableKeys: OptionEntry[];
@@ -1205,7 +1207,9 @@ export function resolvePlotModel(axis: AxisModel, statement: AddPlotStatement, c
       return;
     }
     if (key === "mark options") {
+      // TikZ: `mark options/.style={every mark/.style={#1}}` (tikz.code.tex): it replaces `every mark`, the frame's too (AC3).
       styles.set("every mark", value ? [parseOptionListRaw(`[${stripBraces(value)}]`)] : []);
+      plot.markOptionsReplace = true;
       return;
     }
     if (key === "domain") {
