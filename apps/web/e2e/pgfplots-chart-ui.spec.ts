@@ -369,6 +369,27 @@ test("change chart type in the inspector: unavailable kinds show their reason; o
   await settled(page);
 });
 
+test("inspector Ticks and Grid lines: tick positions, label size, grid dash; each one clean edit", async ({ page }) => {
+  await select(page, AXIS);
+  const panel = inspector(page);
+  const xticks = panel.getByRole("textbox", { name: "X ticks", exact: true });
+  await xticks.scrollIntoViewIfNeeded();
+  await shot(page, "inspector-ticks");
+  await xticks.fill("0,2,4");
+  await xticks.press("Enter");
+  await expect.poll(() => readSource(page)).toBe(SOURCE.replace("ymax=4]", "ymax=4, xtick={0,2,4}]"));
+  await settled(page);
+  await panel.getByRole("button", { name: "Label size", exact: true }).click();
+  await page.getByRole("option", { name: "Small", exact: true }).click();
+  await expect.poll(() => readSource(page)).toBe(SOURCE.replace("ymax=4]", "ymax=4, xtick={0,2,4}, tick label style={font=\\small}]"));
+  await settled(page);
+  await focusCanvas(page);
+  await page.keyboard.press("ControlOrMeta+z");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readSource(page)).toBe(SOURCE);
+  await settled(page);
+});
+
 test("change plot type from the context menu; a refused type is disabled with its reason", async ({ page }) => {
   await select(page, `${AXIS}:plot:1`);
   await openContextMenu(page, `${AXIS}:plot:1`);
