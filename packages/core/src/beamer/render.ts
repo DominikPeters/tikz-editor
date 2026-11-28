@@ -3918,10 +3918,12 @@ async function prepareColumnFlowNode(params: {
               const skip = Math.round((baseline - paragraphStartingMaterialHeight(paragraph)) * 65_536) / 65_536;
               return skip >= 0 ? skip : 1;
             })() : 0),
-      // A plain TeX paragraph contributes its line hboxes, not the TikZ-node
-      // strut carried by the shared text frontend's enclosing vlist. Lists,
-      // on the other hand, intentionally carry their vertical list glue.
-      advanceHeight: node.kind === "paragraph" ? paragraphMaterialExtent(paragraph) : paragraph.height,
+      // The minipage packs the paragraph's or list's boxes and glue, not the
+      // TikZ-node strut that the shared text frontend's enclosing vlist
+      // carries: its cursor advances at least 0.85em past a first line, so a
+      // one-item list without descenders would otherwise grow the column
+      // (and move every column aligned against it).
+      advanceHeight: paragraphMaterialExtent(paragraph),
       // minipage's terminal \unskip drops the final trivlist skip; retain it
       // only when another flow item follows, as for the list's trailing glue.
       trailingSkipPt: node.kind === "list" ? trailingScopedBeamerListSkip(projection.mapped, params.references, params.bodyFont)

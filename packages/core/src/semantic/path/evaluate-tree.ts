@@ -588,7 +588,7 @@ export function handleChildOperationCluster(params: {
         if (handle?.sourceRef.sourceId !== statement.id) {
           continue;
         }
-        context.editHandles[handleIndex] = {
+        const rebound = {
           ...handle,
           sourceRef: {
             ...handle.sourceRef,
@@ -597,6 +597,13 @@ export function handleChildOperationCluster(params: {
             sourceId: childStatement.id
           }
         };
+        // The edge's target is synthesized from the child's position: its
+        // span is the child operation (or `edge from parent`), which is not a
+        // coordinate and must never be rewritten as one.
+        context.editHandles[handleIndex] =
+          rebound.handleType === "coordinate" && rebound.kind === "path-point" && rebound.rewriteMode === "direct"
+            ? { ...rebound, rewriteMode: "unsupported" }
+            : rebound;
       }
       const edgeElements: SceneElement[] = [];
       if (handledEdge.activePath && hasDrawablePathSegments(handledEdge.activePath)) {
