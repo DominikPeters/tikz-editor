@@ -99,6 +99,7 @@ import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure
 import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
 import { applyInsertAxisPlotAction, applyResetPlotStyleAction, applySetAxisElementAction, type AxisElementKind } from "./pgfplots/chart-elements.js";
+import { applyChangeChartTypeAction } from "./pgfplots/chart-type.js";
 import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
@@ -163,6 +164,8 @@ export type EditAction =
   | { kind: "insertAxisPlot"; axisId: string }
   /** Removes a plot's own style options so the cycle list applies (chart-elements.ts). */
   | { kind: "resetPlotStyle"; plotId: string }
+  /** Change Chart Type of an axis (`chartType`: a chart kind) or a plot (a plot type), chart-type.ts. */
+  | { kind: "changeChartType"; elementId: string; chartType: string }
   /** A new path through world points: what the path and freehand tools draw. */
   | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
@@ -387,6 +390,8 @@ export function applyEditAction(
         return applyInsertAxisPlotAction(source, action.axisId, parseOptions);
       case "resetPlotStyle":
         return applyResetPlotStyleAction(source, action.plotId, parseOptions);
+      case "changeChartType":
+        return applyChangeChartTypeAction(source, action.elementId, action.chartType, parseOptions);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":

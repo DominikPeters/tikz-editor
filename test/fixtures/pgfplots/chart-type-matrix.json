@@ -1,0 +1,84 @@
+{
+  "template-function": {
+    "axis": "function= data- scatter- bar- stacked-bar- area+ semilogy-",
+    "plot0": "line= scatter- smooth+ step- comb- bar- area+"
+  },
+  "template-data": {
+    "axis": "function- data= scatter+ bar+ stacked-bar+ area+ semilogy-",
+    "plot0": "line= scatter+ smooth+ step+ comb- bar- area+"
+  },
+  "template-scatter": {
+    "axis": "function- data+ scatter= bar+ stacked-bar+ area+ semilogy-",
+    "plot0": "line+ scatter= smooth+ step+ comb- bar- area+"
+  },
+  "template-bar": {
+    "axis": "function- data+ scatter+ bar= stacked-bar+ area+ semilogy-",
+    "plot0": "line- scatter- smooth- step- comb- bar- area-"
+  },
+  "template-stacked-bar": {
+    "axis": "function- data+ scatter+ bar+ stacked-bar= area+ semilogy-",
+    "plot0": "line- scatter- smooth- step- comb- bar- area-",
+    "plot1": "line- scatter- smooth- step- comb- bar- area-"
+  },
+  "template-area": {
+    "axis": "function- data+ scatter- bar+ stacked-bar+ area= semilogy-",
+    "plot0": "line+ scatter- smooth+ step+ comb+ bar+ area="
+  },
+  "template-semilogy": {
+    "axis": "function- data- scatter- bar- stacked-bar- area- semilogy=",
+    "plot0": "line= scatter- smooth+ step- comb- bar- area-"
+  },
+  "real-colours-legend": {
+    "axis": "function- data= scatter+ bar- stacked-bar- area+ semilogy-",
+    "plot0": "line= scatter+ smooth+ step+ comb- bar- area+",
+    "plot1": "line= scatter+ smooth+ step+ comb- bar- area+"
+  },
+  "real-symbolic-bars": {
+    "axis": "function- data+ scatter+ bar= stacked-bar+ area+ semilogy-",
+    "plot0": "line- scatter- smooth- step- comb- bar- area-",
+    "plot1": "line- scatter- smooth- step- comb- bar- area-"
+  },
+  "real-table": {
+    "axis": "function- data= scatter+ bar+ stacked-bar+ area+ semilogy-",
+    "plot0": "line= scatter+ smooth+ step+ comb- bar- area+"
+  },
+  "real-log": {
+    "axis": "function- data- scatter+ bar- stacked-bar- area- semilogy-",
+    "plot0": "line= scatter+ smooth+ step+ comb+ bar- area-",
+    "plot1": "line+ scatter= smooth+ step+ comb+ bar- area-"
+  },
+  "real-scope": {
+    "axis": "function- data= scatter- bar- stacked-bar- area- semilogy-",
+    "plot0": "line= scatter- smooth- step- comb- bar- area-",
+    "plot1": "line= scatter+ smooth+ step+ comb+ bar+ area+"
+  },
+  "real-settings-safe": {
+    "axis": "function- data= scatter- bar+ stacked-bar- area+ semilogy-",
+    "plot0": "line= scatter+ smooth+ step+ comb+ bar+ area+",
+    "plot1": "line= scatter- smooth+ step- comb- bar+ area+"
+  },
+  "real-settings-smooth": {
+    "axis": "function- data= scatter- bar- stacked-bar- area- semilogy-",
+    "plot0": "line= scatter- smooth- step- comb- bar- area-",
+    "plot1": "line= scatter- smooth- step- comb- bar- area-"
+  },
+  "real-legend-no-marks": {
+    "axis": "function- data= scatter- bar+ stacked-bar+ area+ semilogy-",
+    "plot0": "line= scatter- smooth+ step+ comb+ bar- area+",
+    "plot1": "line= scatter- smooth+ step+ comb+ bar- area+"
+  },
+  "real-areas": {
+    "axis": "function- data+ scatter- bar+ stacked-bar+ area= semilogy-",
+    "plot0": "line+ scatter- smooth+ step+ comb+ bar+ area=",
+    "plot1": "line+ scatter- smooth+ step+ comb+ bar+ area="
+  },
+  "real-user-style": {
+    "axis": "function- data- scatter- bar- stacked-bar- area- semilogy-",
+    "plot0": "line- scatter- smooth- step- comb- bar- area-"
+  },
+  "real-smooth-step": {
+    "axis": "function- data+ scatter- bar+ stacked-bar- area+ semilogy-",
+    "plot0": "line+ scatter- smooth= step- comb- bar+ area+",
+    "plot1": "line+ scatter+ smooth+ step= comb+ bar+ area+"
+  }
+}
