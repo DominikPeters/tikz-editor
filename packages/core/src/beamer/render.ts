@@ -79,6 +79,7 @@ import { evaluateTexLengthExpression, parseTexDimensionExpression } from "../tex
 import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
+import { beamerPictureLengths, type BeamerPictureLengths } from "./picture-lengths.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
 import { themeListTopsepPt, withThemeDisplaySkips, withThemeListRegisters } from "./theme/theme-spacing.js";
 import { beamerClassNormalSize, beamerDisplayMathProfile, beamerFontSizeProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
@@ -789,8 +790,20 @@ async function renderBeamerFrameStep(params: {
     const inputSegment = virtual?.segments.find(segment => segment.kind === "input" && segment.span.from <= root.span.from && root.span.to <= segment.span.to);
     const ambientOffset = virtual && inputSegment ? beamerVirtualRoot(virtual, inputSegment.span).from : root.span.from;
     const pictureTheme = ambientTextTheme(references.scopedTheme?.at(root.span.from) ?? theme, references.ambientTextAt?.(ambientOffset) ?? "");
+    // The paragraph sets the picture at its natural size; \textwidth and \linewidth are those of its environment.
+    const placedSpan = virtual && inputSegment ? beamerVirtualRoot(virtual, inputSegment.span) : root.span;
+    const lengths = placedSpan.from >= frame.bodySpan.from && placedSpan.to <= frame.bodySpan.to
+      ? beamerPictureLengths({ context, span: placedSpan, bodySpan: frame.bodySpan, textWidth: page.textArea.width,
+        paperWidth: page.page.width, emPt: pictureTheme.fonts["normal-text"].sizePt, listLeftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
+        ...(references.lengthRegisters !== undefined ? { registers: references.lengthRegisters } : {}) })
+      : null;
+    if (!lengths && /\\(?:textwidth|linewidth|columnwidth)\b/u.test(source.slice(root.span.from, root.span.to))) {
+      diagnostics.push({ severity: "warning", code: "beamer-picture-length-unresolved", span: placedSpan,
+        message: "The width of the environment around this picture is not known; \\textwidth and \\linewidth in it are the frame's text width." });
+    }
     const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
       ambientText: references.ambientTextAt?.(ambientOffset) ?? "",
+      lengths: lengths ?? { textwidth: page.textArea.width },
       width: Number.POSITIVE_INFINITY, bodyFont: pictureTheme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? {work:params.work} : {}) });
@@ -3983,6 +3996,8 @@ async function prepareEmbeddedTikz(params: {
     kind: "tikzpicture";
   }>;
   width: number;
+  /** \textwidth and \linewidth where the picture is set, when they differ from `width`. */
+  lengths?: Pick<BeamerPictureLengths, "textwidth"> & Partial<BeamerPictureLengths>;
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
   visibility: BeamerOverlayVisibility;
@@ -4005,7 +4020,7 @@ async function prepareEmbeddedTikz(params: {
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
         // \textwidth and \linewidth where the picture is set (a column's width inside columns).
-        documentLengths: { textwidth: params.width },
+        documentLengths: params.lengths ?? { textwidth: params.width },
         ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
         ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },
