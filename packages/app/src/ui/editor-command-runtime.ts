@@ -16,6 +16,8 @@ import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
 import { graphicsInsertionTarget, pickAndInsertDeckGraphics, pickAndInsertTikzGraphics } from "./deck-graphics-insertion";
+import { insertDeckPgfplotsTemplate } from "./deck-pgfplots-insertion";
+import type { PgfplotsTemplateKind } from "@tikz-editor/core/edit/pgfplots/templates";
 import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
@@ -299,7 +301,9 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     sceneElements: snapshot.source === source ? snapshot.scene?.elements ?? null : null,
     selectedElementIds,
     parseOptions,
-    canEdit: snapshot.parseResult != null,
+    // On a slide: a new picture with the axis in the frame (core `deckInsertPgfplotsTemplate`).
+    canEdit: imageTarget === "slide" ? snapshot.source === source : snapshot.parseResult != null,
+    ...(imageTarget === "slide" ? { insertChart: (template: PgfplotsTemplateKind) => { insertDeckPgfplotsTemplate(useEditorStore.getState, dispatch, template); } } : {}),
     dispatch,
     ...(onEditChartText === undefined ? {} : { onEditChartText })
   });
@@ -334,8 +338,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     if (!snapshot.semanticResult) {
       return;
     }
+    // A slide picture keeps the size it has on its slide (\textwidth of its column…).
+    const documentLengths = snapshot.pictureDocumentLengths;
     void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeRootId, {
-      fileName: "tikz-export.tex"
+      fileName: "tikz-export.tex",
+      ...(documentLengths ? { documentLengths } : {})
     }));
   };
 

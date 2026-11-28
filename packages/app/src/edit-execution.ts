@@ -10,6 +10,7 @@ import { parseDocumentRootId } from "@tikz-editor/core/document/root-id";
 import { applySourcePatches, composeSourcePatches } from "@tikz-editor/core/edit/source-patches";
 import type { SourcePatch } from "@tikz-editor/core/edit/types";
 import { editedSlice, EMPTY_FRAGMENT } from "@tikz-editor/core/edit/fragment";
+import { pgfplotsPreambleInsertions } from "@tikz-editor/core/edit/pgfplots/templates";
 import { drawingLayerOffset, insertDrawingLayer } from "./drawing-layer";
 import { rootDelimitersSurvive } from "./root-inventory";
 import { buildEditParseOptions } from "./edit-parse-options";
@@ -103,14 +104,18 @@ export function executeDocumentEdit(
   if (parseRootId === undefined) delete parseContext.activeRootId;
   else parseContext.activeRootId = parseRootId;
   const parseOptions = buildEditParseOptions({ ...parseContext, source: editSource, analysis: "none", ...((options.parseOptions) === undefined ? {} : { overrides: options.parseOptions }) });
-  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, ...pictureOverlayVisibility(working, span, snapshot.pictureOverlayStep) };
+  const evaluateOptions = { ...options.evaluateOptions, ...layer?.evaluate, ...pictureOverlayVisibility(working, span, snapshot.pictureOverlayStep),
+    ...(span && snapshot.pictureDocumentLengths ? { documentLengths: snapshot.pictureDocumentLengths } : {}) };
   if (parseOptions.sourceFingerprint === undefined) delete evaluateOptions.sourceFingerprint;
   else evaluateOptions.sourceFingerprint = parseOptions.sourceFingerprint;
   const snapshotMatchesRoot = parseOptions.activeFigureId === undefined || snapshot.parseResult?.activeFigureId === parseOptions.activeFigureId;
   const geometry = options.geometry ?? (snapshotMatchesRoot && snapshot.source === source && snapshot.parseResult && snapshot.semanticResult
     ? createEditGeometrySession({ source: editSource, parsed: snapshot.parseResult, semantic: snapshot.semanticResult }, evaluateOptions, parseOptions)
     : undefined);
-  const result = applyEditAction(editSource, snapshot.editHandles, action, { ...((geometry) === undefined ? {} : { geometry: geometry }), parseOptions, evaluateOptions,
+  // The picture is edited with the rest of the deck masked, preamble included:
+  // what a new axis needs there is added below, from the deck itself.
+  const deckTemplate = span !== null && action.kind === "insertPgfplotsTemplate";
+  const result = applyEditAction(editSource, snapshot.editHandles, deckTemplate ? { ...action, preamble: false } : action, { ...((geometry) === undefined ? {} : { geometry: geometry }), parseOptions, evaluateOptions,
     ...(options.pointerTolerancePt === undefined ? {} : { pointerTolerancePt: options.pointerTolerancePt }) });
   if (!span || (result.kind !== "success" && result.kind !== "partial")) return result;
   const replay = applySourcePatches(working, result.patches);
@@ -126,6 +131,16 @@ export function executeDocumentEdit(
     }
   }
   if (!insertion) {
+    if (deckTemplate) {
+      const preamblePatches = pgfplotsPreambleInsertions(replay.source).map((entry) => ({
+        oldSpan: { from: entry.at, to: entry.at }, newSpan: { from: entry.at, to: entry.at + entry.text.length }, replacement: entry.text
+      }));
+      if (preamblePatches.length === 0) return { ...result, newSource: replay.source };
+      const patches = composeSourcePatches(source, [result.patches, preamblePatches]);
+      const committed = applySourcePatches(source, patches);
+      if (committed.kind !== "success") return { kind: "error", message: "The figure edit did not apply cleanly." };
+      return { ...result, newSource: committed.source, patches };
+    }
     if (layer && (action.kind === "deleteElement" || action.kind === "deleteElements")) {
       const editedSpan = { from: span.from, to: span.to + replay.source.length - working.length };
       const parsed = parseTikz(maskSourceOutsideSpan(replay.source, editedSpan), { recover: true });

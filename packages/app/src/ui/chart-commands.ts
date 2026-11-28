@@ -8,7 +8,7 @@
  */
 import type { Span } from "@tikz-editor/core/ast/types";
 import { applyResetPlotStyleAction, readAxisElements, type AxisElementKind, type AxisElementsState } from "@tikz-editor/core/edit/pgfplots/chart-elements";
-import { CHART_KINDS } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
+import { CHART_KINDS, type ChartKindId } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
 import { CHART_KIND_COMMAND_IDS } from "../app-menu/chart-menu";
 import { legendAssociationFor } from "@tikz-editor/core/edit/pgfplots/legend-edits";
 import { applyReorderPlotsAction } from "@tikz-editor/core/edit/pgfplots/axis-actions";
@@ -91,6 +91,8 @@ export type ChartCommandInput = {
   selectedElementIds: ReadonlySet<string>;
   parseOptions: EditParseOptions;
   canEdit: boolean;
+  /** How a chart is inserted where the default (`insertPgfplotsTemplate` into the picture) does not apply: a slide. */
+  insertChart?: (template: ChartKindId) => void;
   dispatch: (action: EditorAction) => void;
   /** Opens in-place text editing of an axis part (`within`: the source span of the legend entry to edit). */
   onEditChartText?: (targetId: string, within?: Span) => void;
@@ -98,12 +100,15 @@ export type ChartCommandInput = {
 
 /** Every chart command's binding: insert commands always, the others for a chart selection. */
 export function buildChartCommandBindings(input: ChartCommandInput): Record<ChartCommandId, CommandBindingLike> {
-  const { source, sceneElements, selectedElementIds, parseOptions, canEdit, dispatch, onEditChartText } = input;
+  const { source, sceneElements, selectedElementIds, parseOptions, canEdit, insertChart, dispatch, onEditChartText } = input;
   const bindings: Record<string, CommandBindingLike> = {};
   for (const kind of CHART_KINDS) {
     bindings[CHART_KIND_COMMAND_IDS[kind.id]] = {
       enabled: canEdit,
-      run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "insertPgfplotsTemplate", template: kind.id } }); }
+      run: () => {
+        if (insertChart) insertChart(kind.id);
+        else dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "insertPgfplotsTemplate", template: kind.id } });
+      }
     };
   }
   const disabled = (reason?: string): CommandBindingLike => ({ enabled: false, ...(reason ? { reason } : {}), run: () => undefined });

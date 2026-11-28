@@ -8,7 +8,7 @@ import type { OptionListAst } from "../options/types.js";
 import type { NodeTextEngine } from "../text/types.js";
 import type { MacroBinding, MacroExpansionTraceEvent } from "../macros/index.js";
 import { parseLength } from "./coords/parse-length.js";
-import type { Statement } from "../ast/types.js";
+import type { AxisBodyItem, Statement } from "../ast/types.js";
 import type { EditHandle, OverlayStatementVisibility, ResolvedStyle, SceneClipPath, SceneElement, SceneLayer } from "./types.js";
 import { BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER } from "./types.js";
 import type { CustomStyleRegistry } from "./style/custom-styles.js";
@@ -185,9 +185,10 @@ export type SemanticContext = {
    * On a Beamer overlay step: what a statement is there (see
    * `EvaluateOptions.overlayVisibility`). Asked for every statement that
    * draws, wherever it is evaluated: at the picture's level, or inside a
-   * scope a loop made, which is evaluated whole.
+   * scope a loop made, which is evaluated whole. With `at: "end"`, what the
+   * step is at the statement's end (where pgfplots draws an axis).
    */
-  overlayVisibilityOf?: (statement: Statement) => OverlayStatementVisibility;
+  overlayVisibilityOf?: (statement: Statement | AxisBodyItem, at?: "end") => OverlayStatementVisibility;
   stack: SemanticContextFrame[];
   source: string;
   sourceFingerprint: string;

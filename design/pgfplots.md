@@ -112,7 +112,11 @@ Verified by reading master on 2026-11-27.
 - **Export.** The standalone exporter always writes `\usepackage{tikz}` plus inferred
   TikZ libraries. There is no way to require a package or carry `\pgfplotsset`.
 - **Beamer.** Slides render pictures through the same pipeline, so an axis inside a
-  `tikzpicture` on a slide works with no beamer-specific code.
+  `tikzpicture` on a slide works with no beamer-specific code. (Checked on
+  2026-11-28, `test/pgfplots-beamer.spec.ts`: true for pictures at frame level;
+  pictures inside blocks, columns and lists needed the lengths of their
+  environment, and overlay commands in an axis body need pgfplots' own rules,
+  behaviour Y4 and Y5.)
 
 ## 4. Architecture
 

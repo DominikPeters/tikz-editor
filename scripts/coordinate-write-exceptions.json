@@ -161,6 +161,14 @@
   },
   {
     "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/beamer/deck-insert-pgfplots.ts",
+    "declaration": "beamerPgfplotsInsertionEdits.block",
+    "count": 1,
+    "expression": "userText(`${newline}${indent}\\\\begin{center}${newline}${indent} \\\\begin{tikzpicture}${newline}${indent} ${axis}${newline"
+  },
+  {
+    "rule": "F2",
     "symbol": "plainNumber",
     "file": "packages/core/src/beamer/deck-resize.ts",
     "declaration": "beamerImageResizePatches.replacement",
@@ -1412,8 +1420,16 @@
     "symbol": "userText",
     "file": "packages/core/src/edit/pgfplots/templates.ts",
     "declaration": "ensurePgfplotsSetup",
-    "count": 4,
-    "expression": "userText(\"\\n\\\\usepackage{pgfplots}\", \"pasted-tikz\")"
+    "count": 2,
+    "expression": "userText(\"\\\\pgfplotsset{compat=1.18}\\n\", \"pasted-tikz\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/templates.ts",
+    "declaration": "pgfplotsPreambleInsertions.text",
+    "count": 1,
+    "expression": "userText(text, \"pasted-tikz\")"
   },
   {
     "rule": "F2",

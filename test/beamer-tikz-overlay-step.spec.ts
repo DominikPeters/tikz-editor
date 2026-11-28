@@ -60,6 +60,8 @@ describe("a slide picture on an overlay step", () => {
           const structural = overlays.commands.some((command) => command.commandSpan.from >= picture.span.from && command.commandSpan.from < picture.span.to) ||
             overlays.pauses.some((pause) => pause.span.from >= picture.span.from && pause.span.from < picture.span.to);
           if (!structural) continue;
+          // pgfplots draws an axis at its end, not statement by statement (test/pgfplots-beamer.spec.ts).
+          if (/\\begin\{(?:axis|semilogxaxis|semilogyaxis|loglogaxis)\}/u.test(source.slice(picture.span.from, picture.span.to))) continue;
           pictures += 1;
           const idsByStep: string[][] = [];
           for (let step = 1; step <= overlays.stepCount; step += 1) {

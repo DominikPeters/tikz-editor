@@ -155,7 +155,8 @@ export type EditAction =
   | SetFigureBoundsAction
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
   /** A pgfplots axis from a template, placed right of the picture's content. */
-  | { kind: "insertPgfplotsTemplate"; template: PgfplotsTemplateKind }
+  /** `preamble: false`: the caller adds what the document's preamble needs (a picture opened from a deck). */
+  | { kind: "insertPgfplotsTemplate"; template: PgfplotsTemplateKind; preamble?: false }
   /** Adds or removes the title, an axis label or the legend of an axis (chart-elements.ts); `selectNew` selects an added title or label. */
   | { kind: "setAxisElement"; axisId: string; element: AxisElementKind; visible: boolean; selectNew?: boolean }
   /** A new plot after the last one of an axis, with placeholder data (chart-elements.ts). */
@@ -379,7 +380,7 @@ export function applyEditAction(
       case "addPath":
         return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
       case "insertPgfplotsTemplate":
-        return applyInsertPgfplotsTemplate(source, action.template, parseOptions, evaluateOptions);
+        return applyInsertPgfplotsTemplate(source, action.template, parseOptions, evaluateOptions, action.preamble !== false);
       case "setAxisElement":
         return applySetAxisElementAction(source, action.axisId, action.element, action.visible, parseOptions, action.selectNew ? { selectNew: true } : {});
       case "insertAxisPlot":
@@ -1306,9 +1307,10 @@ function applyInsertPgfplotsTemplate(
   source: string,
   template: PgfplotsTemplateKind,
   parseOptions: EditParseOptions,
-  evaluateOptions: EvaluateOptions | undefined
+  evaluateOptions: EvaluateOptions | undefined,
+  preamble: boolean
 ): EditActionResult {
-  const working = ensurePgfplotsSetup(source);
+  const working = preamble ? ensurePgfplotsSetup(source) : source;
   const parsed = parseTikzForEdit(working, parseOptions);
   // Beside what the picture already shows: 1cm right of its content, bottoms aligned.
   let text = PGFPLOTS_TEMPLATES[template].text;

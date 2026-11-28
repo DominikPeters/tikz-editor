@@ -1333,6 +1333,35 @@ length. VERIFIED on E18 (10 cases): max error **0.0035 pt**.
 ("Plot width 0.824pt is too small"); `1\axisdefaultwidth` is 1240pt (E18
 `axisdefault-text`, box 1240.0028pt). The editor substitutes it as text.
 
+**Y4 — Lengths inside Beamer environments.** LuaLaTeX, beamer 3.72, 11pt,
+`\typeout` of `\the\textwidth`/`\linewidth`/`\columnwidth` at the picture's
+place (default theme 307.28987pt, Madrid 342.29536pt): a `column` of width w
+sets all three to w (0.5\textwidth → 153.64493pt; `onlytextwidth` and
+`totalwidth` do not change a column's own width); a `minipage` likewise;
+`block`, `exampleblock`, `figure` and `center` change none; each `itemize` or
+`enumerate` level narrows only `\linewidth` by 2em (21.9pt at 10.95pt: 285.38988,
+then 263.48989 …); `description` by 2cm + .5em (279.91487pt in Madrid). A
+picture set in a paragraph (inside a block, a column, a list) uses these
+(`beamer/picture-lengths.ts`); before 2026-11-28 the editor passed an infinite
+width there and the axis fell back to its default size. `\textheight` is the
+frame's: paper height less the theme's head- and footline (default 4:3
+269.14662pt, 16:9 12pt 252.0748pt, Madrid 16:9 243.4168pt); the picture was
+evaluated without the deck's class and took article's 550pt. A picture draws in
+the theme's normal text colour (`\setbeamercolor{normal text}{fg=…}` colours
+the axis box, ticks and labels; the plot keeps its cycle colour). VERIFIED on
+`test/fixtures/beamer/pgfplots/` (glyphs within 0.002pt).
+
+**Y5 — Overlays in an axis body.** pgfplots postpones drawing to `\end{axis}`
+(manual, miscellaneous: "pgfplots postpones drawing commands until
+\end{axis}"). Observed in LuaLaTeX (`d13-overlay-matrix.tex`, `d12`, `d7`):
+`\only<2>{\addplot …;}` and `\alt` remove the plot on other steps (no limits,
+cycle list entry or legend entry: the next plot takes the first cycle style);
+`\only<2>{\addlegendentry{…}}` likewise; `\uncover<2>{\addplot …;}`,
+`\visible<2>{…}` and `\uncover<2>{\node …;}` in the body change **nothing**
+(the plot is drawn on step 1 too); a `\pause` or `\onslide<2->` in the body
+covers the **whole** axis, box and first plots included, until its step.
+`\addplot<2-> …` is a TeX error ("the supplied plot command is unknown").
+
 ## U. Bars
 
 Experiment E19 (`e19-bars.mts`, 28 cases, digest in data units) and the

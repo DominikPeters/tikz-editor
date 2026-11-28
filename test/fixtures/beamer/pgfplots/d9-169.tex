@@ -1,0 +1,13 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{Wide}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=0.8\textwidth, height=5cm]
+\addplot coordinates {(0,2) (1,1) (2,3) (3,2)};
+\end{axis}
+\end{tikzpicture}
+\end{frame}
+\end{document}

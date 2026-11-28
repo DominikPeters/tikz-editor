@@ -79,6 +79,7 @@ import { evaluateTexLengthExpression, parseTexDimensionExpression } from "../tex
 import { parseSimpleTexTabularRegisters, parseSimpleTexParagraphIr } from "../text/tex/ir.js";
 import { collectBeamerParagraphSpacing } from "./spacing.js";
 import { resolveBeamerColumnPositions, resolveBeamerColumnWidth } from "./column-dimensions.js";
+import { beamerPictureLengths, type BeamerPictureLengths } from "./picture-lengths.js";
 import { beamerFrameBodyTransform, beamerFrameShrinkScale, beamerFrameShrinkWidth, crampedBeamerListProfile, resolveBeamerFrameShrink, transformBeamerPoint, transformBeamerRect } from "./frame-shrink.js";
 import { themeListTopsepPt, withThemeDisplaySkips, withThemeListRegisters } from "./theme/theme-spacing.js";
 import { beamerClassNormalSize, beamerDisplayMathProfile, beamerFontSizeProfile, beamerListSizeOverrides, beamerNamedFontSize, beamerNamedFontSizes, beamerTrivlistSpacing } from "./theme/font-sizes.js";
@@ -769,6 +770,7 @@ async function renderBeamerFrameStep(params: {
     });
   }
   if (metadataMeasurements.length) chrome = planChrome();
+  references.pictureLengths = { textheight: page.page.height - chrome.headlineInset - chrome.bottomInset, paperwidth: page.page.width, paperheight: page.page.height };
   const extractedPictures = new Set<number>();
   const collectExtracted = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]): void => {
     for (const node of nodes) {
@@ -789,8 +791,21 @@ async function renderBeamerFrameStep(params: {
     const inputSegment = virtual?.segments.find(segment => segment.kind === "input" && segment.span.from <= root.span.from && root.span.to <= segment.span.to);
     const ambientOffset = virtual && inputSegment ? beamerVirtualRoot(virtual, inputSegment.span).from : root.span.from;
     const pictureTheme = ambientTextTheme(references.scopedTheme?.at(root.span.from) ?? theme, references.ambientTextAt?.(ambientOffset) ?? "");
+    // The paragraph sets the picture at its natural size; \textwidth and \linewidth are those of its environment.
+    const placedSpan = virtual && inputSegment ? beamerVirtualRoot(virtual, inputSegment.span) : root.span;
+    const lengths = placedSpan.from >= frame.bodySpan.from && placedSpan.to <= frame.bodySpan.to
+      ? beamerPictureLengths({ context, span: placedSpan, bodySpan: frame.bodySpan, textWidth: page.textArea.width,
+        paperWidth: page.page.width, emPt: pictureTheme.fonts["normal-text"].sizePt, listLeftMarginEmByDepth: theme.dimensions.listLeftMarginEmByDepth,
+        ...(references.lengthRegisters !== undefined ? { registers: references.lengthRegisters } : {}) })
+      : null;
+    if (!lengths && /\\(?:textwidth|linewidth|columnwidth)\b/u.test(source.slice(root.span.from, root.span.to))) {
+      diagnostics.push({ severity: "warning", code: "beamer-picture-length-unresolved", span: placedSpan,
+        message: "The width of the environment around this picture is not known; \\textwidth and \\linewidth in it are the frame's text width." });
+    }
     const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
       ambientText: references.ambientTextAt?.(ambientOffset) ?? "",
+      lengths: lengths ?? { textwidth: page.textArea.width },
+      pageLengths: references.pictureLengths,
       width: Number.POSITIVE_INFINITY, bodyFont: pictureTheme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? {work:params.work} : {}) });
@@ -1793,6 +1808,7 @@ async function prepareFrameFlow(params: {
         theme: nodeTheme,
         node,
         width: params.textWidth,
+        ...(params.references.pictureLengths ? { pageLengths: params.references.pictureLengths } : {}),
         overlays: params.overlays, step: params.step,
         bodyFont,
         diagnostics: params.diagnostics,
@@ -3933,6 +3949,7 @@ async function prepareColumnFlowNode(params: {
     source, theme,
     node,
     width,
+    ...(params.references.pictureLengths ? { pageLengths: params.references.pictureLengths } : {}),
     bodyFont,
     diagnostics,
     visibility,
@@ -3965,6 +3982,17 @@ function beamerTikzRuledShapes(rendered: RenderTikzToSvgResult, ruled: ((span: S
 }
 
 /** The picture's paint without its covered elements, which keep their room and names. */
+/**
+ * The theme's normal text colour as a TikZ colour (`{rgb,255:…}`), which a
+ * slide picture draws in; undefined when it is black (TikZ's default).
+ */
+export function beamerPictureTextColor(theme: ResolvedBeamerTheme): string | undefined {
+  const hex = textColor(theme, "normal text");
+  if (!/^#[0-9a-f]{6}$/iu.test(hex) || hex.toLowerCase() === "#000000") return undefined;
+  const channel = (offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16);
+  return `{rgb,255:red,${channel(1)};green,${channel(3)};blue,${channel(5)}}`;
+}
+
 function beamerTikzPaintModel(rendered: RenderTikzToSvgResult) {
   const hiddenIds = new Set(rendered.semantic.scene.elements.filter(element => element.overlayCovered).map(element => element.id));
   return hiddenIds.size === 0 ? rendered.svg.model : {
@@ -3983,6 +4011,10 @@ async function prepareEmbeddedTikz(params: {
     kind: "tikzpicture";
   }>;
   width: number;
+  /** \textwidth and \linewidth where the picture is set, when they differ from `width`. */
+  lengths?: Pick<BeamerPictureLengths, "textwidth"> & Partial<BeamerPictureLengths>;
+  /** `\textheight` and the paper size of the frame (the picture is evaluated without the deck's class). */
+  pageLengths?: { textheight: number; paperwidth: number; paperheight: number };
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
   visibility: BeamerOverlayVisibility;
@@ -3995,17 +4027,23 @@ async function prepareEmbeddedTikz(params: {
     mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
     namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
   });
-  const ambientColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
+  // The picture draws in the colour of the text around it: a colour declared
+  // there, else the theme's normal text colour (when it is not black).
+  const declaredColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
     name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
+  const ambientColor = declaredColor ?? (params.theme ? beamerPictureTextColor(params.theme) : undefined);
   const pictureStep = beamerTikzStep(params.source, params.node.root.span, params.overlays, params.step);
+  // \textwidth and \linewidth where the picture is set (a column's width inside columns), \textheight and the paper.
+  // (\columnwidth is \textwidth in beamer, in a column too; \linewidth unless a list narrows it.)
+  const textwidth = params.lengths?.textwidth ?? params.width;
+  const documentLengths = { ...params.pageLengths, textwidth, linewidth: textwidth, columnwidth: textwidth, ...params.lengths };
   const rendered = await renderTikzToSvgAsync(
     pictureStep.source,
     {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
-        // \textwidth and \linewidth where the picture is set (a column's width inside columns).
-        documentLengths: { textwidth: params.width },
+        documentLengths,
         ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
         ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },
@@ -4022,7 +4060,6 @@ async function prepareEmbeddedTikz(params: {
   const coveredModel = { ...rendered.svg.model, parts: rendered.svg.model.parts.filter(part => !visibleParts.has(part)) };
   const empty = rendered.semantic.scene.elements.length === 0 && !rendered.semantic.scene.bounds;
   const viewBox = empty ? { x: 0, y: 0, width: 1, height: 1 } : rendered.svg.viewBox;
-  const scale = Math.min(1, params.width / Math.max(viewBox.width, 1));
   for (const diagnostic of [
     ...rendered.parse.diagnostics,
     ...rendered.semantic.diagnostics,
@@ -4042,12 +4079,15 @@ async function prepareEmbeddedTikz(params: {
     id: params.node.id,
     sourceSpan: params.node.span,
     horizontalAlignment: params.node.horizontalAlignment,
-    width: empty ? 0 : viewBox.width * scale,
-    height: empty ? 0 : viewBox.height * scale,
+    // TeX sets the picture's box at its natural size: a picture wider than the
+    // line overflows it (an overfull box), it is not scaled down.
+    width: empty ? 0 : viewBox.width,
+    height: empty ? 0 : viewBox.height,
     model,
     coveredModel,
     ruledShapes: beamerTikzRuledShapes(rendered, pictureStep.ruled),
     viewBox,
+    documentLengths,
   };
 }
 

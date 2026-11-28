@@ -421,6 +421,11 @@ export type BeamerEmbeddedTikzLayout = {
   ruledShapes?: readonly { sourceSpan: Span; bounds: BeamerRect }[];
   /** A TikZ `overlay` picture: drawn where it is on the page, taking no room in the text. */
   overlay?: BeamerOverlayPictureLayout;
+  /**
+   * `\textwidth`, `\linewidth`, `\textheight`… where the picture is set, as its
+   * evaluation used them: the picture opened for editing evaluates with the same.
+   */
+  documentLengths?: Readonly<Partial<Record<"textwidth" | "textheight" | "linewidth" | "columnwidth" | "paperwidth" | "paperheight", number>>>;
 };
 
 /** An overlay picture on the page: a drawing layer the slide edits in place. */

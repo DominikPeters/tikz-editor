@@ -278,6 +278,7 @@ const NUMBER_FORMAT_PREFIX = "/pgf/number format/";
 
 /** Evaluates one axis; returns its scene elements in paint order. */
 export function evaluateAxisStatement(source: AxisStatement, context: SemanticContext, host: AxisHost): SceneElement[] {
+  source = axisOnOverlayStep(source, context);
   const outer = currentFrame(context);
   const t = outer.transform;
   const everyPicture = outer.customStyles.get("every picture") ?? [];
@@ -598,7 +599,11 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     }
     if (data.kind === "unsupported") {
       markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : input === "other" ? "pgfplots_addplot_other_inputs" : "pgfplots_addplot_expression", "unsupported");
-      diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn: ${data.reason} is not supported yet.`, span: data.span });
+      // `\addplot<2->`: pgfplots reads `<` as the plot input and stops (behaviour Y5).
+      const overlaySpec = /^\s*\+?\s*</u.test(context.source.slice(statement.commandSpan.to, statement.commandSpan.to + 8));
+      diagnostics.push(overlaySpec
+        ? { severity: "error", code: "pgfplots-addplot-overlay-spec", message: "pgfplots does not take an overlay specification after `\\addplot` (TeX stops: \"the supplied plot command is unknown\"); write `\\only<…>{\\addplot …;}` instead.", span: statement.commandSpan }
+        : { severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn: ${data.reason} is not supported yet.`, span: data.span });
       plots.push({ model: plot, points: null });
       return;
     }
@@ -1591,6 +1596,21 @@ function bodyTextKeys(axis: AxisStatement, groups: ReadonlyArray<readonly number
 /** Whether a TikZ key set in the body is one of the text keys of AB3. */
 function isBodyTextKey(key: string): boolean {
   return /^(?:\/tikz\/)?(?:color|text|font)$/u.test(key.trim()) || isColorName(key.trim());
+}
+
+/**
+ * The axis body on a Beamer overlay step (behaviour Y5). pgfplots collects the
+ * body and draws it at `\end{axis}`: what `\only`, `\alt` or `\temporal`
+ * remove is not in the axis at all (no limits, cycle list entry or legend
+ * entry), while `\uncover` and `\visible` around an item have ended before the
+ * drawing and change nothing. Covering the whole axis is decided at its end
+ * (statementOverlayVisibility).
+ */
+function axisOnOverlayStep(axis: AxisStatement, context: SemanticContext): AxisStatement {
+  const visibility = context.overlayVisibilityOf;
+  if (!visibility || !axis.body.some((item) => (item.overlayGroups?.length ?? 0) > 0 || item.kind === "OverlayGroup" || item.kind === "OverlayDeclaration")) return axis;
+  const body = axis.body.filter((item) => visibility(item) !== "removed");
+  return body.length === axis.body.length ? axis : { ...axis, body };
 }
 
 /** Limit keys pgfplots refuses inside the axis body (behaviour AB5). */

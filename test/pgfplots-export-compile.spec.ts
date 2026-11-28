@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStandaloneLatexExportArtifact } from "../packages/core/src/export/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
+import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
 
 const commandExists = (command: string, args = ["--version"]): boolean =>
   spawnSync(command, args, { stdio: "ignore", timeout: 5_000 }).status === 0;
@@ -327,5 +328,53 @@ describe.skipIf(!runTex)("pgfplots standalone export: compiles with LuaLaTeX", (
       expect(Math.abs(width - originalWidth)).toBeLessThanOrEqual(0.01);
       expect(Math.abs(height - originalHeight)).toBeLessThanOrEqual(0.01);
     }
+  }, 180_000);
+});
+
+// Beamer decks with axes (test/fixtures/beamer/pgfplots): the deck compiles, and
+// a slide picture exported on its own is the one asked for, at its slide size.
+const BEAMER_FIXTURES = new URL("./fixtures/beamer/pgfplots/", import.meta.url);
+const beamerDeck = (name: string): string => readFileSync(new URL(`${name}.tex`, BEAMER_FIXTURES), "utf8");
+
+describe("pgfplots in Beamer decks: standalone export of a slide picture", () => {
+  it("exports the picture a deck root id names, not the deck's first", () => {
+    const source = beamerDeck("d13-overlay-matrix");
+    const artifact = createStandaloneLatexExportArtifact({ source, activeFigureId: "frame:2:tikzpicture:0" });
+    expect(artifact.complete).toBe(true);
+    expect(artifact.text).toContain("\\alt<2>");
+    expect(artifact.text).not.toContain("\\only<2>");
+  });
+  it("sets the lengths of the picture's place on the slide that it names", async () => {
+    const source = beamerDeck("d2-columns");
+    const rendered = await renderBeamerFrame(source);
+    const documentLengths = rendered.layout.embeddedTikz[0]?.documentLengths;
+    expect(documentLengths?.columnwidth).toBeCloseTo(153.64493, 2);
+    const artifact = createStandaloneLatexExportArtifact({ source, activeFigureId: "frame:0:tikzpicture:0", ...(documentLengths ? { documentLengths } : {}) });
+    expect(artifact.text).toMatch(/\\setlength\{\\textwidth\}\{153\.644\d*pt\}\n\\begin\{document\}/u);
+    expect(artifact.text).not.toContain("\\setlength{\\textheight}");
+  });
+});
+
+describe.skipIf(!runTex)("pgfplots in Beamer decks: compiles with LuaLaTeX", () => {
+  it.each(["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull", "d15-inserted", "d16-madrid169-heights"])("deck %s compiles", (name) => {
+    const compiled = compile(beamerDeck(name));
+    expect(compiled.status, compiled.log.split("\n").filter((line) => line.startsWith("!")).join("\n")).toBe(0);
+    expect(compiled.pages).toBeGreaterThan(0);
+  }, 180_000);
+  it.each([["d2-columns", 0], ["d4-block", 0], ["d16-madrid169-heights", 1]] as const)("the picture of %s exported alone has its slide size", async (name, frameIndex) => {
+    const source = beamerDeck(name);
+    const rendered = await renderBeamerFrame(source, { frameIndex });
+    const picture = rendered.layout.embeddedTikz[0];
+    const documentLengths = picture?.documentLengths;
+    const artifact = createStandaloneLatexExportArtifact({ source, activeFigureId: `frame:${frameIndex}:tikzpicture:0`, ...(documentLengths ? { documentLengths } : {}) });
+    const compiled = compile(artifact.text);
+    expect(compiled.status).toBe(0);
+    const [width, height] = compiled.size ?? [0, 0];
+    // pdfinfo reports bp; the slide picture's box (checked against LuaLaTeX by
+    // test/pgfplots-beamer.spec.ts) is in pt. The standalone class sets the tick
+    // labels in 10pt roman, not beamer's 10.95pt sans: up to 4pt of difference
+    // remains (without the lengths it was 28pt to 190pt).
+    expect(Math.abs(width * 72.27 / 72 - (picture?.bounds.width ?? 0))).toBeLessThan(5);
+    expect(Math.abs(height * 72.27 / 72 - (picture?.bounds.height ?? 0))).toBeLessThan(5);
   }, 180_000);
 });

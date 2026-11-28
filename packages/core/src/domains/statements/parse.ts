@@ -18,6 +18,7 @@ import {
   tikzStyleStatementId
 } from "../../ast/ids.js";
 import type {
+  AxisBodyItem,
   ColorletStatement,
   DefineColorStatement,
   ForeachStatement,
@@ -66,11 +67,14 @@ function mapBodyChild(child: SyntaxNode, source: string, state: StatementMapping
   const maybeStatement = unwrapStatementLikeNode(child);
 
   if (maybeStatement.type.name === "OverlayGroupStatement") {
-    return mapOverlayGroupStatement(maybeStatement, source, state);
+    return mapOverlayGroupStatement<Statement>(maybeStatement, source, state, (member) => mapBodyChild(member, source, state));
   }
   const mapped = mapStatementNode(maybeStatement, source, state);
   return mapped ? [mapped] : [];
 }
+
+const AXIS_COMMAND_NODES = new Set(["AddPlotStatement", "AddLegendEntryStatement", "AddLegendImageStatement", "LegendStatement",
+  "PgfplotsExtraStatement", "PgfplotsInvokeForeachStatement", "AxisLabelStatement", "AxisFontEnvironment"]);
 
 const OVERLAY_GROUP_COMMANDS: readonly OverlayGroupCommand[] = ["only", "uncover", "visible", "invisible", "alt", "temporal", "onslide"];
 
@@ -78,7 +82,13 @@ const OVERLAY_GROUP_COMMANDS: readonly OverlayGroupCommand[] = ["only", "uncover
  * An overlay command around statements, as its head followed by the
  * statements of its bodies, each naming the head and its body.
  */
-function mapOverlayGroupStatement(node: SyntaxNode, source: string, state: StatementMappingState): Statement[] {
+export function mapOverlayGroupStatement<Member extends { overlayGroups?: Statement["overlayGroups"] }>(
+  node: SyntaxNode,
+  source: string,
+  state: StatementMappingState,
+  // Maps one item of a body: a statement, or inside an axis an axis item (an `\addplot`).
+  mapMember: (child: SyntaxNode) => Member[]
+): Array<OverlayGroupStatement | Member> {
   const statementIndex = allocateStatementIndex(state);
   const commandNode = findFirstChildByName(node, "OverlayGroupCmd") ?? findFirstChildByName(node, "OnslideCmd");
   const specNode = findFirstChildByName(node, "OverlaySpec");
@@ -96,9 +106,11 @@ function mapOverlayGroupStatement(node: SyntaxNode, source: string, state: State
     spec: specNode ? mapOverlaySpec(specNode, source) : { span: { from: node.from, to: node.from }, contentSpan: { from: node.from, to: node.from }, raw: "" },
     branches: bodies.map((body) => ({ from: body.from + 1, to: source[body.to - 1] === "}" ? body.to - 1 : body.to }))
   };
-  const statements: Statement[] = [head];
+  const statements: Array<OverlayGroupStatement | Member> = [head];
   bodies.forEach((body, branch) => {
-    for (const member of mapBodyStatements(body, source, state)) {
+    const members: Member[] = [];
+    forEachChild(body, (child) => { members.push(...mapMember(child)); });
+    for (const member of members) {
       member.overlayGroups = [{ groupId: head.id, branch }, ...(member.overlayGroups ?? [])];
       statements.push(member);
     }
@@ -204,7 +216,12 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
   }
 
   if (node.type.name === "AxisStatement") {
-    return mapAxisStatement(node, source, state, (child) => mapBodyChild(child, source, state));
+    return mapAxisStatement(node, source, state, (child, mapAxisMember) => {
+      const unwrapped = unwrapStatementLikeNode(child);
+      return unwrapped.type.name === "OverlayGroupStatement"
+        ? mapOverlayGroupStatement<AxisBodyItem>(unwrapped, source, state, mapAxisMember)
+        : mapBodyChild(child, source, state);
+    });
   }
 
   if (node.type.name === "PgfplotsSetStatement") {
@@ -221,6 +238,11 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
 
   if (node.type.name === "PgfplotsTableReadStatement") {
     return mapPgfplotsTableReadStatement(node, source, state);
+  }
+
+  // An axis command in an overlay body outside any axis: reported as outside the axis.
+  if (AXIS_COMMAND_NODES.has(node.type.name)) {
+    return mapUnknownStatement(node, source, allocateStatementIndex(state));
   }
 
   return null;

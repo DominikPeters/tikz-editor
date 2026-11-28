@@ -229,3 +229,18 @@ it("retains an explicit selection made while a source edit is still rendering", 
   state = ready(state);
   expect([...state.selectedElementIds]).toEqual(["path:2"]);
 });
+
+it("keeps a moved pic selected: its operation id is an object of its own", () => {
+  // The pic's paths take their identity from the definition (identityRef); the
+  // canvas selects the operation (`pic-operation:N:0`), which needs an identity too.
+  let state = setup(wrap(String.raw`\tikzset{seagull/.pic={\draw (0,0) -- (1,1) -- (2,0);}}
+\pic at (1,1) {seagull};
+\pic at (4,1) {seagull};`));
+  state = editorReducer(state, { type: "SELECT", id: "pic-operation:2:0", additive: false });
+  state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "moveElements", elementIds: ["pic-operation:2:0"], delta: wp(10, 5) } }));
+  expect(state.source).not.toContain("(4,1)");
+  expect([...state.selectedElementIds]).toEqual(["pic-operation:2:0"]);
+  state = editorReducer(state, { type: "SELECT", id: "pic-operation:1:0", additive: false });
+  state = ready(editorReducer(state, { type: "APPLY_EDIT_ACTION", action: { kind: "moveElements", elementIds: ["pic-operation:1:0"], delta: wp(10, 5) } }));
+  expect([...state.selectedElementIds]).toEqual(["pic-operation:1:0"]);
+});

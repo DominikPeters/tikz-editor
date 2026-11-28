@@ -1,6 +1,6 @@
 import type { CooperativeWorkOptions } from "@tikz-editor/core/semantic/cooperative-work";
 import { maskTikzPictureSource } from "@tikz-editor/core/document/masking";
-import type { Statement } from "@tikz-editor/core/ast/types";
+import type { Span, Statement } from "@tikz-editor/core/ast/types";
 import {
   createIncrementalParseSession,
   type IncrementalParseSession,
@@ -40,6 +40,7 @@ import {
   beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
   prepareBeamerDocument,
+  beamerPictureTextColor,
   resolveBeamerTheme,
   scanBeamerDocument,
   scanBeamerFrameOverlays,
@@ -96,6 +97,8 @@ export type SessionSnapshot = {
   pictureOverlayStep?: PictureOverlayStep | null;
   /** For a slide picture edited on its own: the step it is shown on, of how many its frame has. */
   pictureFrameSteps?: { readonly frameId: string; readonly step: number; readonly stepCount: number } | null;
+  /** For a slide picture edited on its own: the document lengths of its place on the slide, which its edits evaluate with too. */
+  pictureDocumentLengths?: NonNullable<BeamerFrameLayout["embeddedTikz"][number]["documentLengths"]>;
 };
 
 /**
@@ -1096,9 +1099,14 @@ async function computeNestedTikzSnapshot(
   const pictureStepNumber = Math.min(Math.max(1, request.deckStep ?? 1), Math.max(1, overlays.stepCount));
   const pictureStep = beamerTikzStep(request.source, picture.span, overlays, pictureStepNumber);
   const masked = pictureStep.source;
+  const documentLengths = await nestedPictureDocumentLengths(request.source, ref.frameIndex, picture.span, graphicsContext, work);
+  // The theme's text colour, as on the slide.
+  const textColor = beamerPictureTextColor(theme);
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver, initialFont: beamerTikzFontCommand(theme.fonts["normal-text"]),
+      ...(documentLengths ? { documentLengths } : {}),
+      ...(textColor ? { pictureOptions: `color=${textColor}` } : {}),
       ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}) },
     svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
     textEngine,
@@ -1121,6 +1129,7 @@ async function computeNestedTikzSnapshot(
     incremental: null,
     deck: null,
     ...(pictureStep.overlayKey ? { pictureOverlayStep: { frameIndex: ref.frameIndex, step: pictureStepNumber } } : {}),
+    ...(documentLengths ? { pictureDocumentLengths: documentLengths } : {}),
     pictureFrameSteps: { frameId: formatDocumentRootId({ kind: "beamer-frame", index: ref.frameIndex }), step: pictureStepNumber, stepCount: Math.max(1, overlays.stepCount) }
   };
   recordProfilingComputeTiming({
@@ -1156,6 +1165,28 @@ type OverlayLayerPlacement = {
  * placement and the slide's text layout.
  */
 const overlayLayerPlacements = new BoundedLru<string, OverlayLayerPlacement>(8, 8 * 1024 * 1024);
+
+/**
+ * The document lengths a slide picture is evaluated with on its slide
+ * (`\textwidth` of its column, `\textheight` of the frame…), for the picture
+ * opened from the slide: an axis with `width=\linewidth` has the same size in
+ * both. Only read when the picture names a length; kept under the deck with
+ * the picture left out, which edits inside the picture do not change.
+ */
+type NestedDocumentLengths = NonNullable<BeamerFrameLayout["embeddedTikz"][number]["documentLengths"]>;
+const nestedPictureLengths = new BoundedLru<string, NestedDocumentLengths | null>(8, 4 * 1024 * 1024);
+async function nestedPictureDocumentLengths(
+  source: string, frameIndex: number, span: Span, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions
+): Promise<NestedDocumentLengths | undefined> {
+  if (!/\\(?:textwidth|linewidth|columnwidth|textheight|paperwidth|paperheight)(?![A-Za-z@])/u.test(source.slice(span.from, span.to))) return undefined;
+  const key = `${frameIndex}\u0000${span.from}\u0000${source.slice(0, span.from)}\u0000${source.slice(span.to)}`;
+  if (!nestedPictureLengths.has(key)) {
+    const rendered = await renderLayerFrame(source, frameIndex, 1, graphicsContext, work);
+    const entry = rendered.layout.embeddedTikz.find((tikz) => tikz.sourceSpan.from <= span.from && span.to <= tikz.sourceSpan.to);
+    nestedPictureLengths.set(key, entry?.documentLengths ?? null, key.length * 2);
+  }
+  return nestedPictureLengths.get(key) ?? undefined;
+}
 async function renderLayerFrame(source: string, frameIndex: number, step: number, graphicsContext: PreparedDocumentGraphicsContext, work?: CooperativeWorkOptions) {
   const prepared = deckComputeSession?.source === source ? deckComputeSession.prepared : prepareBeamerDocument(source, graphicsContext.projectFiles ? { projectFiles: graphicsContext.projectFiles } : {});
   const stepCount = prepared.frameStepCount(frameIndex);

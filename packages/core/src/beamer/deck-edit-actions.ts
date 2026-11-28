@@ -4,6 +4,8 @@ import type { EditActionResult } from "../edit/actions.js";
 import type { SourcePatch } from "../edit/types.js";
 import { readOptionList, rewriteBeamerOptions, type OptionListLocation } from "./option-edits.js";
 import { beamerGraphicsInsertionEdits, type BeamerGraphicsPlacement } from "./deck-insert-graphics.js";
+import { beamerPgfplotsInsertionEdits } from "./deck-insert-pgfplots.js";
+import type { PgfplotsTemplateKind } from "../edit/pgfplots/templates.js";
 import { beamerImageCropPatches, beamerImageCropTarget, type BeamerImageCrop } from "./deck-crop.js";
 import type { Span } from "../ast/types.js";
 import { buildBeamerObjectIndex, type BeamerObjectNode } from "./object-index.js";
@@ -65,6 +67,8 @@ export type DeckEditAction =
   | { kind: "deckSetFrameOption"; frameId: string; key: string; value: string | true | null }
   /** A new `\includegraphics`; `widthFraction` of `\linewidth`, or null for natural size. */
   | { kind: "deckInsertGraphics"; frameId: string; path: string; widthFraction: number | null; placement: BeamerGraphicsPlacement }
+  /** Insert → Function Plot / Data Plot / Bar Chart on the slide: a new picture with the axis. */
+  | { kind: "deckInsertPgfplotsTemplate"; frameId: string; template: PgfplotsTemplateKind; placement: BeamerGraphicsPlacement }
   | DeckDocumentEditAction;
 
 const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
@@ -82,6 +86,7 @@ const DECK_EDIT_ACTION_KINDS: ReadonlySet<string> = new Set([
   "deckSetColumnWidth",
   "deckSetFrameOption",
   "deckInsertGraphics",
+  "deckInsertPgfplotsTemplate",
   "deckSetPresentationTheme",
   "deckSetThemeOption",
   "deckSetTheme",
@@ -125,6 +130,10 @@ export function applyDeckEditAction(
   }
   if (action.kind === "deckInsertGraphics") {
     const plan = beamerGraphicsInsertionEdits(source, layout, action.path, action.widthFraction, action.placement);
+    return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
+  }
+  if (action.kind === "deckInsertPgfplotsTemplate") {
+    const plan = beamerPgfplotsInsertionEdits(source, layout, action.template, action.placement);
     return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
   }
 

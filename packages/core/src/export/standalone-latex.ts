@@ -3,6 +3,8 @@ import type { OptionListAst } from "../options/types.js";
 import { readTexBalancedDelimited, readTexControlSequence, skipTexComment, skipTexWhitespaceAndComments } from "../parser/tex-lexical.js";
 import { pgfplotsTableReadFormat } from "../pgfplots/table-io.js";
 import { parseTikz } from "../parser/index.js";
+import { parseDocumentRootId } from "../document/root-id.js";
+import { scanBeamerDocument } from "../beamer/scan.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
 import { nestedStatements } from "../ast/walk.js";
 import { collectPgfplotsPreamble, pgfplotsPackageLines, type PgfplotsPreamble } from "../pgfplots/preamble.js";
@@ -37,10 +39,48 @@ export type MinimalTikzSourceArtifact = {
 
 export type CreateStandaloneLatexExportArtifactOptions = {
   source: string;
+  /** A picture id of the parse (`figure:N`), or a deck picture's document root id (`frame:i:tikzpicture:j`). */
   activeFigureId: string | null;
   fileName?: string;
   documentClassOptions?: readonly string[];
+  /**
+   * The lengths where the picture is set (a slide picture in a column): the
+   * export sets those the picture names, since the standalone class has
+   * article's `\textwidth`.
+   */
+  documentLengths?: Readonly<Partial<Record<"textwidth" | "textheight" | "linewidth" | "columnwidth" | "paperwidth" | "paperheight", number>>>;
 };
+
+/** The parse's id of the picture a deck root id (`frame:i:tikzpicture:j`) names; other ids unchanged. */
+function exportFigureId(source: string, activeFigureId: string | null): string | null {
+  const ref = parseDocumentRootId(activeFigureId ?? "");
+  if (ref?.kind !== "beamer-frame-tikz" || ref.layer) return activeFigureId;
+  const picture = scanBeamerDocument(source).frames[ref.frameIndex]?.children[ref.index];
+  if (!picture) return activeFigureId;
+  return parseTikz(source, { recover: true }).figures.find((figure) => figure.span.from === picture.span.from)?.id ?? activeFigureId;
+}
+
+/**
+ * `\setlength` lines for the document lengths the picture names (the class
+ * default otherwise). `\begin{document}` sets `\columnwidth` and `\linewidth`
+ * from `\textwidth`, so the preamble sets `\textwidth`; a `\linewidth` a list
+ * narrowed is set again at the start of the body (with `%`: no space).
+ */
+function documentLengthLines(figureSource: string, lengths: CreateStandaloneLatexExportArtifactOptions["documentLengths"]): { preamble: string[]; body: string[] } {
+  const named = (name: string) => new RegExp(`\\\\${name}(?![A-Za-z@])`, "u").test(figureSource);
+  const value = (name: keyof NonNullable<typeof lengths>) => lengths?.[name];
+  const line = (name: string, length: number) => `\\setlength{\\${name}}{${String(Math.round(length * 100000) / 100000)}pt}`;
+  const preamble: string[] = []; const body: string[] = [];
+  const textwidth = value("textwidth");
+  if (textwidth !== undefined && ["textwidth", "linewidth", "columnwidth"].some(named)) preamble.push(line("textwidth", textwidth));
+  for (const name of ["textheight", "paperwidth", "paperheight"] as const) {
+    const length = value(name);
+    if (length !== undefined && named(name)) preamble.push(line(name, length));
+  }
+  const linewidth = value("linewidth");
+  if (linewidth !== undefined && named("linewidth") && Math.abs(linewidth - (textwidth ?? linewidth)) > 1e-6) body.push(`${line("linewidth", linewidth)}%`);
+  return { preamble, body };
+}
 
 export type CreateMinimalTikzSourceArtifactOptions = {
   source: string;
@@ -370,7 +410,7 @@ function analyzeMinimalFigureDependencies(
 } {
   const parseResult = parseTikz(options.source, {
     recover: true,
-    activeFigureId: options.activeFigureId,
+    activeFigureId: exportFigureId(options.source, options.activeFigureId),
     includeContextDefinitions: true
   });
   const semanticResult = evaluateTikzFigure(parseResult.figure, parseResult.source);
@@ -515,7 +555,10 @@ export function createStandaloneLatexExportArtifact(
   }
   // Definitions go in the preamble: in the body, the spaces between them would widen the standalone page.
   lines.push(...definitionChunks);
+  const lengthLines = documentLengthLines(analysis.figureSource, options.documentLengths);
+  lines.push(...lengthLines.preamble);
   lines.push("\\begin{document}");
+  lines.push(...lengthLines.body);
   lines.push(analysis.figureSource);
   lines.push("\\end{document}");
   const diagnosticsComment = renderDiagnosticsCommentBlock(analysis.diagnostics);
