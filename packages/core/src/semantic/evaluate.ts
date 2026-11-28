@@ -291,8 +291,10 @@ export function createSemanticEvaluationRun(
   if (opts.currentPage) {
     defineCurrentPage(context, opts.currentPage);
   }
-  const expanded = withPgfMathRuntime(
-    pgfMathRuntimeFor(context),
+  const expanded = withStatementPgfMath(
+    context,
+    diagnostics,
+    figure.span,
     () => expandForeachFigure(figure, source, opts.maxForeachExpansions ?? 10_000)
   );
   const prePictureContextStatements = expanded.figureBody.filter((statement) =>
@@ -314,8 +316,10 @@ export function createSemanticEvaluationRun(
   for (const statement of prePictureContextStatements) {
     const contextStatement = remapPrePictureContextStatement(statement, expanded.statementSourceMaps.get(statement));
     withDependencySource(context, statement.id, () =>
-      withPgfMathRuntime(
-        pgfMathRuntimeFor(context),
+      withStatementPgfMath(
+        context,
+        diagnostics,
+        contextStatement.span,
         () => evaluateStatement(contextStatement, context, diagnostics, featureUsage, expanded.statementMacroAttribution)
       )
     );
@@ -478,8 +482,10 @@ export function evaluateSemanticStatementByIndex(
   const overlayVisibility = scopeStep ? "visible" : statementOverlayVisibility(run.context, statement);
   beginStatementEffectTracking(run.context);
   const statementElements = withDependencySource(run.context, statement.id, () =>
-    withPgfMathRuntime(
-      pgfMathRuntimeFor(run.context),
+    withStatementPgfMath(
+      run.context,
+      run.diagnostics,
+      sourceSpan,
       () => {
         if (scopeStep === "leave") { popFrame(run.context); return []; }
         if (overlayVisibility === "removed") return [];
@@ -1734,8 +1740,10 @@ function evaluatePicCodeBody(
     for (const statement of parsed.parseResult.figure.body) {
       elements.push(
         ...withDependencySource(context, item.id, () =>
-          withPgfMathRuntime(
-            pgfMathRuntimeFor(context),
+          withStatementPgfMath(
+            context,
+            diagnostics,
+            item.span,
             () => evaluateStatement(statement, context, diagnostics, featureUsage, statementMacroAttribution)
           )
         )
@@ -1964,12 +1972,37 @@ function applyPgfMathStatement(
 }
 
 /** The pgfmath runtime of a picture: its RNG, the current frame's pgfmath scope, text measuring. */
-function pgfMathRuntimeFor(context: SemanticContext): PgfMathRuntime {
+function pgfMathRuntimeFor(context: SemanticContext, onWarning?: PgfMathRuntime["onWarning"]): PgfMathRuntime {
   const measureText = pgfMathTextMeasurer(context);
   return {
     rng: context.mathRandom,
     scope: () => readPgfMathScope(currentFrame(context).macroBindings),
-    ...(measureText ? { measureText } : {})
+    ...(measureText ? { measureText } : {}),
+    ...(onWarning ? { onWarning } : {})
+  };
+}
+
+/**
+ * Evaluates one statement with the picture's pgfmath runtime. A value past
+ * TeX's dimension range (fixed mode) is computed and drawn; the statement
+ * gets one warning naming the first such expression, since TeX stops there.
+ */
+function withStatementPgfMath<T>(context: SemanticContext, diagnostics: Diagnostic[], span: { from: number; to: number }, evaluate: () => T): T {
+  let overflowExpression: string | null = null;
+  const result = withPgfMathRuntime(
+    pgfMathRuntimeFor(context, (_warning, expression) => { overflowExpression ??= expression; }),
+    evaluate
+  );
+  if (overflowExpression !== null) diagnostics.push(pgfMathDimensionTooLargeDiagnostic(overflowExpression, span));
+  return result;
+}
+
+function pgfMathDimensionTooLargeDiagnostic(expression: string, span: { from: number; to: number }): Diagnostic {
+  return {
+    severity: "warning",
+    code: "pgfmath-dimension-too-large",
+    message: `\`${expression}\` reaches a value beyond ±16383.99998, the largest TeX dimension: the editor draws the computed value, but TeX will fail with "Dimension too large".`,
+    span
   };
 }
 

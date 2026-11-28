@@ -51,6 +51,11 @@ export type PgfMathEvalState = {
   rng: PgfRandom | undefined;
   measure: PgfMathTextMeasurer | undefined;
   depth: number;
+  /**
+   * Set in fixed mode when a value reached ±16384: TeX stops there with
+   * "Dimension too large"; the editor keeps the double and reports a warning.
+   */
+  overflow?: boolean;
 };
 
 export type PgfMathCompiled = (state: PgfMathEvalState) => PgfMathValue;
@@ -138,14 +143,18 @@ class Compiler {
         }
         const checked = o.float || Math.abs(value) < TEX_MAX_DIMEN;
         if (node.units) {
-          return checked
-            ? (state) => {
-                state.units = true;
-                return value;
-              }
-            : () => overflow();
+          return (state) => {
+            state.units = true;
+            if (!checked) state.overflow = true;
+            return value;
+          };
         }
-        return checked ? () => value : () => overflow();
+        return checked
+          ? () => value
+          : (state) => {
+              state.overflow = true;
+              return value;
+            };
       }
       case "str": {
         if (o.float) {
@@ -308,7 +317,7 @@ class Compiler {
       if (o.float) {
         return (state) => unary(num(a(state)), o);
       }
-      return (state) => checkFixed(unary(num(a(state)), o));
+      return (state) => checkFixed(unary(num(a(state)), o), state);
     }
     const call = builtin.call;
     if (!call) {
@@ -322,7 +331,7 @@ class Compiler {
     return (state) => {
       const values = argFns.map((fn) => fn(state));
       const result = call(values, state, o);
-      return typeof result === "number" && !o.float ? checkFixed(result) : result;
+      return typeof result === "number" && !o.float ? checkFixed(result, state) : result;
     };
   }
 
@@ -356,9 +365,9 @@ class Compiler {
       case "fact":
         return o.float
           ? (state) => factorial(num(operand(state)))
-          : (state) => checkFixed(factorial(num(operand(state))));
+          : (state) => checkFixed(factorial(num(operand(state))), state);
       case "deg":
-        return o.float ? (state) => num(operand(state)) * DEG : (state) => checkFixed(num(operand(state)) * DEG);
+        return o.float ? (state) => num(operand(state)) * DEG : (state) => checkFixed(num(operand(state)) * DEG, state);
     }
   }
 
@@ -369,21 +378,21 @@ class Compiler {
       case "+":
         return float
           ? (state) => num(left(state)) + num(right(state))
-          : (state) => checkFixed(num(left(state)) + num(right(state)));
+          : (state) => checkFixed(num(left(state)) + num(right(state)), state);
       case "-":
         return float
           ? (state) => num(left(state)) - num(right(state))
-          : (state) => checkFixed(num(left(state)) - num(right(state)));
+          : (state) => checkFixed(num(left(state)) - num(right(state)), state);
       case "*":
         return float
           ? (state) => num(left(state)) * num(right(state))
-          : (state) => checkFixed(num(left(state)) * num(right(state)));
+          : (state) => checkFixed(num(left(state)) * num(right(state)), state);
       case "/":
-        return (state) => divide(num(left(state)), num(right(state)), float);
+        return (state) => divide(num(left(state)), num(right(state)), float, state);
       case "^":
         return float
           ? (state) => powFloat(num(left(state)), num(right(state)))
-          : (state) => checkFixed(powFixed(num(left(state)), num(right(state))));
+          : (state) => checkFixed(powFixed(num(left(state)), num(right(state))), state);
       case "&&":
       case "||": {
         const truthy = this.truthy();
@@ -418,18 +427,24 @@ function requireItem<T>(item: T | undefined): T {
   return item;
 }
 
-function overflow(): never {
-  throw new PgfMathRuntimeError("overflow", "Dimension too large (pgfmath fixed-point range is ±16383.99998).");
-}
-
-function checkFixed(value: number): number {
+/**
+ * Fixed mode's range check. TeX stops at ±16384 with "Dimension too large";
+ * the editor keeps computing in doubles, flags the overflow on the state
+ * (reported as a warning) and returns the value. Only a value that cannot be
+ * drawn (±Infinity) is still the `overflow` error.
+ */
+function checkFixed(value: number, state: PgfMathEvalState): number {
   if (value < TEX_MAX_DIMEN && value > -TEX_MAX_DIMEN) {
     return value;
   }
   if (Number.isNaN(value)) {
     throw new PgfMathRuntimeError("invalid-domain", "Expression evaluated to a non-finite value.");
   }
-  return overflow();
+  if (!Number.isFinite(value)) {
+    throw new PgfMathRuntimeError("overflow", "Dimension too large (pgfmath fixed-point range is ±16383.99998).");
+  }
+  state.overflow = true;
+  return value;
 }
 
 export function num(value: PgfMathValue | undefined): number {
@@ -521,14 +536,14 @@ function fpuMagnitudeLess(a: number, b: number): boolean {
   return Math.round((a / 10 ** ea) * SP) < Math.round((b / 10 ** eb) * SP);
 }
 
-function divide(a: number, b: number, float: boolean): number {
+function divide(a: number, b: number, float: boolean, state: PgfMathEvalState): number {
   if (float) {
     return a / b;
   }
   if (Math.round(b * SP) === 0) {
     throw new PgfMathRuntimeError("division-by-zero", "Division by zero.");
   }
-  return checkFixed(a / b);
+  return checkFixed(a / b, state);
 }
 
 /** `pgfmathpow@`: 0^y is 0 (1 for y=0); integer exponents multiply; others use exp(y ln x). */
@@ -745,7 +760,7 @@ const BUILTINS: ReadonlyMap<string, Builtin> = new Map<string, Builtin>([
   ["add", { arity: 2, call: (args) => arg(args, 0) + arg(args, 1) }],
   ["subtract", { arity: 2, call: (args) => arg(args, 0) - arg(args, 1) }],
   ["multiply", { arity: 2, call: (args) => arg(args, 0) * arg(args, 1) }],
-  ["divide", { arity: 2, call: (args, _state, o) => divide(arg(args, 0), arg(args, 1), o.float) }],
+  ["divide", { arity: 2, call: (args, state, o) => divide(arg(args, 0), arg(args, 1), o.float, state) }],
   [
     "pow",
     { arity: 2, call: (args, _state, o) => (o.float ? powFloat : powFixed)(arg(args, 0), arg(args, 1)) }
@@ -805,7 +820,7 @@ const BUILTINS: ReadonlyMap<string, Builtin> = new Map<string, Builtin>([
     "div",
     {
       arity: 2,
-      call: (args, _state, o) => Math.trunc(divide(arg(args, 0), arg(args, 1), o.float))
+      call: (args, state, o) => Math.trunc(divide(arg(args, 0), arg(args, 1), o.float, state))
     }
   ],
   ["mod", { arity: 2, call: (args, _state, o) => (o.float ? modFloat : modFixed)(arg(args, 0), arg(args, 1)) }],

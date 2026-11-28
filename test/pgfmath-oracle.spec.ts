@@ -155,6 +155,16 @@ function evaluateCase(entry: OracleCase, mode: PgfMathMode) {
   });
 }
 
+/**
+ * TeX's range errors in the fixed-point engine. Where these are a case's only
+ * errors, the editor keeps computing in doubles and must flag a result it
+ * computes with the `overflow` warning (the editor shows what the user meant
+ * and says TeX will reject it); it may still fail for another cause. Every
+ * other TeX error must stay an evaluator error, a TeX success must come with
+ * no warning, and float mode is compared as before.
+ */
+const TEX_RANGE_ERRORS = new Set(["Dimension too large.", "Arithmetic overflow."]);
+
 function parseTexNumber(text: string): number | null {
   if (/^[-+]?(?:\d+\.?\d*|\.\d+)$/u.test(text)) return Number(text);
   if (text === "nan") return Number.NaN;
@@ -168,10 +178,19 @@ function compare(entry: OracleCase, mode: PgfMathMode): string | null {
   if (!tex) return null;
   const result = evaluateCase(entry, mode);
   if (tex.errors.length > 0) {
+    if (mode === "fixed" && tex.errors.every((error) => TEX_RANGE_ERRORS.has(error))) {
+      // Past TeX's range the editor computes the value and warns. An evaluator error is still right
+      // where the cause is another one (TeX reports `mod(1,0)` as an arithmetic overflow) or the value is ±∞.
+      if (!result.ok) return null;
+      return result.warnings?.includes("overflow") ? null : `TeX error "${tex.errors[0] ?? ""}" but evaluator gave ${result.text} without the overflow warning`;
+    }
     return result.ok ? `TeX error "${tex.errors[0] ?? ""}" but evaluator gave ${result.text}` : null;
   }
   if (!result.ok) {
     return `TeX gave ${tex.result ?? ""} but evaluator failed: ${result.code} ${result.message}`;
+  }
+  if (result.warnings && result.warnings.length > 0) {
+    return `TeX gave ${tex.result ?? ""} but evaluator warned ${result.warnings.join(", ")}`;
   }
   const texText = tex.result ?? "";
   const expected = parseTexNumber(texText);
@@ -221,6 +240,20 @@ describe("pgfmath against TeX (oracle)", () => {
       expect(texErrors).toBeGreaterThan(40);
     });
   }
+
+  it("computes TeX's fixed-mode range errors with the overflow warning, and nothing else", () => {
+    let warned = 0;
+    for (const entry of oracle.cases) {
+      const tex = entry.fixed;
+      if (!tex || EXCLUDED[`fixed:${entry.expr}`]) continue;
+      const result = evaluateCase(entry, "fixed");
+      if (result.ok && result.warnings?.includes("overflow")) {
+        warned += 1;
+        expect(tex.errors.length > 0 && tex.errors.every((error) => TEX_RANGE_ERRORS.has(error)), entry.expr).toBe(true);
+      }
+    }
+    expect(warned).toBeGreaterThanOrEqual(20);
+  });
 
   it("lists only exclusions that exist in the table", () => {
     const keys = new Set(oracle.cases.flatMap((entry) => [`fixed:${entry.expr}`, `float:${entry.expr}`]));
