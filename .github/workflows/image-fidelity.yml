@@ -83,6 +83,17 @@ jobs:
             throw new Error("Image oracle suites must run every test, including the live TeX paint regressions.");
           }
           JS
+      - name: pgfplots standalone export compiles with LuaLaTeX
+        run: |
+          mkdir -p artifacts/image-fidelity
+          npm run test:export-compile -- --reporter=default --reporter=json --outputFile=artifacts/image-fidelity/export-compile-tests.json
+          node --input-type=module <<'JS'
+          import { readFileSync } from "node:fs";
+          const report = JSON.parse(readFileSync("artifacts/image-fidelity/export-compile-tests.json", "utf8"));
+          if (report.numPendingTests !== 0) {
+            throw new Error("The export compile spec skipped tests: lualatex, pgfplots or pdfinfo is missing.");
+          }
+          JS
       - name: Bounded article image comparison
         run: node scripts/compare-tex-text-visual-fuzz.mjs --case-mode images --cases 16 --seed "$IMAGE_FUZZ_SEED" --scale 4 --out-dir artifacts/image-fidelity/article --cache-dir artifacts/image-fidelity/oracle-cache
       - name: Bounded Beamer image and overlay comparison

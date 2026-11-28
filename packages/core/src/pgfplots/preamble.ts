@@ -76,15 +76,21 @@ function stripComments(text: string): string {
  * none) and the document's own `\pgfplotsset` settings, verbatim.
  */
 export function pgfplotsPreambleLines(source: string, preamble: PgfplotsPreamble): string[] {
+  return [...pgfplotsPackageLines(preamble), ...preamble.settings.map((setting) => source.slice(setting.span.from, setting.span.to).trim())];
+}
+
+/**
+ * The package, library and default `compat` lines of `pgfplotsPreambleLines`,
+ * for a caller that places the settings itself (among the document's other
+ * definitions, in source order).
+ */
+export function pgfplotsPackageLines(preamble: PgfplotsPreamble): string[] {
   const lines = [`\\usepackage${preamble.package.optionsRaw ? `[${preamble.package.optionsRaw}]` : ""}{pgfplots}`];
   if (preamble.libraries.length > 0) {
     lines.push(`\\usepgfplotslibrary{${preamble.libraries.join(",")}}`);
   }
   if (preamble.compat === undefined) {
     lines.push(`\\pgfplotsset{compat=${DEFAULT_PGFPLOTS_COMPAT}}`);
-  }
-  for (const setting of preamble.settings) {
-    lines.push(source.slice(setting.span.from, setting.span.to).trim());
   }
   return lines;
 }
