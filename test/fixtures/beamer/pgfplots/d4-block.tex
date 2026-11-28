@@ -1,0 +1,14 @@
+\documentclass{beamer}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{In a block}
+\begin{block}{Result}
+\begin{tikzpicture}
+\begin{axis}[width=0.8\linewidth, height=3.5cm]
+\addplot[domain=-1:1] {x^3};
+\end{axis}
+\end{tikzpicture}
+\end{block}
+\end{frame}
+\end{document}

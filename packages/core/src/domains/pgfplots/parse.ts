@@ -52,7 +52,8 @@ export function mapAxisStatement(
   node: SyntaxNode,
   source: string,
   state: AxisMappingState,
-  mapBodyItem: (child: SyntaxNode) => Statement[]
+  // `mapAxisMember` maps an item of an overlay body inside the axis as an axis item.
+  mapBodyItem: (child: SyntaxNode, mapAxisMember: (member: SyntaxNode) => AxisBodyItem[]) => AxisBodyItem[]
 ): AxisStatement {
   const statementIndex = allocate(state);
   const id = axisStatementId(statementIndex);
@@ -101,8 +102,13 @@ export function mapAxisStatement(
         body.push(mapPgfplotsExtraStatement(child, source, id, counters.extra++));
         return;
       default:
-        body.push(...mapBodyItem(child));
+        body.push(...mapBodyItem(child, mapAxisMember));
     }
+  };
+  const mapAxisMember = (member: SyntaxNode): AxisBodyItem[] => {
+    const start = body.length;
+    visit(member);
+    return body.splice(start);
   };
   forEachChild(node, visit);
 

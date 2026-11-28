@@ -416,11 +416,12 @@ export function createSemanticEvaluationRun(
   const sourceStatementSpanById = buildSourceStatementSpanById(figure.body);
   const overlayVisibility = opts.overlayVisibility;
   if (overlayVisibility) {
-    context.overlayVisibilityOf = (statement) => {
+    context.overlayVisibilityOf = (item, at) => {
+      const statement = item as Statement;
       const origin = expanded.statementAttribution.get(statement);
       const sourceMap = expanded.statementSourceMaps.get(statement);
       const sourceSpan = sourceMap ? mapExpansionSpan(sourceMap, statement.span) : sourceStatementSpanById.get(origin?.sourceId ?? statement.id) ?? statement.span;
-      return overlayVisibility(sourceSpan, origin?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
+      return overlayVisibility(at === "end" ? { from: sourceSpan.to, to: sourceSpan.to } : sourceSpan, origin?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
     };
   }
   return {
@@ -1062,7 +1063,13 @@ export function resolvePathBoundary(
  * answer for themselves.
  */
 function statementOverlayVisibility(context: SemanticContext, statement: Statement): OverlayStatementVisibility {
-  return statement.kind === "Scope" ? "visible" : context.overlayVisibilityOf?.(statement) ?? "visible";
+  if (statement.kind === "Scope") return "visible";
+  // pgfplots draws the whole axis at `\end{axis}`: a `\pause` or `\onslide` in its body covers all of it.
+  if (statement.kind === "Axis") {
+    const start = context.overlayVisibilityOf?.(statement) ?? "visible";
+    return start === "removed" ? start : context.overlayVisibilityOf?.(statement, "end") ?? "visible";
+  }
+  return context.overlayVisibilityOf?.(statement) ?? "visible";
 }
 
 export function enterScopeStatement(statement: Extract<Statement, { kind: "Scope" }>, context: SemanticContext): void {

@@ -1,0 +1,14 @@
+\documentclass{beamer}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{Pause between plots}
+\begin{tikzpicture}
+\begin{axis}[width=6cm, height=4cm]
+\addplot coordinates {(0,0) (1,1)};
+\pause
+\addplot coordinates {(0,1) (1,0)};
+\end{axis}
+\end{tikzpicture}
+\end{frame}
+\end{document}

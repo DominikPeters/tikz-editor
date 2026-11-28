@@ -269,8 +269,11 @@ OverlayModifier {
   !overlayContinuation ("*" | "+")
 }
 
+// The axis commands may stand in an overlay body inside an axis
+// (`\only<2>{\addplot …;}`); outside an axis they map to unknown statements
+// and are reported there.
 OverlayBody {
-  "{" pictureItem* !overlayContinuation "}"
+  "{" (pictureItem | axisCommand)* !overlayContinuation "}"
 }
 
 PathCommand {

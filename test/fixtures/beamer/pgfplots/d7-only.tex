@@ -1,0 +1,15 @@
+\documentclass{beamer}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{Overlays}
+\begin{tikzpicture}
+\begin{axis}[width=7cm, height=5cm, legend pos=north west]
+\addplot[blue] coordinates {(0,0) (1,1) (2,4)};
+\addlegendentry{A}
+\only<2>{\addplot[red] coordinates {(0,1) (1,2) (2,2)};}
+\only<2>{\addlegendentry{B}}
+\end{axis}
+\end{tikzpicture}
+\end{frame}
+\end{document}

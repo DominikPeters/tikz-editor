@@ -721,7 +721,7 @@ export type AxisStatement = {
 };
 
 /** What an axis body holds, in source order. */
-export type AxisBodyItem = Statement | AxisCommand;
+export type AxisBodyItem = Statement | (AxisCommand & OverlayGroupMember);
 
 /** The commands only an axis body has. */
 export type AxisCommand =
