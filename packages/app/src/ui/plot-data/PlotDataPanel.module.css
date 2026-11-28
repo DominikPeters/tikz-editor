@@ -1,0 +1,129 @@
+.panel {
+  min-width: 300px;
+  min-height: 220px;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.plotPicker {
+  width: 150px;
+}
+
+.note,
+.notice {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--separator);
+  font-size: calc(var(--app-ui-scale, 1) * 10.5px);
+  line-height: 1.35;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.note {
+  color: var(--text-dim);
+}
+
+.notice {
+  color: var(--color-warning);
+}
+
+.scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  font-family: var(--font-ui);
+  font-size: calc(var(--app-ui-scale, 1) * 11px);
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--control-accent) 45%, transparent);
+}
+
+.headerRow,
+.row {
+  display: grid;
+  height: 22px;
+  align-items: stretch;
+}
+
+.headerRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-pane);
+  border-bottom: 1px solid var(--separator);
+  font-weight: 600;
+}
+
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--separator) 55%, transparent);
+}
+
+.rowNumber {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  color: var(--text-dim);
+  border-right: 1px solid color-mix(in srgb, var(--separator) 55%, transparent);
+}
+
+.columnHeader,
+.cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 6px;
+  border-right: 1px solid color-mix(in srgb, var(--separator) 55%, transparent);
+  cursor: default;
+}
+
+.cellText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellActive {
+  box-shadow: inset 0 0 0 2px var(--control-accent);
+  background: color-mix(in srgb, var(--control-accent) 10%, transparent);
+}
+
+.cellEditor {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.status {
+  color: var(--text-dim);
+  font-size: calc(var(--app-ui-scale, 1) * 10.5px);
+}
+
+.error {
+  color: var(--color-warning);
+  font-size: calc(var(--app-ui-scale, 1) * 10.5px);
+  line-height: 1.3;
+  max-width: 60%;
+}
+
+.actions {
+  display: inline-flex;
+  gap: 6px;
+}

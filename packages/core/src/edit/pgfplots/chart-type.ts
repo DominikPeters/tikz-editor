@@ -221,6 +221,8 @@ type AxisContext = {
   scopedPlots: Set<string>;
   /** The cycle list the plots get once an axis bar style is removed (the bar cycle list goes with it, U5). */
   cycleWithoutBars: readonly string[];
+  /** Each plot's data, read once (a large inline table is read for every target type otherwise). */
+  dataCache: Map<string, PlotData>;
 };
 
 function axisEntries(axis: AxisStatement): OptionEntry[] {
@@ -285,7 +287,7 @@ function readAxisContext(source: string, axis: AxisStatement, evaluation: AxisEv
   const cycle = evaluation?.model.cycleList ?? [];
   const isBarCycle = cycle.length === BAR_CYCLE_LIST.length && cycle.every((entry, index) => entry === BAR_CYCLE_LIST[index]);
   const cycleWithoutBars = barKey && isBarCycle ? COLOR_CYCLE_LIST : cycle;
-  return { source, axis, evaluation, blocked, barKey, logY, scopedPlots, cycleWithoutBars };
+  return { source, axis, evaluation, blocked, barKey, logY, scopedPlots, cycleWithoutBars, dataCache: new Map() };
 }
 
 function settingsList(item: AxisBodyItem): OptionListAst | null {
@@ -305,6 +307,14 @@ function tableSeparator(raw: string | null): InlineTableColumnSeparator | null {
 }
 
 function readPlotData(context: AxisContext, plot: AddPlotStatement): PlotData {
+  const cached = context.dataCache.get(plot.id);
+  if (cached) return cached;
+  const data = readPlotDataUncached(context, plot);
+  context.dataCache.set(plot.id, data);
+  return data;
+}
+
+function readPlotDataUncached(context: AxisContext, plot: AddPlotStatement): PlotData {
   const { source } = context;
   const input = plot.input;
   if (input.kind === "coordinates") {

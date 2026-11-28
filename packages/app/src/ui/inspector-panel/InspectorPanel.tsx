@@ -41,6 +41,8 @@ import { ColorPickerField } from "../ColorPicker";
 import { MULTI_ARRANGE_ACTIONS,type MultiArrangeAction } from "./arrange-actions";
 import { InspectorMultiSection,InspectorSingleSection } from "./InspectorSections";
 import { ShapeOverlaySection } from "./ShapeOverlaySection";
+import { PlotDataSection } from "../plot-data/PlotDataSection";
+import { PlotDataPanel } from "../plot-data/PlotDataPanel";
 import { IMAGE_NODE_HIDDEN_PROPERTY_IDS, ImageNodeSections, useImageNodeSpan } from "./ImageNodeSections";
 import {
 clampNumber,
@@ -152,6 +154,8 @@ export function InspectorPanel() {
   const [scalarProvenanceLocks, setScalarProvenanceLocks] = useState<Record<string, InspectorPropertyProvenance | null>>({});
   const [optionalLengthDrafts, setOptionalLengthDrafts] = useState<Record<string, string>>({});
   const [strokeMoreOptionsOpen, setStrokeMoreOptionsOpen] = useState(false);
+  /** The plot whose data grid is open (Edit Data…), if any. */
+  const [dataPanelPlotId, setDataPanelPlotId] = useState<string | null>(null);
   const [fillMoreOptionsOpen, setFillMoreOptionsOpen] = useState(false);
   const [fillAdvancedOptionsOpen, setFillAdvancedOptionsOpen] = useState(false);
 
@@ -2016,6 +2020,7 @@ export function InspectorPanel() {
                   />
                 ))}
                 {imageElementId ? <ShapeOverlaySection elementId={imageElementId} source={inspectorSource} snapshot={snapshot} /> : null}
+                {renderedDescriptor.elementKind === "plot" ? <PlotDataSection plotId={renderedDescriptor.elementId} source={inspectorSource} onOpen={setDataPanelPlotId} /> : null}
               </div>
             </SidePanel.Content>
           </>
@@ -2052,6 +2057,7 @@ export function InspectorPanel() {
           </SidePanel.Content>
         </>
       )}
+      {dataPanelPlotId ? <PlotDataPanel plotId={dataPanelPlotId} onClose={() => { setDataPanelPlotId(null); }} /> : null}
     </SidePanel>
   );
 }
