@@ -1,0 +1,128 @@
+{
+  "formatVersion": 1,
+  "title": "Column minipage height of a short list",
+  "fidelity": [
+    {
+      "id": "madrid-wide-center",
+      "file": "madrid-wide-center.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "default-narrow-center",
+      "file": "default-narrow-center.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-top",
+      "file": "madrid-wide-top.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-bottom",
+      "file": "madrid-wide-bottom.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-bottom-short",
+      "file": "madrid-wide-bottom-short.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-center-short",
+      "file": "madrid-wide-center-short.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-column-command",
+      "file": "madrid-wide-column-command.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-picture-first",
+      "file": "madrid-wide-picture-first.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-list-alone",
+      "file": "madrid-wide-list-alone.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Left"
+      ]
+    },
+    {
+      "id": "madrid-wide-three-items",
+      "file": "madrid-wide-three-items.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Item"
+      ]
+    },
+    {
+      "id": "madrid-wide-descender",
+      "file": "madrid-wide-descender.tex",
+      "frame": 1,
+      "family": "column-list-height",
+      "pages": 1,
+      "oracleText": [
+        "Heights",
+        "Gap"
+      ]
+    }
+  ],
+  "recognition": []
+}
