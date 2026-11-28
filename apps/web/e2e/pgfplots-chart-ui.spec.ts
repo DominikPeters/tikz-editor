@@ -154,10 +154,10 @@ test("inspector: plain labels; automatic values are placeholders; clearing remov
   const labels = await panel.locator("[class*='propertyLabel'], [class*='checkboxLabel']").allTextContents();
   expect(labels.length).toBeGreaterThan(10);
   for (const label of labels) expect(label).not.toMatch(/auto:|\(auto/iu);
-  expect(labels).toEqual(expect.arrayContaining(["Width", "Height", "X min", "Y max", "X tick distance", "Title", "X label", "Legend", "Grid"]));
+  expect(labels).toEqual(expect.arrayContaining(["Width", "Height", "X min", "Y max", "X tick step", "Title", "X label", "Legend", "Grid"]));
   await expect(panel.getByRole("textbox", { name: "Width", exact: true })).toHaveAttribute("placeholder", "240pt");
   await expect(panel.getByRole("textbox", { name: "X min", exact: true })).toHaveAttribute("placeholder", /^-?[\d.]+$/u);
-  await expect(panel.getByRole("textbox", { name: "X tick distance", exact: true })).toHaveAttribute("placeholder", "Auto");
+  await expect(panel.getByRole("textbox", { name: "X tick step", exact: true })).toHaveAttribute("placeholder", "Auto");
   await shot(page, "inspector-placeholders");
   // Clearing a written value removes its key.
   const xmax = panel.getByRole("textbox", { name: "X max", exact: true });
@@ -207,6 +207,8 @@ test("Objects panel: title, label and legend rows select the parts; plots reorde
   await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:xlabel`]);
   await panel.getByRole("button", { name: "Legend", exact: true }).click();
   await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:legend`]);
+  // Selected from the panel, the part is outlined on the canvas as after a drill-in click.
+  await expect(page.locator(`[data-selection-overlay-box-source-id='${AXIS}:legend']`)).toBeAttached();
   await shot(page, "objects-panel-parts");
   const second = panel.getByRole("button", { name: "Coordinates \u2014 model", exact: true });
   const first = panel.getByRole("button", { name: "Coordinates \u2014 measured", exact: true });

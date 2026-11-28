@@ -23,6 +23,16 @@ import type { BeamerFrameLayout, BeamerFrameLayoutItem } from "./types.js";
  * so the picture takes about that much room.
  */
 export function deckChartHeight(frameLayout: BeamerFrameLayout): string {
+  return deckChartHeightPlan(frameLayout).fraction;
+}
+
+/**
+ * The height rule with whether the chart is expected to fit: below the 0.3
+ * floor the frame has no room for an editable chart, and LuaLaTeX confirms
+ * the overflow (a second inserted chart on a frame with a title and a line of
+ * text: `Overfull \vbox` of 1.7pt to 9.2pt, test/pgfplots-export-compile.spec.ts).
+ */
+export function deckChartHeightPlan(frameLayout: BeamerFrameLayout): { fraction: string; fits: boolean } {
   const text = frameLayout.page.textArea;
   // Frames centre their content vertically: the room is the text area below the title, less the content's height.
   const titleBottom = Math.max(text.y, ...frameLayout.items.filter((item) => item.kind === "frame-title" || item.kind === "frame-subtitle").map((item) => item.bounds.y + item.bounds.height));
@@ -31,7 +41,7 @@ export function deckChartHeight(frameLayout: BeamerFrameLayout): string {
   const centerSkips = 2 * 6;
   const remaining = text.y + text.height - titleBottom - used - centerSkips;
   const fraction = text.height > 0 ? Math.floor((remaining / text.height) * 20) / 20 : DECK_CHART_HEIGHT_MAX;
-  return String(Math.min(DECK_CHART_HEIGHT_MAX, Math.max(DECK_CHART_HEIGHT_MIN, fraction)));
+  return { fraction: String(Math.min(DECK_CHART_HEIGHT_MAX, Math.max(DECK_CHART_HEIGHT_MIN, fraction))), fits: fraction >= DECK_CHART_HEIGHT_MIN };
 }
 
 const BODYLESS_KINDS = new Set<BeamerFrameLayoutItem["kind"]>(["background", "frame-title", "frame-subtitle", "navigation-symbols", "mini-frame-navigation", "headline-decoration"]);
@@ -43,7 +53,7 @@ export function beamerPgfplotsInsertionEdits(
   frameLayout: BeamerFrameLayout,
   template: PgfplotsTemplateKind,
   placement: BeamerGraphicsPlacement,
-): { edits: BeamerStructuralEdit[] } | { reason: string } {
+): { edits: BeamerStructuralEdit[]; note?: string } | { reason: string } {
   const frame = scanBeamerDocument(source).frames.find((candidate) => candidate.id === frameLayout.frameId);
   if (!frame?.endSpan) return { reason: "The frame was not found." };
   const body = frame.bodySpan;
@@ -59,8 +69,9 @@ export function beamerPgfplotsInsertionEdits(
   const lineStart = source.lastIndexOf("\n", at - 1) + 1;
   const indent = at > body.from ? /^[ \t]*/u.exec(source.slice(lineStart, at))?.[0] ?? "" : "";
   // Every chart kind's environment (`axis`, `semilogyaxis`, ...) gets the slide size.
+  const height = deckChartHeightPlan(frameLayout);
   const axis = PGFPLOTS_TEMPLATES[template].text
-    .replace(/^\\begin\{(\w+)\}\[/u, (opening) => `${opening}width=0.8\\linewidth, height=${deckChartHeight(frameLayout)}\\textheight, `)
+    .replace(/^\\begin\{(\w+)\}\[/u, (opening) => `${opening}width=0.8\\linewidth, height=${height.fraction}\\textheight, `)
     .replace(/\n/gu, `${newline}${indent}    `);
   const tail = at === body.from && source[body.from] !== "\n" && source[body.from] !== "\r" ? newline : "";
   const block: TikzFragment = userText(`${newline}${indent}\\begin{center}${newline}${indent}  \\begin{tikzpicture}${newline}${indent}    ${axis}${newline}${indent}  \\end{tikzpicture}${newline}${indent}\\end{center}`, "pasted-tikz");
@@ -68,5 +79,8 @@ export function beamerPgfplotsInsertionEdits(
     span: { from: insertion.at, to: insertion.at }, insert: insertion.text,
   }));
   edits.push({ span: { from: at, to: at }, insert: tikz`${block}${layout(tail)}` });
+  if (!height.fits) {
+    return { edits, note: "This slide has less room left than the smallest chart the editor inserts (0.3\\textheight): the chart may run past the bottom of the slide. Make room, or put the chart on a new slide." };
+  }
   return { edits };
 }

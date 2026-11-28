@@ -195,8 +195,8 @@ function buildAxisDescriptor(axis: AxisStatement, elementId: string, elements: r
         enumOf("axis lines", "Axis lines", AXIS_LINES_CHOICES, "box"),
         enumOf("xmode", "X scale", SCALE_CHOICES, axis.environment === "semilogxaxis" || axis.environment === "loglogaxis" ? "log" : "linear"),
         enumOf("ymode", "Y scale", SCALE_CHOICES, axis.environment === "semilogyaxis" || axis.environment === "loglogaxis" ? "log" : "linear"),
-        text("xtick distance", "X tick distance", AUTO_PLACEHOLDER),
-        text("ytick distance", "Y tick distance", AUTO_PLACEHOLDER)
+        text("xtick distance", "X tick step", AUTO_PLACEHOLDER),
+        text("ytick distance", "Y tick step", AUTO_PLACEHOLDER)
       ]
     },
     {

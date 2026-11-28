@@ -56,6 +56,8 @@ import {
 } from "./panel-helpers";
 import { nestedStatements } from "@tikz-editor/core/ast/walk";
 
+const AXIS_PART_ID = /^axis:\d+:(?:xlabel|ylabel|title|legend|xticklabels|yticklabels)$/u;
+
 export type UseCanvasSelectionDerivedStateArgs = {
   snapshot: Pick<CanvasSnapshot, "source" | "editHandles" | "scene" | "parseResult" | "semanticResult" | "overlayLayer">;
   selectedElementIds: ReadonlySet<string>;
@@ -503,7 +505,9 @@ export function useCanvasSelectionDerivedState(args: UseCanvasSelectionDerivedSt
   const scopeSelectionSourceIds = useMemo(() => {
     const ids = new Set<string>();
     for (const sourceId of selectedElementIds) {
-      if (scopeOverlay.scopesById.has(sourceId)) {
+      // A pgfplots axis part (title, axis label, legend, tick labels) is outlined like a container,
+      // whether it was selected on the canvas or in the Objects panel.
+      if (scopeOverlay.scopesById.has(sourceId) || AXIS_PART_ID.test(sourceId)) {
         ids.add(sourceId);
       }
     }

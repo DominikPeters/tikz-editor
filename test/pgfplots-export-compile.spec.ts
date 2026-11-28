@@ -18,7 +18,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStandaloneLatexExportArtifact } from "../packages/core/src/export/index.js";
 import { parseTikz } from "../packages/core/src/parser/index.js";
-import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { applyDeckEditAction, renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import type { ChartKindId } from "../packages/core/src/edit/pgfplots/chart-kinds.js";
 
 const commandExists = (command: string, args = ["--version"]): boolean =>
   spawnSync(command, args, { stdio: "ignore", timeout: 5_000 }).status === 0;
@@ -386,5 +387,55 @@ describe.skipIf(!runTex)("pgfplots in Beamer decks: compiles with LuaLaTeX", () 
     // remains (without the lengths it was 28pt to 190pt).
     expect(Math.abs(width * 72.27 / 72 - (picture?.bounds.width ?? 0))).toBeLessThan(5);
     expect(Math.abs(height * 72.27 / 72 - (picture?.bounds.height ?? 0))).toBeLessThan(5);
+  }, 180_000);
+});
+
+// Charts inserted on a slide (Insert > Chart on a deck): every kind on a frame
+// with a title and a line of text fits the slide (no overfull frame box); a
+// second chart on that frame is at the 0.3\textheight floor, which TeX shows
+// overflowing for some kinds, so the insert says so (deck-insert-pgfplots.ts).
+const INSERT_DECK = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Plot}
+Some text.
+\end{frame}
+\end{document}`;
+
+async function insertOnSlide(source: string, template: ChartKindId) {
+  const rendered = await renderBeamerFrame(source);
+  const result = applyDeckEditAction(source, rendered.layout, { kind: "deckInsertPgfplotsTemplate", frameId: rendered.layout.frameId, template, placement: { kind: "end" } });
+  if (result.kind !== "success" && result.kind !== "partial") throw new Error(`inserting ${template} failed`);
+  return result;
+}
+
+const overfullFrame = (log: string): number => Math.max(0, ...[...log.matchAll(/Overfull \\vbox \(([\d.]+)pt too high\)/gu)].map((match) => Number(match[1])));
+
+describe("charts inserted on a slide: the room rule", () => {
+  it("warns when a second chart has no room left", async () => {
+    const once = await insertOnSlide(INSERT_DECK, "data");
+    expect(once.kind).toBe("success");
+    const twice = await insertOnSlide(once.newSource, "bar");
+    expect(twice.kind).toBe("partial");
+    expect(twice.kind === "partial" ? twice.reason : "").toMatch(/run past the bottom of the slide/u);
+  });
+});
+
+describe.skipIf(!runTex)("charts inserted on a slide: compile with LuaLaTeX", () => {
+  it.each(CHART_KINDS.map((kind) => [kind.id] as const))("a deck with an inserted %s chart compiles and fits the slide", async (id) => {
+    const inserted = await insertOnSlide(INSERT_DECK, id);
+    expect(inserted.kind).toBe("success");
+    const compiled = compile(inserted.newSource);
+    expect(compiled.status, compiled.log.split("\n").filter((line) => line.startsWith("!")).join("\n")).toBe(0);
+    expect(overfullFrame(compiled.log)).toBe(0);
+  }, 180_000);
+  it.each([["data", "bar"], ["function", "semilogy"], ["stacked-bar", "area"]] as const)("two charts (%s, %s) on one frame compile; an overflow comes with the warning", async (first, second) => {
+    const once = await insertOnSlide(INSERT_DECK, first);
+    const twice = await insertOnSlide(once.newSource, second);
+    const compiled = compile(twice.newSource);
+    expect(compiled.status).toBe(0);
+    // TeX measured 9.2pt (data, bar), 0 (function, semilogy) and 1.7pt (stacked-bar, area) past the frame.
+    if (overfullFrame(compiled.log) > 0) expect(twice.kind).toBe("partial");
+    expect(overfullFrame(compiled.log)).toBeLessThan(12);
   }, 180_000);
 });

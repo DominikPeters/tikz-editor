@@ -134,7 +134,10 @@ export function applyDeckEditAction(
   }
   if (action.kind === "deckInsertPgfplotsTemplate") {
     const plan = beamerPgfplotsInsertionEdits(source, layout, action.template, action.placement);
-    return "reason" in plan ? { kind: "unsupported", reason: plan.reason } : finishEdits(source, plan.edits);
+    if ("reason" in plan) return { kind: "unsupported", reason: plan.reason };
+    const finished = finishEdits(source, plan.edits);
+    // A slide without room for the chart: inserted all the same (the user asked for it), with the warning.
+    return plan.note && finished.kind === "success" ? { ...finished, kind: "partial", skippedHandles: [], reason: plan.note } : finished;
   }
 
   const index = buildBeamerObjectIndex({

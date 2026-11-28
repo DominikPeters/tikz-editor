@@ -404,7 +404,7 @@ describe("pgfplots editing: inspector", () => {
     const width = props.get("pgfplots-width");
     expect(width?.kind === "text" && [width.label, width.placeholder]).toEqual(["Width", "240pt"]);
     const tick = props.get("pgfplots-xtick-distance");
-    expect(tick?.kind === "text" && [tick.label, tick.placeholder]).toEqual(["X tick distance", "Auto"]);
+    expect(tick?.kind === "text" && [tick.label, tick.placeholder]).toEqual(["X tick step", "Auto"]);
     for (const property of descriptor?.sections.flatMap((s) => s.properties) ?? []) expect(property.label).not.toMatch(/auto|\(/iu);
     expect(props.get("pgfplots-xlabel")?.kind === "text" && (props.get("pgfplots-xlabel") as { value: string }).value).toBe("Time");
     expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-elements", "pgfplots-labels", "pgfplots-size", "pgfplots-limits", "pgfplots-axes", "pgfplots-legend"]);

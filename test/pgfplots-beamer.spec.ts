@@ -157,7 +157,7 @@ Some text.
     expect(picture?.bounds.width ?? 0).toBeLessThan(307.28987);
     expect((picture?.bounds.y ?? 0) + (picture?.bounds.height ?? 0)).toBeLessThan(273.14662);
     const again = applyDeckEditAction(inserted.newSource, second.layout, { kind: "deckInsertPgfplotsTemplate", frameId: second.layout.frameId, template: "bar", placement: { kind: "end" } });
-    expect(again.kind === "success" ? again.newSource.match(/usepackage\{pgfplots\}|compat=1\.18/gu) : null).toEqual(["usepackage{pgfplots}", "compat=1.18"]);
+    expect(again.kind === "success" || again.kind === "partial" ? again.newSource.match(/usepackage\{pgfplots\}|compat=1\.18/gu) : null).toEqual(["usepackage{pgfplots}", "compat=1.18"]);
   });
   it("adds only what the preamble lacks", () => {
     expect(pgfplotsPreambleInsertions(String.raw`\documentclass{beamer}\n\usepackage{pgfplots}\n\pgfplotsset{compat=1.17}\n\begin{document}\end{document}`)).toEqual([]);

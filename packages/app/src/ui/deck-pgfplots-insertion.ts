@@ -25,7 +25,8 @@ export function insertDeckPgfplotsTemplate(
   }
   const action = { kind: "deckInsertPgfplotsTemplate", frameId: frame.frameId, template, placement } as const;
   const result = applyDeckEditAction(state.source, frame.layout, action);
-  if (result.kind !== "success") return;
+  // A partial result is inserted with a warning (a slide without room for the chart).
+  if (result.kind !== "success" && result.kind !== "partial") return;
   // The picture is the last edit (preamble lines come first).
   const patch = result.patches.at(-1);
   if (patch) requestDeckReselect({ frameId: frame.frameId, kind: "tikzpicture", span: patch.newSpan, source: result.newSource });
