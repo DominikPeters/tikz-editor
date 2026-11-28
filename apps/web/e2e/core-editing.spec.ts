@@ -26,6 +26,7 @@ import {
   readSelectedSourceIds,
   selectAllSceneElements,
   selectFirstCanvasElement,
+  setCanvasTransform,
   setSource,
   waitForHitRegions
 } from "./helpers";
@@ -1386,6 +1387,63 @@ test("selected scope drag from member area tracks cursor displacement without ru
   const xshiftDelta = Number(afterMatch[1]) - Number(beforeMatch[1]);
   expect(Math.abs(xshiftDelta)).toBeLessThan(400);
   expect(xshiftDelta).toBeGreaterThan(0);
+});
+
+test("selected scope dragged from a member moves by the pointer travel from pointerdown", async ({ page }) => {
+  await gotoApp(page);
+  await setSource(page, String.raw`\begin{tikzpicture}
+  \draw (-3,-3) rectangle (3,3);
+  \begin{scope}[xshift=5pt, yshift=3pt]
+    \draw[fill=red] (-2.5,1.5) rectangle (-0.8,-0.3);
+    \draw[fill=blue] (-2.4,0) rectangle (-0.9,-2);
+  \end{scope}
+\end{tikzpicture}`);
+  await waitForHitRegions(page);
+  await setCanvasTransform(page, { translateX: 0, translateY: 0, scale: 1.5 });
+  await waitForHitRegions(page);
+
+  await focusCanvas(page);
+  await clickHitRegionByTargetId(page, "path:2");
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["scope:1"]);
+  const beforeSource = await readStoreSource(page);
+
+  // A click on a member of the selected scope (sub-threshold jitter) drills in and writes nothing.
+  const memberBox = await page.locator("[data-hit-region-target-id='path:2']").first().boundingBox();
+  expect(memberBox).not.toBeNull();
+  if (!memberBox) {
+    return;
+  }
+  const startX = memberBox.x + memberBox.width / 2;
+  const startY = memberBox.y + memberBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 2, startY + 1, { steps: 2 });
+  await page.mouse.up();
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["path:2"]);
+  expect(await readStoreSource(page)).toBe(beforeSource);
+
+  await clearSceneSelection(page);
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual([]);
+  await clickHitRegionByTargetId(page, "path:2");
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["scope:1"]);
+
+  // 60 px right, 30 px down at 1.5 px/pt: (+40pt, -20pt). The drag only starts once the pointer
+  // has left the drill-in threshold, but it is measured from the pointerdown point.
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.keyboard.down("Control"); // no snapping
+  await page.mouse.move(startX + 60, startY + 30, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up("Control");
+  await expect.poll(async () => readStoreSource(page)).not.toBe(beforeSource);
+  await expect.poll(async () => readSelectedSourceIds(page)).toEqual(["scope:1"]);
+  const afterSource = await readStoreSource(page);
+  const xshift = readShiftValue(afterSource, "x");
+  const yshift = readShiftValue(afterSource, "y");
+  expect(xshift).not.toBeNull();
+  expect(yshift).not.toBeNull();
+  expect(Math.abs((xshift ?? Number.NaN) - 5 - 40)).toBeLessThan(0.1);
+  expect(Math.abs((yshift ?? Number.NaN) - 3 + 20)).toBeLessThan(0.1);
 });
 
 test("unselected member drag promotes to scope drag without runaway shifts", async ({ page }) => {

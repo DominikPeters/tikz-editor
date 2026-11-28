@@ -82,10 +82,30 @@ function clientPointFromEvent(event: Pick<PointerEvent | ReactPointerEvent<SVGEl
 
 const TOUCH_ELEMENT_DRAG_ACTIVATION_DELAY_MS = 80;
 const TOUCH_ELEMENT_DRAG_ACTIVATION_DISTANCE_SQ = 36;
+/** Travel (squared client px) before a press on a part of the selected scope/axis drags it instead of drilling in. */
+export const SCOPE_DRILL_DRAG_ACTIVATION_DISTANCE_SQ = 16;
+
+/**
+ * Start point of a deferred element drag once the pointer has travelled past
+ * `activationDistanceSq` from the press, or null while it is still a click.
+ * The drag is anchored at the pointerdown, not at the point where it activates:
+ * the travel inside the threshold belongs to the drag.
+ */
+export function resolveDeferredElementDragStart(
+  pending: { startClient: ClientPoint; startWorld: WorldPoint },
+  client: ClientPoint,
+  activationDistanceSq: number
+): WorldPoint | null {
+  const dx = client.x - pending.startClient.x;
+  const dy = client.y - pending.startClient.y;
+  return (dx * dx) + (dy * dy) <= activationDistanceSq ? null : pending.startWorld;
+}
 
 type PendingTouchElementDrag = {
   pointerId: number;
   startClient: ClientPoint;
+  /** World point under the pointerdown: the drag is measured from here, not from where it activates. */
+  startWorld: WorldPoint;
   startTime: number;
   draggedIds: string[];
   adornmentDragFromText: boolean;
@@ -135,6 +155,12 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
   const pendingScopeDrillRef = useRef<{
     pointerId: number;
     startClient: ClientPoint;
+    /**
+     * World point under the pointerdown. The drag starts only once the pointer
+     * leaves the drill-in threshold (a click drills in instead), but its
+     * displacement is measured from here so that the threshold travel is kept.
+     */
+    startWorld: WorldPoint;
     selectedScopeId: string;
     hitSourceId: string;
     dragIds: string[];
@@ -289,24 +315,19 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
           pendingTouchElementDragRef.current = null;
           return;
         }
-        const clientPoint = clientPointFromEvent(event);
-        const dx = clientPoint.x - pendingTouchDrag.startClient.x;
-        const dy = clientPoint.y - pendingTouchDrag.startClient.y;
-        if ((dx * dx) + (dy * dy) <= TOUCH_ELEMENT_DRAG_ACTIVATION_DISTANCE_SQ) {
+        const touchDragStart = resolveDeferredElementDragStart(
+          pendingTouchDrag,
+          clientPointFromEvent(event),
+          TOUCH_ELEMENT_DRAG_ACTIVATION_DISTANCE_SQ
+        );
+        if (!touchDragStart) {
           return;
         }
         if (event.timeStamp - pendingTouchDrag.startTime < TOUCH_ELEMENT_DRAG_ACTIVATION_DELAY_MS) {
           return;
         }
-        if (!svgResult) {
-          return;
-        }
-        const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
-        if (!world) {
-          return;
-        }
         pendingTouchElementDragRef.current = null;
-        startElementDrag(event.pointerId, world, pendingTouchDrag.draggedIds, {
+        startElementDrag(event.pointerId, touchDragStart, pendingTouchDrag.draggedIds, {
           adornmentDragFromText: pendingTouchDrag.adornmentDragFromText
         });
         return;
@@ -316,21 +337,19 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       if (pending?.pointerId !== event.pointerId || pending.dragStarted) {
         return;
       }
-      const clientPoint = clientPointFromEvent(event);
-      const dx = clientPoint.x - pending.startClient.x;
-      const dy = clientPoint.y - pending.startClient.y;
-      if ((dx * dx) + (dy * dy) <= 16) {
+      const dragStart = resolveDeferredElementDragStart(
+        pending,
+        clientPointFromEvent(event),
+        SCOPE_DRILL_DRAG_ACTIVATION_DISTANCE_SQ
+      );
+      if (!dragStart) {
         return;
       }
       pending.moved = true;
-      if (pending.dragIds.length === 0 || !svgResult) {
+      if (pending.dragIds.length === 0) {
         return;
       }
-      const world = clientToWorldPoint(clientPoint, interactionSvgRef.current, svgResult.viewBox);
-      if (!world) {
-        return;
-      }
-      startElementDrag(event.pointerId, world, pending.dragIds);
+      startElementDrag(event.pointerId, dragStart, pending.dragIds);
       pending.dragStarted = true;
     }
 
@@ -383,7 +402,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
       window.removeEventListener("pointerup", onWorldPointerUp);
       window.removeEventListener("pointercancel", onWorldPointerUp);
     };
-  }, [dispatch, interactionSvgRef, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag, svgResult]);
+  }, [dispatch, scopeOverlay, selectedElementIds, setSnapLines, startElementDrag]);
 
   const onElementPointerDown = useCallback(
     (event: ReactPointerEvent<SVGElement>, targetId: string, region?: HitRegion) => {
@@ -531,6 +550,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         pendingScopeDrillRef.current = {
           pointerId: event.pointerId,
           startClient: clientPoint,
+          startWorld: world,
           selectedScopeId: singleSelectedScopeId,
           hitSourceId,
           dragIds: canDragSelectedScope ? [singleSelectedScopeId] : [],
@@ -569,6 +589,7 @@ export function useCanvasElementInteractions(args: UseCanvasElementInteractionsA
         pendingTouchElementDragRef.current = {
           pointerId: event.pointerId,
           startClient: clientPoint,
+          startWorld: world,
           startTime: event.timeStamp,
           draggedIds,
           adornmentDragFromText

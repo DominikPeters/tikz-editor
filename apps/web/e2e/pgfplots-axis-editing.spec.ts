@@ -360,13 +360,11 @@ test("hide axis: clicking the plot selects the axis, dragging moves it (at=)", a
   const source = await readSource(page);
   expect(source).toMatch(/ymax=4, at=\{\([-\d.]+cm,[-\d.]+cm\)\}\]/u);
   // 60 px right, 30 px up at 1.5 px/pt: (40pt, 20pt). A drag that starts on a part of the
-  // selected axis (here the plot) begins once the pointer has left its drag threshold, so the
-  // first few pixels are not applied (observed: 4 px); the direction is the pointer's.
+  // selected axis (here the plot) waits for the drag threshold before it starts (a click
+  // drills in), but it is measured from the pointerdown point: no travel is lost.
   const was = axisWorldBox(HIDDEN_SOURCE); const now = axisWorldBox(source);
-  const dx = now.x0 - was.x0; const dy = now.y0 - was.y0;
-  expect(dx).toBeGreaterThan(36); expect(dx).toBeLessThanOrEqual(40.5);
-  expect(dy).toBeGreaterThan(18); expect(dy).toBeLessThanOrEqual(20.5);
-  expect(Math.abs(dx / dy - 2)).toBeLessThan(0.05);
+  expect(Math.abs(now.x0 - was.x0 - 40)).toBeLessThan(0.5);
+  expect(Math.abs(now.y0 - was.y0 - 20)).toBeLessThan(0.5);
   expect(await readSelectedSourceIds(page)).toEqual([AXIS]);
   await shot(page, "16-hidden-axis-moved");
 });
