@@ -1,6 +1,10 @@
 # Native pgfplots support
 
-Status: proposal, 2026-11-27. Nothing here is implemented on master.
+Status: proposal of 2026-11-27, implemented through Phase 4, most of Phase 5 and the
+basics of Phase 6 on branch `claude/keen-shannon-b2z575` (2026-11-28). The measured rules
+are in `design/pgfplots-behaviour.md`; the oracle harness is described in
+`scripts/pgfplots-oracle/README.md`. Sections 3 and 7 describe the state and plan at the
+time of the proposal.
 
 Supersedes the pgfplots parts of `design/addon-architecture.md`.
 
