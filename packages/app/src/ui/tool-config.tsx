@@ -44,6 +44,16 @@ function MatrixIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+/** The toolbar's Insert Chart button: an axis with a rising line, in the tool icons' 20x20 grid. */
+export function ChartIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 20 20" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3V17H17" />
+      <path d="M6 13L9.5 8.5L12 11L16 5.5" />
+    </svg>
+  );
+}
+
 function ShapeIcon({ size = 20 }: { size?: number }) {
   return (
     <svg viewBox="0 0 20 20" width={size} height={size} fill="none">

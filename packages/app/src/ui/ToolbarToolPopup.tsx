@@ -94,15 +94,19 @@ export function ToolbarPopupVisualChoiceGrid({
   choices,
   selectedId,
   onSelect,
-  testIdPrefix
+  testIdPrefix,
+  ariaLabel = "Node shapes",
+  className
 }: {
   choices: readonly ToolbarPopupVisualChoice[];
   selectedId: string;
   onSelect: (id: string) => void;
   testIdPrefix?: string;
+  ariaLabel?: string;
+  className?: string;
 }) {
   return (
-    <div className={css.visualChoiceGrid} role="listbox" aria-label="Node shapes">
+    <div className={[css.visualChoiceGrid, className ?? ""].filter(Boolean).join(" ")} role="listbox" aria-label={ariaLabel}>
       {choices.map((choice) => {
         const selected = choice.id === selectedId;
         const testId = testIdPrefix ? `${testIdPrefix}-${choice.id.replace(/\s+/g, "-")}` : undefined;

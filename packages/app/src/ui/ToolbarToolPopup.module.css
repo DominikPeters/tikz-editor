@@ -131,3 +131,13 @@
   line-height: 1.2;
   text-align: center;
 }
+
+/* Chart thumbnails are whole axes: wider cells than the shape previews. */
+.chartChoiceGrid {
+  min-width: 360px;
+}
+
+.chartChoiceGrid .visualChoicePreview > span,
+.chartChoiceGrid .visualChoicePreview svg {
+  max-width: 100px;
+}

@@ -2219,6 +2219,7 @@ function EditorApp() {
           <Toolbar
             menuBar={windowsLook ? appMenuBar : null}
             onPresentationOptions={handlePresentationOptions}
+            onRunCommand={(commandId) => { commandRuntimeRef.current.runCommand(commandId, "menu"); }}
             updateChip={updateChip}
           />
           {windowsLook ? null : tabStrip}

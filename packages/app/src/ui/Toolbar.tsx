@@ -12,8 +12,13 @@ import {
   TOOL_BUTTONS,
   TOOL_COLOR_OPTIONS,
   CaretDownIcon,
+  ChartIcon,
   type ToolPopupKind
 } from "./tool-config";
+import { CHART_KINDS } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
+import { CHART_KIND_COMMAND_IDS } from "../app-menu/chart-menu";
+import type { AppMenuCommandId } from "../app-menu";
+import { GENERATED_CHART_KIND_PREVIEWS } from "./examples/generated-chart-kind-previews";
 import { GENERATED_NODE_SHAPE_PREVIEWS } from "./generated-node-shape-previews";
 import { ToolbarToolPopup, ToolbarPopupSection, ToolbarPopupVisualChoiceGrid } from "./ToolbarToolPopup";
 import popupCss from "./ToolbarToolPopup.module.css";
@@ -30,8 +35,17 @@ const SHAPE_POPUP_CHOICES = NODE_SHAPE_OPTIONS.map((option) => ({
   previewSvg: GENERATED_NODE_SHAPE_PREVIEWS[option.value] ?? null
 }));
 
+/** The chart gallery: one entry per chart kind, with its template as the editor renders it. */
+const CHART_POPUP_CHOICES = CHART_KINDS.map((kind) => ({
+  id: kind.id,
+  label: kind.label,
+  previewSvg: GENERATED_CHART_KIND_PREVIEWS[kind.id]?.svg ?? null
+}));
+
 type ToolbarProps = {
   onPresentationOptions: () => void;
+  /** Runs an app command (the chart gallery runs the Insert > Chart commands). */
+  onRunCommand?: (commandId: AppMenuCommandId) => void;
   /** The in-app menu bar, when it shares the toolbar row (Windows). */
   menuBar?: ReactNode;
   updateChip?: {
@@ -40,7 +54,7 @@ type ToolbarProps = {
   } | null;
 };
 
-export function Toolbar({ updateChip = null, onPresentationOptions, menuBar = null }: ToolbarProps) {
+export function Toolbar({ updateChip = null, onPresentationOptions, onRunCommand, menuBar = null }: ToolbarProps) {
   const documentId = useEditorStore(s => s.activeDocumentId);
   const drawingSurface = useEditorStore(s => s.documentKind !== "beamer" || parseDocumentRootId(s.activeRootId ?? "") != null);
   const toolMode = useEditorStore((s) => s.toolMode);
@@ -55,6 +69,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions, menuBar = nu
     [projectNamedColorSwatches]
   );
   const [openPopupMode, setOpenPopupMode] = useState<ToolMode | null>(null);
+  const [chartPopupOpen, setChartPopupOpen] = useState(false);
   const [bucketPopupClosePending, setBucketPopupClosePending] = useState(false);
   const [matrixHoverSize, setMatrixHoverSize] = useState<{ rows: number; columns: number } | null>(null);
   const matrixPreviewRows = matrixHoverSize?.rows ?? selectedAddMatrixRows;
@@ -329,6 +344,50 @@ export function Toolbar({ updateChip = null, onPresentationOptions, menuBar = nu
     );
   };
 
+  // Insert Chart: not a tool mode; the gallery runs the same commands as Insert > Chart.
+  const renderChartButton = () => (
+    <ToolbarToolPopup
+      key="insert-chart"
+      open={chartPopupOpen}
+      onClose={() => { setChartPopupOpen(false); }}
+      popup={(
+        <ToolbarPopupSection title="Insert Chart">
+          <ToolbarPopupVisualChoiceGrid
+            choices={CHART_POPUP_CHOICES}
+            selectedId=""
+            ariaLabel="Chart types"
+            className={popupCss.chartChoiceGrid ?? ""}
+            onSelect={(id) => {
+              const kind = CHART_KINDS.find((candidate) => candidate.id === id);
+              if (kind) onRunCommand?.(CHART_KIND_COMMAND_IDS[kind.id]);
+              setChartPopupOpen(false);
+            }}
+            testIdPrefix="toolbar-chart-choice"
+          />
+        </ToolbarPopupSection>
+      )}
+      popupTestId="toolbar-tool-popup-insertChart"
+    >
+      <RenderedTooltip content="Chart">
+        <button
+          type="button"
+          className={css.btn}
+          aria-label="Chart"
+          aria-haspopup="dialog"
+          aria-expanded={chartPopupOpen}
+          disabled={!onRunCommand}
+          data-testid="toolbar-insert-chart"
+          onClick={() => {
+            setOpenPopupMode(null);
+            setChartPopupOpen((current) => !current);
+          }}
+        >
+          <ChartIcon size={18} />
+        </button>
+      </RenderedTooltip>
+    </ToolbarToolPopup>
+  );
+
   const renderStandardButton = (toolDef: (typeof TOOL_BUTTONS)[number]) => {
     const { mode, label, title, icon: Icon } = toolDef;
     const capability = getToolCapabilityStatus(mode);
@@ -383,7 +442,7 @@ export function Toolbar({ updateChip = null, onPresentationOptions, menuBar = nu
           if (toolDef.mode === "addBucket") {
             button = renderBucketButton();
           } else if (toolDef.mode === "addMatrix") {
-            button = renderMatrixButton();
+            return [...(separator ? [separator] : []), renderMatrixButton(), renderChartButton()];
           } else if (toolDef.mode === "addShape") {
             button = renderShapeButton();
           } else {
