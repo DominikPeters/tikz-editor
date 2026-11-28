@@ -393,15 +393,21 @@ describe("pgfplots editing: inspector", () => {
 \addplot[red, domain=0:2] {x^2};
 \end{axis}`);
 
-  it("axis sections read authored values and show computed limits as auto", () => {
+  it("axis sections read authored values and show computed limits as placeholders (plain labels)", () => {
     const id = AXIS_ID(SOURCE);
     const descriptor = buildPgfplotsInspectorDescriptor(SOURCE, id, evaluate(SOURCE).scene.elements);
     const props = new Map(descriptor?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
     const xmin = props.get("pgfplots-xmin"); const xmax = props.get("pgfplots-xmax");
     expect(xmin?.kind === "text" && xmin.value).toBe("0");
-    expect(xmax?.kind === "text" && [xmax.value, xmax.label]).toEqual(["", expect.stringMatching(/^X max \(auto: [\d.]+\)$/u)]);
+    expect(xmax?.kind === "text" && [xmax.value, xmax.label, xmax.placeholder]).toEqual(["", "X max", expect.stringMatching(/^[\d.]+$/u)]);
+    expect(xmin?.kind === "text" && xmin.placeholder).toMatch(/^-?[\d.]+$/u);
+    const width = props.get("pgfplots-width");
+    expect(width?.kind === "text" && [width.label, width.placeholder]).toEqual(["Width", "240pt"]);
+    const tick = props.get("pgfplots-xtick-distance");
+    expect(tick?.kind === "text" && [tick.label, tick.placeholder]).toEqual(["X tick distance", "Auto"]);
+    for (const property of descriptor?.sections.flatMap((s) => s.properties) ?? []) expect(property.label).not.toMatch(/auto|\(/iu);
     expect(props.get("pgfplots-xlabel")?.kind === "text" && (props.get("pgfplots-xlabel") as { value: string }).value).toBe("Time");
-    expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-size", "pgfplots-limits", "pgfplots-labels", "pgfplots-axes", "pgfplots-legend"]);
+    expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-elements", "pgfplots-labels", "pgfplots-size", "pgfplots-limits", "pgfplots-axes", "pgfplots-legend"]);
   });
 
   it("plot sections: cycle-list defaults, legend entry, expression", () => {
@@ -410,13 +416,15 @@ describe("pgfplots editing: inspector", () => {
     const first = buildPgfplotsInspectorDescriptor(SOURCE, `${id}:plot:0`, elements);
     const p0 = new Map(first?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
     const mark = p0.get("pgfplots-plot-mark");
-    expect(mark?.kind === "enum" && [mark.value, mark.options[0]?.label]).toEqual(["default", "Default (cycle: *)"]);
+    expect(mark?.kind === "enum" && [mark.value, mark.options[0]?.label]).toEqual(["default", "Default (*)"]);
     expect((p0.get("pgfplots-plot-color") as { value: string }).value).toBe("blue");
     expect((p0.get("pgfplots-plot-legend-entry") as { value: string }).value).toBe("data");
     const second = buildPgfplotsInspectorDescriptor(SOURCE, `${id}:plot:1`, elements);
     const p1 = new Map(second?.sections.flatMap((s) => s.properties.map((p) => [p.id, p] as const)));
     expect((p1.get("pgfplots-plot-expression") as { value: string }).value).toBe("x^2");
     expect((p1.get("pgfplots-plot-domain") as { value: string }).value).toBe("0:2");
+    expect(p1.get("pgfplots-plot-samples")).toMatchObject({ label: "Samples", value: "", placeholder: "25" });
+    expect(p1.get("pgfplots-plot-color")?.label).toBe("Color");
   });
 
   it("writes: braced text, auto/default removal, legend entry insert/edit/remove, expression", () => {

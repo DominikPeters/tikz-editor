@@ -3,6 +3,7 @@ import type { InspectorProperty, NodeFontFamilyId, NodeFontSizePresetId } from "
 import { ColorPickerField } from "../../ColorPicker";
 import { CustomDropdown } from "../../CustomDropdown";
 import css from "../InspectorPanel.module.css";
+import { RenderedTooltip } from "../../RenderedTooltip";
 import { getInspectorPropertyCapabilityStatus } from "../../capabilities";
 import {
 LINE_WIDTH_CUSTOM_OPTION_VALUE,
@@ -148,7 +149,13 @@ export function renderSingleInspectorProperty(property: InspectorProperty, api: 
                 );
               }}
             />
-            <span className={withValueProvenanceClass(css.checkboxLabel, provenance)}>{property.label}</span>
+            {property.tooltip ? (
+              <RenderedTooltip content={property.tooltip}>
+                <span className={withValueProvenanceClass(css.checkboxLabel, provenance)}>{property.label}</span>
+              </RenderedTooltip>
+            ) : (
+              <span className={withValueProvenanceClass(css.checkboxLabel, provenance)}>{property.label}</span>
+            )}
           </label>
           {renderReadOnlyReasonNote(readOnlyReason)}
         </div>

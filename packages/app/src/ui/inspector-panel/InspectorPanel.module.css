@@ -349,6 +349,15 @@
   width: 100%;
 }
 
+/* A text field's placeholder is the value that applies while none is
+   written (pgfplots limits, sizes): italic like other inherited values. */
+.textInput::placeholder {
+  color: var(--label-secondary);
+  -webkit-text-fill-color: var(--label-secondary);
+  font-style: italic;
+  opacity: 1;
+}
+
 .textInput:not(:focus) {
   -webkit-user-select: none;
   user-select: none;

@@ -6,32 +6,14 @@
  */
 import { userText, type EditedSource } from "../fragment.js";
 import { replaceSpan } from "../patch.js";
+import { CHART_KINDS, type ChartKindId } from "./chart-kinds.js";
 
-export type PgfplotsTemplateKind = "function" | "data" | "bar";
+/** The insert templates are the chart kinds (chart-kinds.ts), one list for every insert command. */
+export type PgfplotsTemplateKind = ChartKindId;
 
-export const PGFPLOTS_TEMPLATES: Record<PgfplotsTemplateKind, { label: string; text: string }> = {
-  function: {
-    label: "Function Plot",
-    text: String.raw`\begin{axis}[xlabel={$x$}, ylabel={$f(x)$}, domain=-2:2, samples=50]
-  \addplot {x^2 - 1};
-  \addlegendentry{$x^2 - 1$}
-\end{axis}`
-  },
-  data: {
-    label: "Data Plot",
-    text: String.raw`\begin{axis}[xlabel={Time}, ylabel={Value}]
-  \addplot coordinates {(0,1.2) (1,2.3) (2,2.9) (3,4.1) (4,4.8)};
-  \addlegendentry{Measurements}
-\end{axis}`
-  },
-  bar: {
-    label: "Bar Chart",
-    text: String.raw`\begin{axis}[ybar, ymin=0, xlabel={Quarter}, ylabel={Sales},
-  symbolic x coords={Q1,Q2,Q3,Q4}, xtick=data]
-  \addplot coordinates {(Q1,3) (Q2,5) (Q3,4) (Q4,6)};
-\end{axis}`
-  }
-};
+export const PGFPLOTS_TEMPLATES: Record<PgfplotsTemplateKind, { label: string; text: string }> = Object.fromEntries(
+  CHART_KINDS.map((kind) => [kind.id, { label: kind.label, text: kind.template }])
+) as Record<PgfplotsTemplateKind, { label: string; text: string }>;
 
 const COMPAT_RE = /\\pgfplotsset\s*\{[^{}]*\bcompat\s*=/u;
 

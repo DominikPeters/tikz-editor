@@ -98,6 +98,7 @@ import { flattenForeachInSource, type FlattenForeachTarget } from "../foreach/fl
 import { applySetFigureBoundsAction, type SetFigureBoundsAction } from "./figure-bounds.js";
 import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
+import { applyInsertAxisPlotAction, applyResetPlotStyleAction, applySetAxisElementAction, type AxisElementKind } from "./pgfplots/chart-elements.js";
 import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
@@ -155,6 +156,12 @@ export type EditAction =
   | { kind: "addElement"; template: ElementTemplate; at: WorldPoint }
   /** A pgfplots axis from a template, placed right of the picture's content. */
   | { kind: "insertPgfplotsTemplate"; template: PgfplotsTemplateKind }
+  /** Adds or removes the title, an axis label or the legend of an axis (chart-elements.ts); `selectNew` selects an added title or label. */
+  | { kind: "setAxisElement"; axisId: string; element: AxisElementKind; visible: boolean; selectNew?: boolean }
+  /** A new plot after the last one of an axis, with placeholder data (chart-elements.ts). */
+  | { kind: "insertAxisPlot"; axisId: string }
+  /** Removes a plot's own style options so the cycle list applies (chart-elements.ts). */
+  | { kind: "resetPlotStyle"; plotId: string }
   /** A new path through world points: what the path and freehand tools draw. */
   | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
@@ -373,6 +380,12 @@ export function applyEditAction(
         return applyAddPath(source, action, parseOptions, evaluateOptions, geometry);
       case "insertPgfplotsTemplate":
         return applyInsertPgfplotsTemplate(source, action.template, parseOptions, evaluateOptions);
+      case "setAxisElement":
+        return applySetAxisElementAction(source, action.axisId, action.element, action.visible, parseOptions, action.selectNew ? { selectNew: true } : {});
+      case "insertAxisPlot":
+        return applyInsertAxisPlotAction(source, action.axisId, parseOptions);
+      case "resetPlotStyle":
+        return applyResetPlotStyleAction(source, action.plotId, parseOptions);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":
@@ -1304,7 +1317,7 @@ function applyInsertPgfplotsTemplate(
     const bounds = evaluateTikzFigure(parsed.figure, working, evaluateOptions).scene.bounds;
     if (bounds) {
       const cm = (value: number) => String(Math.round((value / PT_PER_CM) * 2) / 2);
-      text = text.replace("\\begin{axis}[", `\\begin{axis}[at={(${cm(bounds.maxX + PT_PER_CM)}cm,${cm(bounds.minY)}cm)}, `);
+      text = text.replace(/^\\begin\{(\w+)\}\[/u, (opening) => `${opening}at={(${cm(bounds.maxX + PT_PER_CM)}cm,${cm(bounds.minY)}cm)}, `);
     }
   }
   const snippet = userText(text.replace(/\n/gu, "\n  "), "pasted-tikz");

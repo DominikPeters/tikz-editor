@@ -76,6 +76,8 @@ type InspectorPropertyValue =
       id: string;
       label: string;
       value: string;
+      /** Shown in the empty field: the value that applies while none is written (an automatic or default value). */
+      placeholder?: string;
       write: SetPropertyWriteTarget;
       readOnlyReason?: string;
     }
@@ -93,6 +95,8 @@ type InspectorPropertyValue =
       id: string;
       label: string;
       value: boolean;
+      /** Explains what the checkbox writes, on hover. */
+      tooltip?: string;
       trueValue?: string;
       falseValue?: string;
       clearKeys?: string[];

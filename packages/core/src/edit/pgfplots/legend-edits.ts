@@ -183,6 +183,28 @@ export function legendEntriesForDeletedPlots(source: string, axis: AxisStatement
   return { replacements, notes: [] };
 }
 
+/**
+ * Removing the legend: every entry statement (`\addlegendentry`, `\legend`)
+ * goes, and the `legend entries` key of the axis (which the commands would
+ * otherwise reveal: they only beat it while there are any).
+ */
+export function removeAllLegendEntries(source: string, axis: AxisStatement, association: LegendAssociation): LegendEditResult {
+  const replacements: Replacement[] = [];
+  const seen = new Set<string>();
+  for (const item of axis.body) {
+    if (item.kind === "AddLegendEntry" || item.kind === "Legend") replacements.push({ span: statementLineSpan(source, item.span), fragment: EMPTY_FRAGMENT });
+    seen.add(item.id);
+  }
+  for (const entry of association.entries) {
+    const origin = entry.origin;
+    if (origin?.kind === "addlegendentry" && !seen.has(origin.statementId)) replacements.push({ span: statementLineSpan(source, origin.span), fragment: EMPTY_FRAGMENT });
+  }
+  const option = legendEntriesOption(axis);
+  if (option) replacements.push({ span: optionRemovalSpan(source, axis, option), fragment: EMPTY_FRAGMENT });
+  if (replacements.length === 0) return { unsupported: "The legend entries are set outside this axis (in a style); remove them there." };
+  return { replacements, notes: [] };
+}
+
 /** An entry as `\addlegendentry` text (conversion between forms; the text is the document's). */
 function asStatement(source: string, entry: LegendEntryText): TikzFragment {
   if (entry.origin?.kind === "addlegendentry") return sourceSlice(source, entry.origin.span);

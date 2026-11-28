@@ -271,6 +271,7 @@ export function InspectorPanel() {
         type="text"
         aria-label={property.label}
         value={property.value}
+        placeholder={property.placeholder}
         disabled={!writable}
         onChange={(event) => { applySetProperty(property.write, event.currentTarget.value); }}
       />
