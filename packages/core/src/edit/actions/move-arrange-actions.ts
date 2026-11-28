@@ -36,6 +36,7 @@ import {
 import { parseTikzForEdit, sourceFingerprintForEdit, type EditParseOptions } from "../parse-options.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
+import { TREE_CHILD_MOVE_BLOCK_REASON, independentlyMovedTreeChildIds, isTreeChildSourceId } from "../tree-child-placement.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
 import type { SiteContext } from "../../semantic/site-context.js";
 import { expandPgfEnvironmentIds, nestedStatements } from "../../ast/walk.js";
@@ -80,11 +81,18 @@ export function applyMoveElementsAction(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const normalizedIds = collapseMovedScopeDescendants(
+  const collapsedIds = collapseMovedScopeDescendants(
     parsed.figure.body,
     expandPgfEnvironmentIds(parsed.figure.body, requestedIds),
     editHandles
   );
+  // A tree child's handle spans its whole child operation; rewriting it as a
+  // point would replace the child (and its subtree) with a bare coordinate.
+  if (independentlyMovedTreeChildIds(collapsedIds).length > 0) {
+    return { kind: "unsupported", reason: TREE_CHILD_MOVE_BLOCK_REASON };
+  }
+  // Children of a moved root or ancestor child move with it.
+  const normalizedIds = collapsedIds.filter((elementId) => !isTreeChildSourceId(elementId));
   const fitBlockedId = normalizedIds.find((elementId) =>
     sourceUsesFitNodeFromParseResult(source, parsed, elementId)
   );
@@ -270,6 +278,12 @@ export function applyAlignElementsAction(
     return { kind: "unsupported", reason: "Align requires at least 2 selected elements." };
   }
 
+  // Aligned or distributed elements each take their own offset; a tree
+  // child cannot, even when its root is selected too.
+  if (normalizedIds.some(isTreeChildSourceId)) {
+    return { kind: "unsupported", reason: TREE_CHILD_MOVE_BLOCK_REASON };
+  }
+
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
@@ -293,6 +307,12 @@ export function applyDistributeElementsAction(
   const normalizedIds = normalizeElementIds(action.elementIds);
   if (normalizedIds.length < 3) {
     return { kind: "unsupported", reason: "Distribute requires at least 3 selected elements." };
+  }
+
+  // Aligned or distributed elements each take their own offset; a tree
+  // child cannot, even when its root is selected too.
+  if (normalizedIds.some(isTreeChildSourceId)) {
+    return { kind: "unsupported", reason: TREE_CHILD_MOVE_BLOCK_REASON };
   }
 
   const parsed = parseTikzForEdit(source, {

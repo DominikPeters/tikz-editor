@@ -102,6 +102,7 @@ import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAc
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
 import { evaluateTikzFigure } from "../semantic/evaluate.js";
+import { TREE_CHILD_MOVE_BLOCK_REASON, isTreeChildSourceId } from "./tree-child-placement.js";
 
 export type ResizeRole =
   | "top-left"
@@ -562,6 +563,12 @@ function applyMoveHandle(
   newWorld: WorldPoint,
   parseOptions: EditParseOptions
 ): EditActionResult {
+  const handle = editHandles.find((candidate) => candidate.id === handleId);
+  // A tree edge's end is placed by the tree layout, not by a coordinate.
+  if (handle?.kind === "path-point" && handle.rewriteMode === "unsupported" && isTreeChildSourceId(handle.sourceRef.sourceId) &&
+      /^\s*(?:child|edge\s+from\s+parent)\b/u.test(handle.sourceText)) {
+    return { kind: "unsupported", reason: TREE_CHILD_MOVE_BLOCK_REASON };
+  }
   const result = applyEditIntent(source, editHandles, { kind: "move", handleId, newWorld }, parseOptions);
   if (result.kind === "success") {
     return {
