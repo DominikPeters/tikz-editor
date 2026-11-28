@@ -569,7 +569,8 @@ function plotsOf(axis: AxisStatement): AddPlotStatement[] {
 export function plotTypeConversions(source: string, axis: AxisStatement, plot: AddPlotStatement, evaluation: AxisEvaluation | null): Array<ChartTypeConversion<PlotTypeId>> {
   const context = readAxisContext(source, axis, evaluation);
   const reading = readPlotType(source, plot);
-  const current = reading.kind === "type" && !context.barKey ? reading.type : null;
+  // In a `ybar` axis a plain plot is a bar (U5): shown as the current type, the switch is the axis'.
+  const current = reading.kind !== "type" ? null : !context.barKey ? reading.type : reading.type === "line" ? "bar" : null;
   return PLOT_TYPES.map(({ id, label }) => {
     if (current === id) return { kind: id, label, current: true, available: false, reason: "This is the plot's type." };
     const plan = planPlot(context, plot, id, false);

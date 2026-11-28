@@ -330,7 +330,7 @@ function buildTicksSection(axis: AxisStatement, id: string, text: TextField): In
       text("ytick", "Y ticks", AUTO_PLACEHOLDER),
       text("xticklabels", "X tick labels", AUTO_PLACEHOLDER),
       enumField("tick-label-size", "Label size", sub("tick label style", "font") ?? "", TICK_FONT_CHOICES, pgfplotsSubstyleKey("tick label style", "font")),
-      { kind: "color", id: "pgfplots-tick-label-color", label: "Label color", value: normalizeInspectorColorValue(tickColor), syntaxValue: tickColor, options: colorOptionsForValue(tickColor), write: write(id, pgfplotsSubstyleKey("tick label style", "color")) },
+      { kind: "color", id: "pgfplots-tick-label-color", label: "Label color", value: normalizeInspectorColorValue(tickColor ?? "black"), syntaxValue: tickColor, options: colorOptionsForValue(tickColor ?? "black"), write: write(id, pgfplotsSubstyleKey("tick label style", "color")) },
       enumField("xtick-label-rotation", "X rotation", sub("xticklabel style", "rotate") ?? "", ROTATION_CHOICES, pgfplotsSubstyleKey("xticklabel style", "rotate")),
       enumField("number-format", "Numbers", fixed, NUMBER_FORMAT_CHOICES, "/pgf/number format/fixed"),
       text("/pgf/number format/precision", "Precision", "2")
@@ -347,7 +347,9 @@ function buildGridStyleSection(axis: AxisStatement, id: string): InspectorSectio
   };
   const color = (style: string, label: string, idSuffix: string): InspectorProperty => {
     const value = readSubstyle(styleValue(style), "color");
-    return { kind: "color", id: `pgfplots-${idSuffix}`, label, value: normalizeInspectorColorValue(value), syntaxValue: value, options: colorOptionsForValue(value), write: write(id, pgfplotsSubstyleKey(style, "color")) };
+    // Unset: the colour `every axis grid` gives (thin, black!25).
+    const shown = value ?? "black!25";
+    return { kind: "color", id: `pgfplots-${idSuffix}`, label, value: normalizeInspectorColorValue(shown), syntaxValue: value, options: colorOptionsForValue(shown), write: write(id, pgfplotsSubstyleKey(style, "color")) };
   };
   const dash = readSubstyle(styleValue("grid style"), "dash") ?? "solid";
   return {

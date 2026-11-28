@@ -13,12 +13,12 @@
   },
   "template-bar": {
     "axis": "function- data+ scatter+ bar= stacked-bar+ area+ semilogy-",
-    "plot0": "line- scatter- smooth- step- comb- bar- area-"
+    "plot0": "line- scatter- smooth- step- comb- bar= area-"
   },
   "template-stacked-bar": {
     "axis": "function- data+ scatter+ bar+ stacked-bar= area+ semilogy-",
-    "plot0": "line- scatter- smooth- step- comb- bar- area-",
-    "plot1": "line- scatter- smooth- step- comb- bar- area-"
+    "plot0": "line- scatter- smooth- step- comb- bar= area-",
+    "plot1": "line- scatter- smooth- step- comb- bar= area-"
   },
   "template-area": {
     "axis": "function- data+ scatter- bar+ stacked-bar+ area= semilogy-",
@@ -35,8 +35,8 @@
   },
   "real-symbolic-bars": {
     "axis": "function- data+ scatter+ bar= stacked-bar+ area+ semilogy-",
-    "plot0": "line- scatter- smooth- step- comb- bar- area-",
-    "plot1": "line- scatter- smooth- step- comb- bar- area-"
+    "plot0": "line- scatter- smooth- step- comb- bar= area-",
+    "plot1": "line- scatter- smooth- step- comb- bar= area-"
   },
   "real-table": {
     "axis": "function- data= scatter+ bar+ stacked-bar+ area+ semilogy-",
