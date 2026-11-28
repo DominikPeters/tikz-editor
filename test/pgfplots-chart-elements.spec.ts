@@ -149,7 +149,7 @@ describe("chart elements: legend", () => {
     expect(run(styled, { kind: "setAxisElement", axisId: AXIS, element: "legend", visible: false }).kind).toBe("unsupported");
     const empty = picture("[xmin=0, xmax=1, ymin=0, ymax=1]", []);
     expect(run(empty, { kind: "setAxisElement", axisId: AXIS, element: "legend", visible: true }).kind).toBe("unsupported");
-    expect(readAxisElements(empty, axisIdOf(empty), evaluate(empty).scene.elements)?.legend).toEqual({ present: false, enabled: false, reason: "The axis has no plots to show in a legend." });
+    expect(readAxisElements(empty, axisIdOf(empty), evaluate(empty).scene.elements)?.legend).toMatchObject({ present: false, enabled: false, reason: expect.any(String) });
   });
 });
 

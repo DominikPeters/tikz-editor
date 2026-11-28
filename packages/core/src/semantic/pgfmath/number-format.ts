@@ -238,7 +238,7 @@ const MAX_STYLE_DEPTH = 20;
 
 function applyEntries(state: Mutable<PgfNumberFormat>, entries: readonly RawEntry[], diagnostics: PgfNumberFormatDiagnostic[], depth: number): void {
   if (depth > MAX_STYLE_DEPTH) {
-    diagnostics.push({ code: "invalid-value", message: "number format styles nest too deeply" });
+    diagnostics.push({ code: "invalid-value", message: "Number format styles nest too deeply." });
     return;
   }
   for (const entry of entries) applyEntry(state, entry, diagnostics, depth);
@@ -260,14 +260,14 @@ function applyEntry(state: Mutable<PgfNumberFormat>, entry: RawEntry, diagnostic
   let key = entry.key;
   if (key.startsWith("/")) {
     if (!key.startsWith(PGF_NUMBER_FORMAT_PATH)) {
-      diagnostics.push({ code: "unknown-key", key, message: `key \`${key}\` is outside /pgf/number format/` });
+      diagnostics.push({ code: "unknown-key", key, message: `Unknown number format key \`${key}\`.` });
       return;
     }
     key = key.slice(PGF_NUMBER_FORMAT_PATH.length);
   }
   const value = entry.value;
   const invalid = (what: string): void => {
-    diagnostics.push({ code: "invalid-value", key, message: `invalid value \`${value ?? ""}\` for /pgf/number format/${key}: ${what}` });
+    diagnostics.push({ code: "invalid-value", key, message: `Invalid value \`${value ?? ""}\` for \`${key}\`, ${what}.` });
   };
   const bool = (defaultValue: boolean | null): boolean | null => {
     if (value === null) {
@@ -348,7 +348,7 @@ function applyEntry(state: Mutable<PgfNumberFormat>, entry: RawEntry, diagnostic
     case "frac whole format/.code": {
       const match = /^\s*\\def\s*\\pgfmathresult\s*\{([\s\S]*)\}\s*$/u.exec(value ?? "");
       if (match) state.fracWholeFormat = match[1] ?? "";
-      else diagnostics.push({ code: "unsupported-key", key, message: "frac whole format/.code is supported only as \\def\\pgfmathresult{...}" });
+      else diagnostics.push({ code: "unsupported-key", key, message: "`frac whole format/.code` is supported only as `\\def\\pgfmathresult{...}`." });
       return;
     }
     case "frac denom": state.fracDenominator = (value ?? "").trim(); return;
@@ -408,10 +408,10 @@ function applyEntry(state: Mutable<PgfNumberFormat>, entry: RawEntry, diagnostic
       return;
     case "retain unit mantissa": setBool("retainUnitMantissa", true); return;
     case "implementation":
-      diagnostics.push({ code: "unsupported-key", key, message: "/pgf/number format/implementation is not supported" });
+      diagnostics.push({ code: "unsupported-key", key, message: "`/pgf/number format/implementation` is not supported." });
       return;
     default:
-      diagnostics.push({ code: "unknown-key", key, message: `unknown key /pgf/number format/${key}` });
+      diagnostics.push({ code: "unknown-key", key, message: `Unknown number format key \`${key}\`.` });
   }
 }
 
@@ -865,7 +865,7 @@ function integerPart(text: string, counta: number, ctx: Ctx, parts: PgfNumberPar
   if (count !== digits.length) {
     // PGF derives the group count from the exponent; if the digits disagree it
     // typesets stray tokens or loops forever. Group the digits actually present.
-    ctx.diagnostics.push({ code: "unsupported-input", message: `PGF's 1000-separator logic expects ${count} integer digits but got \`${digits}\`` });
+    ctx.diagnostics.push({ code: "unsupported-input", message: `Expected ${count} integer digits for the 1000 separator, got \`${digits}\`.` });
     count = digits.length;
   }
   const head = count % 3;
@@ -907,7 +907,7 @@ function displayStyle(float: PgfFloat, hasPeriod: boolean, ctx: Ctx): Render {
         if (key === "mantissa sep" || key === "mantisse sep") sep = entry.value ?? "";
         else if (key === "empty mantissa sep" || key === "empty mantisse sep") empty = entry.value ?? "";
         else if (key === "exponent") exp = entry.value ?? "";
-        else ctx.diagnostics.push({ code: "unknown-key", key: entry.key, message: `unknown key /pgf/number format/sci generic/${entry.key}` });
+        else ctx.diagnostics.push({ code: "unknown-key", key: entry.key, message: `Unknown key \`sci generic/${entry.key}\`.` });
       }
       mantissaSep = sep;
       emptyMantissa = empty;
@@ -1032,7 +1032,7 @@ function printRelative(float: PgfFloat, ctx: Ctx): Render {
   styled.fixedZerofill = false;
   styled.sciZerofill = false;
   if (styled.printer === "relative") {
-    ctx.diagnostics.push({ code: "invalid-value", key: "every relative", message: "The '/pgf/number format/every relative' style should set a valid display style" });
+    ctx.diagnostics.push({ code: "invalid-value", key: "every relative", message: "`every relative` must set a valid number style." });
     styled.printer = "std";
   }
   const inner: Ctx = { fmt: { ...styled, precision: 9999 }, originalPrecision: fmt.precision, diagnostics: ctx.diagnostics };

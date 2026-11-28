@@ -52,7 +52,7 @@ export const ARTICLE_10PT_LENGTHS: DocumentLengths = { textwidth: 345, textheigh
 /** The lengths of the document's class, or article 10pt with the reason it was assumed. */
 export function documentClassLengths(source: string): { lengths: DocumentLengths; assumption?: string } {
   const match = /\\documentclass\s*(?:\[([^\]]*)\])?\s*\{\s*([^{}\s]+)\s*\}/u.exec(stripComments(source.slice(0, 20000)));
-  if (!match) return { lengths: ARTICLE_10PT_LENGTHS, assumption: "no document class (a bare picture): LaTeX's article class at 10pt" };
+  if (!match) return { lengths: ARTICLE_10PT_LENGTHS, assumption: "there is no document class" };
   const options = (match[1] ?? "").split(",").map((o) => o.trim());
   const cls = match[2] ?? "";
   const size = options.find((o) => /^1[012]pt$/u.test(o)) ?? "10pt";
@@ -69,7 +69,7 @@ export function documentClassLengths(source: string): { lengths: DocumentLengths
   }
   if (cls === "amsart") return { lengths: { textwidth: 360, textheight: 584, linewidth: 360, columnwidth: 360, ...paper } };
   if (cls === "beamer") return { lengths: { textwidth: 307.28987, textheight: 269.14662, linewidth: 307.28987, columnwidth: 307.28987, paperwidth: 364.19536, paperheight: 273.14662 } };
-  return { lengths: ARTICLE_10PT_LENGTHS, assumption: `the document class \`${cls}\` is not one the editor knows: LaTeX's article class at 10pt` };
+  return { lengths: ARTICLE_10PT_LENGTHS, assumption: `the document class \`${cls}\` is unknown` };
 }
 
 function stripComments(text: string): string {

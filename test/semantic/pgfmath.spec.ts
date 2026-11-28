@@ -261,7 +261,7 @@ describe("semantic evaluator / pgfmath", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.severity).toBe("warning");
     expect(warnings[0]?.message).toContain("`200*100/1000`");
-    expect(warnings[0]?.message).toContain("Dimension too large");
+    expect(warnings[0]?.message).toContain("16383.99998");
     const path = elementsOfKind(result.scene.elements, "Path")[0];
     const lines = path?.commands.filter((command) => command.kind === "L") ?? [];
     expect(lines).toHaveLength(2);
@@ -276,9 +276,9 @@ describe("semantic evaluator / pgfmath", () => {
   \draw (0,0) -- (\small,0);
 \end{tikzpicture}`);
     // `\big` holds 20000, so the second statement reads a literal past the range as well.
-    expect(result.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.message.slice(0, 15)])).toEqual([
-      ["pgfmath-dimension-too-large", "`100*200` reach"],
-      ["pgfmath-dimension-too-large", "`20000/10000` r"]
+    expect(result.diagnostics.map((diagnostic) => [diagnostic.code, /^`[^`]*`/u.exec(diagnostic.message)?.[0]])).toEqual([
+      ["pgfmath-dimension-too-large", "`100*200`"],
+      ["pgfmath-dimension-too-large", "`20000/10000`"]
     ]);
     const line = elementsOfKind(result.scene.elements, "Path")[0]?.commands.find((command) => command.kind === "L");
     if (line?.kind === "L") expect(Number(line.to.x)).toBeCloseTo(2 * 28.45274, 2);

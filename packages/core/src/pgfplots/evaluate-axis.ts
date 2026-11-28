@@ -172,11 +172,7 @@ function compatBelow(compat: string, majorLimit: number, minorLimit: number): bo
 }
 
 function compatBelow111(compat: string): boolean {
-  if (compat === "newest") return false;
-  const match = /^(\d+)\.(\d+)/u.exec(compat);
-  if (!match) return true;
-  const major = Number(match[1]); const minor = Number(match[2]);
-  return major < 1 || (major === 1 && minor < 11);
+  return compatBelow(compat, 1, 11);
 }
 
 function p(x: number, y: number): WorldPoint {
@@ -287,7 +283,7 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
     // coordinate transformation of its own drawing (box and tick lengths, not text).
     host.diagnostics.push({
       severity: "warning", code: "unsupported-pgfplots-every-picture-transform",
-      message: "A transformation in `every picture` is applied twice to a pgfplots axis (once inside the axis, to its coordinates); this editor applies it once, so the axis is drawn too large.",
+      message: "Transformations in `every picture` are not supported in axes.",
       span: source.beginSpan
     });
   }
@@ -429,7 +425,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   if (usedLengths.size > 0 && lengthsEnv.assumption) {
     const values: Record<string, number> = { ...lengthsEnv.lengths };
     const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(values[name])}pt`).join(", ");
-    diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Document lengths are assumed: ${named} (${lengthsEnv.assumption}).`, span: axis.optionsSpan ?? axis.beginSpan });
+    diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Assuming ${named} because ${lengthsEnv.assumption}.`, span: axis.optionsSpan ?? axis.beginSpan });
   }
   // Behaviour AB: settings in the body, with the groups they sit in. The axis
   // and the drawing of the plots use the state at `\end{axis}` (top-level
@@ -442,7 +438,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const limits = list.entries.filter((entry) => entry.kind !== "unknown" && LIMIT_KEYS.has(entry.key.replace(/^\/pgfplots\//u, "").trim()));
     for (const entry of limits) {
       // AB5: TeX stops with "Sorry, you can't change `xmin' in this context".
-      diagnostics.push({ severity: "error", code: "pgfplots-limit-in-axis-body", message: `pgfplots cannot change \`${(entry.kind === "unknown" ? entry.raw : entry.key).replace(/^\/pgfplots\//u, "").trim()}\` inside the axis body (TeX stops with an error); give it to the axis options instead. It is ignored here.`, span: entry.span });
+      diagnostics.push({ severity: "error", code: "pgfplots-limit-in-axis-body", message: `\`${(entry.kind === "unknown" ? entry.raw : entry.key).replace(/^\/pgfplots\//u, "").trim()}\` cannot be set inside the axis body.`, span: entry.span });
     }
     const entries = list.entries.filter((entry) => !limits.includes(entry));
     bodySettingsAll.push({ index, path: bodyGroups[index] ?? [], list: entries.length === list.entries.length ? list : { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` } });
@@ -461,7 +457,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const isPgfplots = (entry: OptionEntry) => entry.kind !== "unknown" && (entry.key.trim().startsWith("/pgfplots/") || DOCUMENTED_PGFPLOTS_KEYS.has(entry.key.trim()));
     const make = (keep: readonly OptionEntry[]): OptionListAst | null => (keep.length === 0 || !list ? null : { ...list, entries: [...keep], raw: `[${keep.map((entry) => entry.raw).join(",")}]` });
     const background = entries.find(isBackground);
-    if (background) diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-scope-background-layer", message: "In TeX, plots in a scope `on background layer` inside an axis are painted before the axis, unclipped; this editor paints them with the other plots.", span: background.span });
+    if (background) diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-scope-background-layer", message: "`on background layer` inside an axis is not supported.", span: background.span });
     split = {
       plot: make(entries.filter((entry) => !isTransform(entry) && !isBackground(entry))),
       transform: make(entries.filter(isTransform)),
@@ -479,15 +475,11 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   if (compat === undefined || compatBelow111(compat)) {
     // Behaviour Z9 (manual preliminaries.tex, `compat/labels`, `compat/pgfpoint substitution`;
     // measured on the corpus: pre-1.3 documents differ visibly, 1.3-1.10 ones rarely).
-    const pre13 = compat === undefined || compatBelow(compat, 1, 3);
-    const what = pre13
-      ? "axis labels are placed at a fixed offset from the axis instead of next to the tick labels (they move by a few points), and coordinates without a coordinate system in TikZ commands inside the axis are not `axis cs`"
-      : "coordinates without a coordinate system in TikZ commands inside the axis are not `axis cs`; most other output is the same";
     diagnostics.push({
       severity: "warning", code: "pgfplots-compat",
       message: compat === undefined
-        ? `No \`\\pgfplotsset{compat=…}\` is in effect, so pgfplots uses its pre-1.3 settings: ${what}. This editor renders compat=1.18 semantics: add \`\\pgfplotsset{compat=1.18}\` to the preamble to match.`
-        : `\`compat=${compat}\` is older than 1.11: ${what}. This editor renders compat=1.18 semantics; set \`compat=1.18\` to match.`,
+        ? "No pgfplots `compat` level is set. Add `\\pgfplotsset{compat=1.18}` to the preamble."
+        : `pgfplots \`compat=${compat}\` is older than 1.11. Set \`compat=1.18\`.`,
       span: axis.beginSpan
     });
   }
@@ -497,11 +489,11 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const logAxis = model.x.mode === "log" || model.y.mode === "log";
   if (logAxis) markFeature("pgfplots_log_axes", "supported");
   const warned = new Set<string>();
-  dedupeWarnings(diagnostics, model.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
+  dedupeWarnings(diagnostics, model.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet.`);
   for (const bad of model.invalid) {
-    diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
+    diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`.`, span: bad.span });
   }
-  dedupeWarnings(diagnostics, (model.ignoredBodyKeys ?? []).filter((use) => !isBodyTextKey(use.key)), warned, "pgfplots-body-tikz-key", (key) => `TikZ key \`${key}\` set with \`\\pgfplotsset\` inside the axis body changes neither the plots nor the axis lines in TeX; it is ignored. Give it to the \`\\addplot\` or the axis options.`);
+  dedupeWarnings(diagnostics, (model.ignoredBodyKeys ?? []).filter((use) => !isBodyTextKey(use.key)), warned, "pgfplots-body-tikz-key", (key) => `TikZ key \`${key}\` has no effect in the axis body.`);
   // AB1/AB2: the axis model a plot is resolved with: drawing keys from the final
   // state, keys read at the `\addplot` from the settings in effect there.
   const capturedModels = new Map<string, PlotAxisModel>();
@@ -535,16 +527,16 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   // The axis scope: TikZ keys given to the axis (`thick`, `font=\small`, `xshift`).
   const axisTikz = model.tikzOptions.filter((use) => !use.key.startsWith("/pgf/"));
   const axisScope = resolveStyle(context, parent, parent.style, axisTikz.length > 0 ? [keyUsesToOptionList(axisTikz)] : [], axis.id, axis.span);
-  dedupeWarnings(diagnostics, axisScope.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: axis.optionsSpan ?? axis.beginSpan })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
+  dedupeWarnings(diagnostics, axisScope.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: axis.optionsSpan ?? axis.beginSpan })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is not supported.`);
   const axisFrame = childFrame(parent, { style: axisScope.style, transform: axisScope.transform });
   const everyMarkOption = axisTikz.find((use) => /^every mark\/\.(?:append )?style$/u.test(use.key.trim()));
   if (everyMarkOption) {
     // Behaviour AC3 (c-every-mark-axis-scale): given to the axis, `every mark` loses the cycle list's mark fill and its scale in TeX.
-    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-axis-every-mark", message: "`every mark` given to the axis options changes the marks differently in TeX (their fill becomes the line colour and a `scale` is lost); this editor applies it as TikZ would. Set it with `\\tikzset` or `mark options` instead.", span: everyMarkOption.origin.span });
+    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-axis-every-mark", message: "`every mark` in the axis options is not supported. Use `mark options`.", span: everyMarkOption.origin.span });
   }
   if (axisFrame.everyNodeStyles.some((layer) => layer.options.entries.some((entry) => entry.kind !== "unknown" && entry.key.trim() === "draw" && (entry.kind === "flag" || entry.valueRaw.trim() !== "none")))) {
     // Behaviour AC4 (pre-every-node-draw): framed text moves the axis labels and the bounding box by the frame's outer sep in TeX.
-    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-every-node-draw", message: "`every node` with `draw` frames every text of the axis; this editor draws the frames but does not move the axis labels and the bounding box by the frames' line width as TeX does (up to about 1pt).", span: axis.beginSpan });
+    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-every-node-draw", message: "`every node` with `draw` is not fully supported in axes.", span: axis.beginSpan });
   }
   // `declare function` and `trig format` given to the axis hold for everything in it.
   const pgfmathScopeKeys = (uses: readonly PgfplotsKeyUse[]) => uses.filter((use) => /^(?:\/pgf\/)?(?:declare function|trig format)$/u.test(use.key)).map((use) => ({ ...use, key: use.key.replace(/^\/pgf\//u, "") }));
@@ -578,8 +570,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   plotStatements.forEach(({ statement, index: bodyIndex }) => {
     const plot = plotModelAt(bodyIndex, statement, cycleCounter);
     if (!plot.forget) cycleCounter += 1;
-    dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
-    for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
+    dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet.`);
+    for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`.`, span: bad.span });
     const bindings = bindingsOf(statement);
     const mathEnvironment = { ...plotMathEnvironment(axisFrame, plot), ...(model.x.mode === "log" ? { logSamples: true } : {}) };
     const io = {
@@ -602,15 +594,15 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       // `\addplot<2->`: pgfplots reads `<` as the plot input and stops (behaviour Y5).
       const overlaySpec = /^\s*\+?\s*</u.test(context.source.slice(statement.commandSpan.to, statement.commandSpan.to + 8));
       diagnostics.push(overlaySpec
-        ? { severity: "error", code: "pgfplots-addplot-overlay-spec", message: "pgfplots does not take an overlay specification after `\\addplot` (TeX stops: \"the supplied plot command is unknown\"); write `\\only<…>{\\addplot …;}` instead.", span: statement.commandSpan }
-        : { severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn: ${data.reason} is not supported yet.`, span: data.span });
+        ? { severity: "error", code: "pgfplots-addplot-overlay-spec", message: "`\\addplot` does not take an overlay specification. Use `\\only<…>{\\addplot …;}`.", span: statement.commandSpan }
+        : { severity: "warning", code: "unsupported-pgfplots-plot", message: `This plot is not drawn. Unsupported: ${data.reason}.`, span: data.span });
       plots.push({ model: plot, points: null });
       return;
     }
     markFeature(input === "coordinates" ? "pgfplots_addplot_coordinates" : input === "table" ? "pgfplots_addplot_table" : "pgfplots_addplot_expression", "supported");
     const unhandled = statement.trailingPath ? unsupportedTrailingItem(statement.trailingPath) : null;
     if (unhandled) {
-      diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: `Path operation \`${unhandled.raw.trim()}\` after an \`\\addplot\` input is not drawn yet (\`\\closedcycle\`, \`-- (…)\`, \`-- cycle\`, \`node[pos=…]\` and \`coordinate[pos=…]\` are).`, span: unhandled.span });
+      diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-trailing-path", message: `Path operation \`${unhandled.raw.trim()}\` after \`\\addplot\` is not drawn yet.`, span: unhandled.span });
     }
     for (const note of data.notes ?? []) {
       if (warned.has(note.code)) continue;
@@ -649,10 +641,10 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   // X2: error bar ends count for the limits (E20 `err-limits`).
   const errorEnds = plots.flatMap((plot) => (plot.points && plot.model.errorBars ? [errorBarSegments(plot.points, plot.model.errorBars).flatMap((bar) => [{ x: bar.to.x, y: bar.to.y, jump: false }])] : []));
   const limitsModel = internalLimitsModel(model);
-  for (const bad of limitsModel.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `\`${bad.key}=${String(bad.value)}\` has no logarithm on a log axis; it is ignored.`, span: axis.optionsSpan ?? axis.beginSpan });
+  for (const bad of limitsModel.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `\`${bad.key}=${String(bad.value)}\` is not valid on a log axis.`, span: axis.optionsSpan ?? axis.beginSpan });
   const limitsResult = computeLimits(limitsModel.model, [...drawn, ...errorEnds], boxSizeWithoutLimits(model));
   if (limitsResult.kind === "inverted") {
-    diagnostics.push({ severity: "error", code: "pgfplots-inverted-limits", message: `${limitsResult.axis}min (${String(limitsResult.min)}) is larger than ${limitsResult.axis}max (${String(limitsResult.max)}); pgfplots cannot draw this axis.`, span: axis.optionsSpan ?? axis.beginSpan });
+    diagnostics.push({ severity: "error", code: "pgfplots-inverted-limits", message: `\`${limitsResult.axis}min=${String(limitsResult.min)}\` is larger than \`${limitsResult.axis}max=${String(limitsResult.max)}\`.`, span: axis.optionsSpan ?? axis.beginSpan });
     return [];
   }
   let limits = limitsResult.limits;
@@ -683,9 +675,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const result = model[letter].mode === "log" ? computeLogTicks(tickInput) : computeTicks(tickInput);
     const extra = result.kind === "ok" ? computeExtraTicks(tickInput) : [];
     numberFormat = before;
-    if (extra === null) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:extra ${letter} ticks`, message: "Cannot read the extra tick list; no extra ticks are drawn.", span: axis.optionsSpan ?? axis.beginSpan });
+    if (extra === null) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:extra ${letter} ticks`, message: "Cannot read the extra tick list.", span: axis.optionsSpan ?? axis.beginSpan });
     if (result.kind === "invalid") {
-      diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${letter}tick`, message: `Cannot read the tick list \`${result.what}\`; no ticks are drawn.`, span: axis.optionsSpan ?? axis.beginSpan });
+      diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${letter}tick`, message: `Cannot read the tick list \`${result.what}\`.`, span: axis.optionsSpan ?? axis.beginSpan });
       return { major: [], minor: [], scaleExponent: 0, labelled: false };
     }
     return extra && extra.length > 0 ? { ...result.ticks, extra } : result.ticks;
@@ -817,7 +809,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const plotBaseStyles = plots.map((plot) => {
     if (!plot.points) return null;
     const resolved = resolveStyle(context, axisFrame, drawBase(axisScope.style), plot.model.pathKeys.length > 0 ? [keyUsesToOptionList(plot.model.pathKeys)] : [], plot.model.statement.id, plot.model.statement.span);
-    dedupeWarnings(diagnostics, resolved.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: plot.model.statement.optionsSpan ?? plot.model.statement.span })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
+    dedupeWarnings(diagnostics, resolved.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: plot.model.statement.optionsSpan ?? plot.model.statement.span })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is not supported.`);
     return resolved.style;
   });
   const plotStyles = plotBaseStyles.map((style, index) => (style ? withEveryPath(style, plots[index]?.model.statement.id ?? axis.id, plots[index]?.model.statement.span ?? axis.span) : null));
@@ -826,7 +818,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const mark = plotModel.mark;
     if (mark === null) return null;
     if (!isPlotMarkName(mark)) {
-      if (warn) diagnostics.push({ severity: "warning", code: `unknown-plot-mark:${mark}`, message: `PGF defines no plot mark named \`${mark}\`; no marks are drawn.`, span: plotModel.statement.span });
+      if (warn) diagnostics.push({ severity: "warning", code: `unknown-plot-mark:${mark}`, message: `Unknown plot mark \`${mark}\`.`, span: plotModel.statement.span });
       return null;
     }
     const markBase: ResolvedStyle = { ...base, stroke: base.stroke ?? base.textColor ?? "black", fill: base.fill ?? base.textColor ?? "black", drawExplicit: true, markerStart: null, markerEnd: null };
@@ -864,7 +856,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       const item = axis.body[bodyIndex];
       const plot = item?.kind === "AddPlot" ? plots.find((entry) => entry.model.statement.id === item.id) : undefined;
       if (transform && plot && (plot.model.bar || plot.model.errorBars)) {
-        diagnostics.push({ severity: "warning", code: "pgfplots-scope-transform-bars", message: "A transformation of a scope around a bar plot or a plot with error bars is drawn as for a line plot (moved twice, marks once); this case was not measured against TeX.", span: item?.span ?? axis.span });
+        diagnostics.push({ severity: "warning", code: "pgfplots-scope-transform-bars", message: "Scope transformations around bar plots or error bars may be drawn inaccurately.", span: item?.span ?? axis.span });
       }
     }
     scopeTransforms.set(bodyIndex, transform);
@@ -1006,7 +998,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const parentInverse = inverseMatrix(parent.transform) ?? parent.transform;
   const atWorld = model.at ? evaluateTransformCoordinateInFrame(model.at, context, parent) : null;
   const at = atWorld ? applyMatrix(parentInverse, atWorld) : null;
-  if (model.at && !at) diagnostics.push({ severity: "warning", code: "invalid-pgfplots-value:at", message: `Cannot read \`at=${model.at}\`; the axis is placed at the origin.`, span: axis.optionsSpan ?? axis.beginSpan });
+  if (model.at && !at) diagnostics.push({ severity: "warning", code: "invalid-pgfplots-value:at", message: `Cannot read \`at=${model.at}\`.`, span: axis.optionsSpan ?? axis.beginSpan });
   const baseLayout = computeAxisLayout({
     model, limits, ticks, labelStyles, lineWidth: axisScope.style.lineWidth,
     tickLineWidth: (letter, kind) => elementStyle(tickStyleNames(letter, kind)).lineWidth,

@@ -800,7 +800,7 @@ async function renderBeamerFrameStep(params: {
       : null;
     if (!lengths && /\\(?:textwidth|linewidth|columnwidth)\b/u.test(source.slice(root.span.from, root.span.to))) {
       diagnostics.push({ severity: "warning", code: "beamer-picture-length-unresolved", span: placedSpan,
-        message: "The width of the environment around this picture is not known; \\textwidth and \\linewidth in it are the frame's text width." });
+        message: "The width around this picture is not known. \\textwidth is the frame's text width here." });
     }
     const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
       ambientText: references.ambientTextAt?.(ambientOffset) ?? "",

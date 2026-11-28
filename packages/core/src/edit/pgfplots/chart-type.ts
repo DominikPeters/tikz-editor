@@ -80,7 +80,8 @@ export type ChartTypeEdit = { span: Span; text: string };
 
 export type ChartTypeConversion<K extends string> =
   | { kind: K; label: string; current: boolean; available: true; edits: ChartTypeEdit[] }
-  | { kind: K; label: string; current: boolean; available: false; reason: string };
+  | { kind: K; label: string; current: true; available: false; reason?: undefined }
+  | { kind: K; label: string; current: false; available: false; reason: string };
 
 /** The key that makes each per-plot type (flags; `area` is `fill` plus `\closedcycle`). */
 const TYPE_FLAG: Record<Exclude<PlotTypeId, "line" | "area">, string> = {
@@ -162,6 +163,12 @@ const TYPE_FLAG_ENTRIES: ReadonlyArray<[Exclude<PlotTypeId, "line" | "area">, st
 
 const code = (text: string) => `\`${text}\``;
 
+/** The refusal for an option the switch does not know: the option as written, or its key when that is long. */
+function unsupportedOption(raw: string, key?: string, scope = ""): string {
+  const shown = raw.length > 24 && key !== undefined ? key.trim() : raw;
+  return `Unsupported ${scope}option: ${code(shown)}.`;
+}
+
 // ---------------------------------------------------------------------------
 // Reading the plot's type.
 
@@ -171,40 +178,40 @@ type PlotReading =
 
 /** The type a plot's own options and trailing path give it, or why the switch leaves it alone. */
 function readPlotType(source: string, plot: AddPlotStatement): PlotReading {
-  if (plot.dimension === 3) return { kind: "refused", reason: "Type switching is for 2D plots; this is an `\\addplot3`." };
-  if (plot.extraOptions?.length || plot.legacyPlot) return { kind: "refused", reason: "The plot has more than one option list; edit its type in the source." };
+  if (plot.dimension === 3) return { kind: "refused", reason: "Not available for 3D plots." };
+  if (plot.extraOptions?.length || plot.legacyPlot) return { kind: "refused", reason: "Plot has more than one option list." };
   const entries = plot.options?.entries ?? [];
   const found = new Set<PlotTypeId>();
   let fillFlag = false;
   for (const entry of entries) {
     if (entry.raw.trim().length === 0) continue;
     const kv = keyed(entry);
-    if (!kv) return { kind: "refused", reason: `The plot option ${code(entry.raw.trim())} is not one the type switch knows.` };
+    if (!kv) return { kind: "refused", reason: unsupportedOption(entry.raw.trim()) };
     const key = plain(kv.key);
     const typeOf = TYPE_FLAG_ENTRIES.find(([, flag]) => flag === key)?.[0];
     if (typeOf) {
-      if (!isOnFlag(kv)) return { kind: "refused", reason: `The plot option ${code(kv.raw.trim())} is not one the type switch knows.` };
+      if (!isOnFlag(kv)) return { kind: "refused", reason: unsupportedOption(kv.raw.trim()) };
       found.add(typeOf);
       continue;
     }
     if (key === "fill") {
-      if (kv.kind === "kv") return { kind: "refused", reason: `The plot has its own fill colour (${code(kv.raw.trim())}); a type switch would drop or misuse it.` };
+      if (kv.kind === "kv") return { kind: "refused", reason: unsupportedOption(kv.raw.trim()) };
       fillFlag = true;
       continue;
     }
     if (key === "fill opacity") continue;
-    if (OTHER_TYPE_KEYS.has(key)) return { kind: "refused", reason: `The plot is drawn with ${code(kv.raw.trim())}, a type the switch does not change.` };
+    if (OTHER_TYPE_KEYS.has(key)) return { kind: "refused", reason: unsupportedOption(kv.raw.trim(), kv.key) };
     if (STYLE_KEYS.has(key) || DATA_KEYS.has(key)) continue;
     if (kv.kind === "flag" && isLikelyBareColorOption(kv.raw.trim())) continue;
-    return { kind: "refused", reason: `The plot option ${code(kv.raw.trim())} is not one the type switch knows; its effect on another type was not checked.` };
+    return { kind: "refused", reason: unsupportedOption(kv.raw.trim(), kv.key) };
   }
   const trailing = plot.trailingPath ? source.slice(plot.trailingPath.span.from, plot.trailingPath.span.to).trim() : "";
-  if (trailing.length > 0 && trailing !== "\\closedcycle") return { kind: "refused", reason: "The plot continues with a path after its data; edit its type in the source." };
+  if (trailing.length > 0 && trailing !== "\\closedcycle") return { kind: "refused", reason: "Plot has a path after its data." };
   if (trailing === "\\closedcycle" || fillFlag) {
-    if (!(trailing === "\\closedcycle" && fillFlag) || found.size > 0) return { kind: "refused", reason: "The plot is filled or closed in a way the type switch does not recognise (an area is `fill` with `\\closedcycle`)." };
+    if (!(trailing === "\\closedcycle" && fillFlag) || found.size > 0) return { kind: "refused", reason: "Plot is filled in an unsupported way." };
     return { kind: "type", type: "area", entries };
   }
-  if (found.size > 1) return { kind: "refused", reason: `The plot combines ${TYPE_FLAG_ENTRIES.filter(([type]) => found.has(type)).map(([, flag]) => code(flag)).join(" and ")}; edit its type in the source.` };
+  if (found.size > 1) return { kind: "refused", reason: `Plot combines ${TYPE_FLAG_ENTRIES.filter(([type]) => found.has(type)).map(([, flag]) => code(flag)).join(" and ")}.` };
   const [type = "line"] = [...found];
   return { kind: "type", type, entries };
 }
@@ -240,13 +247,13 @@ function readAxisContext(source: string, axis: AxisStatement, evaluation: AxisEv
     const kv = keyed(entry);
     const key = kv ? plain(kv.key) : "";
     if (kv && AXIS_BAR_KEYS.has(key)) {
-      if (barKey) blocked ??= "The axis has more than one bar style; edit its type in the source.";
+      if (barKey) blocked ??= "Axis has more than one bar style.";
       barKey = kv;
-      if ((key === "ybar" || key === "ybar stacked") && kv.kind === "kv") blocked ??= `The axis option ${code(kv.raw.trim())} sets a bar gap; the switch writes only plain ${code(key)}.`;
-      if (key !== "ybar" && key !== "ybar stacked") blocked ??= `The axis is drawn with ${code(kv.raw.trim())}, a type the switch does not change.`;
+      if ((key === "ybar" || key === "ybar stacked") && kv.kind === "kv") blocked ??= unsupportedOption(kv.raw.trim(), kv.key, "axis ");
+      if (key !== "ybar" && key !== "ybar stacked") blocked ??= unsupportedOption(kv.raw.trim(), kv.key, "axis ");
       continue;
     }
-    if (!kv || !SAFE_AXIS_KEYS.has(key)) blocked ??= `The axis option ${code(entry.raw.trim())} is not one the type switch knows; it may set the plots' type.`;
+    if (!kv || !SAFE_AXIS_KEYS.has(key)) blocked ??= unsupportedOption(entry.raw.trim(), kv?.key, "axis ");
   }
   // Settings in the body reach plots when the axis ends (AB2): only known-safe keys are allowed there.
   for (const item of axis.body) {
@@ -257,26 +264,26 @@ function readAxisContext(source: string, axis: AxisStatement, evaluation: AxisEv
       const kv = keyed(entry);
       const key = kv ? plain(kv.key) : "";
       if (!kv || !(SAFE_AXIS_KEYS.has(key) || DATA_KEYS.has(key)) || AXIS_BAR_KEYS.has(key)) {
-        blocked ??= `The axis body sets ${code(entry.raw.trim())} (behaviour: such settings reach the plots when the axis ends); edit the type in the source.`;
+        blocked ??= `Axis body sets ${code(entry.raw.trim().length > 24 && kv ? kv.key.trim() : entry.raw.trim())}.`;
       }
     }
   }
-  if (!evaluation) blocked ??= "The axis has not been drawn yet.";
+  if (!evaluation) blocked ??= "Axis is not drawn yet.";
   else {
     const model = evaluation.model;
     // Plot keys given to the whole axis, the plot styles and the cycle list: read from the evaluated
     // axis, so styles from the preamble or a `\pgfplotsset` before the picture count too.
     const plotDefault = model.plotDefaults.find((use) => use.key.trim().length > 0 && !DATA_KEYS.has(plain(use.key)));
-    if (plotDefault) blocked ??= `The axis gives every plot ${code(plotDefault.key)}; change the type in the source.`;
+    if (plotDefault) blocked ??= `Axis sets ${code(plotDefault.key)} for every plot.`;
     for (const style of ["every axis plot", "every axis plot post"]) {
       const lists = model.styles.get(style) ?? [];
       const touched = lists.some((list) => list.entries.some((entry) => entry.raw.trim().length > 0));
-      if (touched) blocked ??= `${code(style)} is set for this axis; its keys may set the plots' type.`;
+      if (touched) blocked ??= `Axis sets ${code(style)}.`;
     }
     const cycleIsDefault = model.cycleList.length === COLOR_CYCLE_LIST.length && model.cycleList.every((entry, index) => entry === COLOR_CYCLE_LIST[index]);
     if (!cycleIsDefault && !barKey) {
       const typed = model.cycleList.find((entry) => /only marks|smooth|const plot|comb|bar|fill|stack/u.test(entry));
-      if (typed !== undefined) blocked ??= `The cycle list sets ${code(typed)}; a type switch would fight it.`;
+      if (typed !== undefined) blocked ??= "Cycle list sets the plot type.";
     }
   }
   const logY = evaluation ? evaluation.model.y.mode === "log" : axis.environment === "semilogyaxis" || axis.environment === "loglogaxis";
@@ -462,22 +469,27 @@ function typeEntries(type: PlotTypeId, entries: readonly OptionEntry[]): OptionE
   });
 }
 
+/**
+ * Reasons about one plot start with "Plot "; the axis-level list names the
+ * plot there ("Plot 2 has no marks.") when the axis has several.
+ */
+const NO_MARKS = "Plot has no marks.";
+
 /** Whether the plot draws marks after the switch to scatter (else `only marks` would draw nothing). */
 function scatterMarks(context: AxisContext, plot: AddPlotStatement, entries: readonly OptionEntry[]): string | null {
   for (const entry of entries) {
     const kv = keyed(entry);
     if (!kv) continue;
     const key = plain(kv.key);
-    if (key === "no markers" || key === "no marks" || (key === "mark" && valueOf(kv) === "none")) {
-      return `The plot has ${code(kv.raw.trim())}: as a scatter plot it would draw nothing. Choose a Mark first.`;
-    }
+    if (key === "no markers" || key === "no marks" || (key === "mark" && valueOf(kv) === "none")) return NO_MARKS;
   }
   if (entries.some((entry) => { const kv = keyed(entry); return kv && plain(kv.key) === "mark"; })) return null;
-  if (!plot.increment && plot.options) return "`\\addplot[…]` without `+` ignores the cycle list and has no marks: as a scatter plot it would draw nothing. Choose a Mark first.";
+  // `\addplot[…]` without `+` ignores the cycle list and has no marks (G2).
+  if (!plot.increment && plot.options) return NO_MARKS;
   const cycle = context.cycleWithoutBars;
   const index = context.axis.body.filter((item) => item.kind === "AddPlot").indexOf(plot);
   const entry = cycle.length > 0 ? cycle[(index + (context.evaluation?.model.cycleListShift ?? 0)) % cycle.length] ?? "" : "";
-  if (!/mark=(?!none)/u.test(entry)) return "The cycle list gives this plot no marks: as a scatter plot it would draw nothing. Choose a Mark first.";
+  if (!/mark=(?!none)/u.test(entry)) return NO_MARKS;
   return null;
 }
 
@@ -507,47 +519,47 @@ type PlotPlan = { edits: ChartTypeEdit[] } | { reason: string };
 /** The edits that turn one plot into `target`, or why not. `axisLevel`: the axis switch handles an axis bar style. */
 function planPlot(context: AxisContext, plot: AddPlotStatement, target: PlotTypeId, axisLevel: boolean): PlotPlan {
   if (context.blocked) return { reason: context.blocked };
-  if (context.scopedPlots.has(plot.id)) return { reason: "The plot is inside a `scope` whose options apply to it (behaviour AC5); edit its type in the source." };
-  if (!axisLevel && context.barKey) return { reason: `The axis makes its plots bars (${code(context.barKey.raw.trim())}): change the Chart type of the axis.` };
+  if (context.scopedPlots.has(plot.id)) return { reason: "Plot is inside a scope with options." };
+  if (!axisLevel && context.barKey) return { reason: "Set by the axis Chart type." };
   const reading = readPlotType(context.source, plot);
   if (reading.kind === "refused") return { reason: reading.reason };
   const input = plot.input.kind;
-  if (input === "other") return { reason: "The plot's input is not coordinates, a table or an expression." };
+  if (input === "other") return { reason: "Unsupported plot input." };
   if (plot.input.kind === "table" && (plot.input.options?.entries ?? []).some((entry) => { const kv = keyed(entry); return !kv || !TABLE_KEYS.has(plain(kv.key)); })) {
-    return { reason: "The table has options the type switch does not know." };
+    return { reason: "Unsupported table options." };
   }
   if (reading.type === target) return { edits: [] };
   const data = readPlotData(context, plot);
   if (target === "step" || target === "comb") {
-    if (input === "expression" || input === "parametric") return { reason: `${target === "step" ? "Step" : "Comb"} plots draw data points; this plot samples ${input === "expression" ? "an expression" : "a curve"}.` };
+    if (input === "expression" || input === "parametric") return { reason: "For data plots only." };
   }
   if (target === "comb" && !context.logY) {
     // Checked against LuaLaTeX (E26): with 0 outside the y range TeX starts the comb lines at the
     // axis' internal origin, which the editor does not reproduce; with 0 inside they match.
     const limits = context.evaluation?.layout.limits;
-    if (!limits || !(limits.ymin <= 0 && limits.ymax >= 0)) return { reason: "The y range does not include 0: TeX starts comb lines elsewhere than the editor draws them there. Set Y min to 0 or below first." };
+    if (!limits || !(limits.ymin <= 0 && limits.ymax >= 0)) return { reason: "Y range must include 0." };
   }
   if (target === "bar" && !axisLevel && legendDrawn(context)) {
     // E26: a `ybar` plot in a line chart with a legend: TeX lays out its legend row differently
     // from the editor (1.5pt to 3pt), so it is not offered there.
-    return { reason: "In a chart with a legend TeX lays out a single bar plot (its legend entry and bar) differently from the editor; not offered here. Bar Chart on the axis is." };
+    return { reason: "Not available in a chart with a legend." };
   }
   if (target === "scatter") {
-    if (input === "expression") return { reason: "A scatter of an expression's samples is not offered: make it a data plot first." };
+    if (input === "expression") return { reason: "For data plots only." };
     const marks = scatterMarks(context, plot, reading.entries);
     if (marks) return { reason: marks };
   }
   if (target === "area" || target === "bar") {
-    if (context.logY) return { reason: `${target === "area" ? "Areas" : "Bars"} start at y = 0, which a log axis does not have.` };
-    if (input === "parametric") return { reason: `A parametric curve has no y over ordered x to ${target === "area" ? "fill down to the axis" : "draw as bars"}.` };
+    if (context.logY) return { reason: "Not available on a log axis." };
+    if (input === "parametric") return { reason: "Not available for parametric plots." };
   }
   if (target === "area" && data.ordered !== true) {
-    return { reason: data.ordered === false ? "The x values are not in order: `\\closedcycle` would fill a tangle." : "The editor cannot see this plot's x values to check their order." };
+    return { reason: data.ordered === false ? "X values must be in order." : "Plot data cannot be read." };
   }
   if (target === "bar") {
-    if (data.count === null) return { reason: "The editor cannot see this plot's points to check they fit as bars." };
-    if (data.count > MAX_BAR_POINTS) return { reason: `${String(data.count)} points: bars 10pt wide would overlap. Use fewer points (at most ${String(MAX_BAR_POINTS)}).` };
-    if (data.xs && new Set(data.xs).size !== data.xs.length) return { reason: "Some x values repeat: their bars would be drawn over each other." };
+    if (data.count === null) return { reason: "Plot data cannot be read." };
+    if (data.count > MAX_BAR_POINTS) return { reason: `Bar plots allow at most ${String(MAX_BAR_POINTS)} points.` };
+    if (data.xs && new Set(data.xs).size !== data.xs.length) return { reason: "X values must not repeat." };
   }
   const remove = typeEntries(reading.type, reading.entries);
   const has = (key: string) => reading.entries.some((entry) => { const kv = keyed(entry); return kv !== null && plain(kv.key) === plain(key.split("=")[0] ?? key); });
@@ -572,10 +584,15 @@ export function plotTypeConversions(source: string, axis: AxisStatement, plot: A
   // In a `ybar` axis a plain plot is a bar (U5): shown as the current type, the switch is the axis'.
   const current = reading.kind !== "type" ? null : !context.barKey ? reading.type : reading.type === "line" ? "bar" : null;
   return PLOT_TYPES.map(({ id, label }) => {
-    if (current === id) return { kind: id, label, current: true, available: false, reason: "This is the plot's type." };
+    if (current === id) return { kind: id, label, current: true, available: false };
     const plan = planPlot(context, plot, id, false);
     return "reason" in plan ? { kind: id, label, current: false, available: false, reason: plan.reason } : { kind: id, label, current: false, available: true, edits: plan.edits };
   });
+}
+
+/** A reason about one plot ("Plot has no marks.") with the plot's number when the axis has several. */
+function namePlot(reason: string, plots: readonly AddPlotStatement[], plot: AddPlotStatement): string {
+  return plots.length > 1 && reason.startsWith("Plot ") ? `Plot ${String(plots.indexOf(plot) + 1)} ${reason.slice("Plot ".length)}` : reason;
 }
 
 /** What kind of chart an axis is, by the same type keys (null: mixed or not one of the kinds). */
@@ -614,41 +631,41 @@ export function chartTypeConversions(source: string, axis: AxisStatement, evalua
   const plots = plotsOf(axis);
   return CHART_KINDS.map(({ id, label }): ChartTypeConversion<ChartKindId> => {
     const refuse = (reason: string): ChartTypeConversion<ChartKindId> => ({ kind: id, label, current: false, available: false, reason });
-    if (current === id) return { kind: id, label, current: true, available: false, reason: "This is the chart's type." };
-    if (id === "semilogy") return refuse("Log scales are set with X scale and Y scale in the Axes section.");
-    if (plots.length === 0) return refuse("The axis has no plots.");
+    if (current === id) return { kind: id, label, current: true, available: false };
+    if (id === "semilogy") return refuse("Use X scale and Y scale.");
+    if (plots.length === 0) return refuse("Axis has no plots.");
     if (context.blocked) return refuse(context.blocked);
     const expressions = plots.filter((plot) => plot.input.kind === "expression").length;
-    if (id === "function" && expressions < plots.length) return refuse("Function Plot is the line chart of expression plots; this chart plots data, so its line chart is Data Plot.");
-    if (id === "data" && expressions === plots.length) return refuse("Data Plot is the line chart of data; this chart plots expressions, so its line chart is Function Plot.");
-    if ((id === "function" || id === "data") && context.logY) return refuse("This is a line chart on a log axis; the scale is the Y scale field in the Axes section.");
+    if (id === "function" && expressions < plots.length) return refuse("For function plots only.");
+    if (id === "data" && expressions === plots.length) return refuse("For data plots only.");
+    if ((id === "function" || id === "data") && context.logY) return refuse("Use X scale and Y scale.");
     // The static part of the rule (CHART_KINDS `convertibleFrom`).
     const kind = CHART_KINDS.find((candidate) => candidate.id === id);
     if (current !== null && kind?.convertibleFrom && !kind.convertibleFrom(current)) {
-      return refuse(`A ${CHART_KINDS.find((candidate) => candidate.id === current)?.label ?? current} does not switch to ${label}.`);
+      return refuse(`Not available for a ${CHART_KINDS.find((candidate) => candidate.id === current)?.label ?? current}.`);
     }
     const plotTarget: PlotTypeId = id === "scatter" ? "scatter" : id === "area" ? "area" : "line";
     const edits: ChartTypeEdit[] = [];
     for (const plot of plots) {
       const plan = planPlot(context, plot, plotTarget, true);
-      if ("reason" in plan) return refuse(plots.length > 1 ? `Plot ${String(plots.indexOf(plot) + 1)}: ${plan.reason}` : plan.reason);
+      if ("reason" in plan) return refuse(namePlot(plan.reason, plots, plot));
       // Bars: the plot's data must suit bars too (checked as a per-plot bar switch would).
       if (id === "bar" || id === "stacked-bar") {
         // E26: plots with their own marks in a bar chart with a legend: TeX sizes the legend rows
         // differently from the editor (up to 3.3pt), so not offered.
         const reading = readPlotType(source, plot);
         if (legendDrawn(context) && reading.kind === "type" && drawsMarks(context, plot, reading.entries, [])) {
-          return refuse(`${plots.length > 1 ? `Plot ${String(plots.indexOf(plot) + 1)} has` : "The plot has"} its own mark: TeX lays out the legend of a bar chart with marks differently from the editor. Set its Mark to None first.`);
+          return refuse(namePlot("Plot has marks.", plots, plot));
         }
         const check = planPlot({ ...context, barKey: null }, plot, "bar", true);
-        if ("reason" in check) return refuse(plots.length > 1 ? `Plot ${String(plots.indexOf(plot) + 1)}: ${check.reason}` : check.reason);
+        if ("reason" in check) return refuse(namePlot(check.reason, plots, plot));
       }
       edits.push(...plan.edits);
     }
     if (id === "stacked-bar") {
       // U6: stacking adds coordinate by coordinate; plots with different x values do not stack as bars.
       const xs = plots.map((plot) => readPlotData(context, plot).xs?.join("\u0000") ?? null);
-      if (xs.includes(null) || new Set(xs).size > 1) return refuse("Stacked bars need every plot to have the same x values.");
+      if (xs.includes(null) || new Set(xs).size > 1) return refuse("Plots must share the same x values.");
     }
     edits.push(...axisBarEdits(context, id === "bar" ? "ybar" : id === "stacked-bar" ? "ybar stacked" : null));
     return { kind: id, label, current: false, available: true, edits };
@@ -691,10 +708,10 @@ export function applyChangeChartTypeAction(source: string, elementId: string, ki
   const parsed = parseTikzForEdit(source, parseOptions);
   const elements = evaluateTikzFigure(parsed.figure, source).scene.elements;
   const conversions = readChartTypeConversions(source, elementId, elements, parseOptions);
-  if (!conversions) return { kind: "unsupported", reason: "Select an axis or a plot to change its type." };
+  if (!conversions) return { kind: "unsupported", reason: "Select an axis or a plot." };
   const option = (conversions.options as Array<ChartTypeConversion<string>>).find((candidate) => candidate.kind === kind);
   if (!option) return { kind: "unsupported", reason: `Unknown chart type ${kind}.` };
-  if (!option.available) return { kind: "unsupported", reason: option.reason };
+  if (!option.available) return { kind: "unsupported", reason: option.reason ?? "Already this type." };
   const axisId = owningAxisId(elementId) ?? elementId;
   const replacements: Replacement[] = option.edits.map((edit) => ({ span: edit.span, fragment: edit.text.length > 0 ? userText(edit.text, "inspector-value") : EMPTY_FRAGMENT }));
   const applied = applyReplacements(source, replacements);

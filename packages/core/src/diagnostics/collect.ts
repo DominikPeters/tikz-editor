@@ -166,7 +166,7 @@ function collectAxisDelimiterDiagnostics(node: SyntaxNode, source: string, diagn
   if (!end) {
     diagnostics.push({
       severity: "error",
-      message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`; add it before the picture or scope ends.`,
+      message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`.`,
       span: begin ? { from: begin.from, to: begin.to } : { from: node.from, to: node.from },
       code: "unterminated-environment"
     });
@@ -176,7 +176,7 @@ function collectAxisDelimiterDiagnostics(node: SyntaxNode, source: string, diagn
   if (endName !== name) {
     diagnostics.push({
       severity: "error",
-      message: `\`\\begin{${name}}\` ends with \`\\end{${endName}}\`; use \`\\end{${name}}\`.`,
+      message: `\`\\begin{${name}}\` ends with \`\\end{${endName}}\`.`,
       span: { from: end.from, to: end.to },
       code: "mismatched-environment-end"
     });
@@ -225,7 +225,7 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
       const name = begin?.[1] ?? "";
       diagnostics.push({
         severity: "error",
-        message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`; add it before the enclosing environment ends.`,
+        message: `\`\\begin{${name}}\` has no matching \`\\end{${name}}\`.`,
         span: { from: node.from, to: node.from + (begin?.[0].length ?? node.to - node.from) },
         code: "unterminated-environment"
       });
@@ -280,7 +280,7 @@ export function collectStructuralDiagnostics(envNode: SyntaxNode, source: string
         if (preview === "{" || preview === "}") return;
         diagnostics.push({
           severity: "warning",
-          message: `Stray text \`${preview}\` in the axis draws nothing; remove it.`,
+          message: `Stray text \`${preview}\` in the axis draws nothing.`,
           span: { from: node.from, to: node.to },
           code: "stray-token"
         });

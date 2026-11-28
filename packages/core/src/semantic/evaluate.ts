@@ -1135,8 +1135,8 @@ function enterPgfEnvironment(
       severity: "error",
       code: "pgf-environment-unterminated",
       message: environment.endName
-        ? `\`${environment.name}\` is ended by \`${environment.endName}\`; LaTeX stops with a mismatched environment error.`
-        : `\`${environment.name}\` has no end; LaTeX stops with an error. The editor reads the rest of the picture as its body.`,
+        ? `\`${environment.name}\` is ended by \`${environment.endName}\`.`
+        : `\`${environment.name}\` has no matching end.`,
       span
     });
   }
@@ -1151,7 +1151,7 @@ function enterPgfEnvironment(
         diagnostics.push({
           severity: "error",
           code: "pgf-layer-missing-name",
-          message: "`{pgfonlayer}` needs the layer's name: `\\begin{pgfonlayer}{background}`. The editor draws the content on the current layer.",
+          message: "`{pgfonlayer}` needs a layer name, as in `\\begin{pgfonlayer}{background}`.",
           span
         });
         return effect;
@@ -1175,7 +1175,7 @@ function enterPgfEnvironment(
       diagnostics.push({
         severity: "warning",
         code: "pgf-transparency-group-approximate",
-        message: "`{pgftransparencygroup}`: the editor draws the content as ordinary statements, not as one transparency group. This differs from TeX where translucent parts of the content overlap or a fill opacity set outside the group applies to it.",
+        message: "`{pgftransparencygroup}` is drawn as ordinary content, not as one group.",
         span
       });
       return effect;
@@ -1186,7 +1186,7 @@ function enterPgfEnvironment(
         ? readLowLevelTransform(environment)
         : readViewBoxTransform(environment, resolved.transform);
       if (!canvas) {
-        unsupported(`\`{${environment.name}}\` with these arguments is not supported; the editor draws its content without the transformation.`);
+        unsupported(`\`{${environment.name}}\` with these arguments is not supported.`);
         return effect;
       }
       markFeature(featureUsage, "pgf_environments", "supported");
@@ -1194,7 +1194,7 @@ function enterPgfEnvironment(
       diagnostics.push({
         severity: "warning",
         code: "pgf-canvas-transform-approximate",
-        message: `\`{${environment.name}}\` installs a canvas transformation; the editor applies it to the content's coordinates only, so line widths and text are not scaled with it as in TeX.`,
+        message: `Line widths and text in \`{${environment.name}}\` are not transformed.`,
         span
       });
       return effect;
@@ -1670,7 +1670,7 @@ function evaluateStatement(
     diagnostics.push({
       severity: "warning",
       code: "unsupported-environment",
-      message: `Unsupported environment \`${statement.environment.name}\`; this editor will skip it and draw nothing for it.`,
+      message: `Environment \`${statement.environment.name}\` is not supported.`,
       span: statement.environment.beginSpan
     });
     return [];
@@ -1694,7 +1694,7 @@ function evaluateStatement(
     diagnostics.push({
       severity: "warning",
       code: "pgfplots-command-outside-axis",
-      message: `\`\\${axisCommand[1] ?? "addplot"}\` is only defined inside an axis environment (\`\\begin{axis}…\\end{axis}\`); TeX stops with an undefined control sequence here, and the editor draws nothing for it.`,
+      message: `\`\\${axisCommand[1] ?? "addplot"}\` is only allowed inside an axis.`,
       span: statement.span
     });
     return [];
@@ -2187,7 +2187,7 @@ function pgfMathDimensionTooLargeDiagnostic(expression: string, span: { from: nu
   return {
     severity: "warning",
     code: "pgfmath-dimension-too-large",
-    message: `\`${expression}\` reaches a value beyond ±16383.99998, the largest TeX dimension: the editor draws the computed value, but TeX will fail with "Dimension too large".`,
+    message: `\`${expression}\` exceeds the largest TeX dimension, ±16383.99998.`,
     span
   };
 }

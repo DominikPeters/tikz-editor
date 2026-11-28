@@ -486,7 +486,7 @@ function analyzeMinimalFigureDependencies(
   for (const file of externalFiles) {
     diagnostics.push({
       code: "standalone-export-external-file",
-      message: `The picture reads the data file '${file.name}', which the export references by name but does not include: the exported document compiles only next to that file.`,
+      message: `The export does not include the data file '${file.name}'.`,
       severity: "warning",
       span: file.span,
       symbolKind: "file",

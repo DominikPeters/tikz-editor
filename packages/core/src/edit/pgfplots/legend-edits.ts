@@ -172,7 +172,7 @@ export function legendEntriesForDeletedPlots(source: string, axis: AxisStatement
       continue;
     }
     const container = containerOf(source, axis, entry, cache);
-    if (!container || origin.span === null) return { unsupported: "The legend entry of the plot is not written as a list item in this axis (a `\\legend` with `...`, or `legend entries` set outside the axis options); delete it there." };
+    if (!container || origin.span === null) return { unsupported: "The legend entry is not written in this axis." };
     const set = lists.get(container) ?? new Set<number>();
     set.add(origin.index);
     lists.set(container, set);
@@ -201,7 +201,7 @@ export function removeAllLegendEntries(source: string, axis: AxisStatement, asso
   }
   const option = legendEntriesOption(axis);
   if (option) replacements.push({ span: optionRemovalSpan(source, axis, option), fragment: EMPTY_FRAGMENT });
-  if (replacements.length === 0) return { unsupported: "The legend entries are set outside this axis (in a style); remove them there." };
+  if (replacements.length === 0) return { unsupported: "The legend entries are set in a style." };
   return { replacements, notes: [] };
 }
 
@@ -219,7 +219,7 @@ function asItem(source: string, entry: LegendEntryText): TikzFragment {
   return userText(/[,=]/u.test(raw) || raw !== raw.trim() ? `{${raw}}` : raw, "source-editor");
 }
 
-const EMPTY_ENTRY_NOTE = "A plot without a legend entry now comes before plots with one: an empty `\\addlegendentry{}` keeps the others attached to their plots, and draws its image without text.";
+const EMPTY_ENTRY_NOTE = "Added an empty `\\addlegendentry{}` to keep the other entries in place.";
 
 /** The indentation of the line `at` is on. */
 function indentAt(source: string, at: number): string {
@@ -313,7 +313,7 @@ export function reorderPlotsWithLegend(source: string, axis: AxisStatement, asso
   for (let k = 0; k < entries.length; k += 1) {
     const slotEntry = entries[k];
     const origin = slotEntry?.origin;
-    if (!slotEntry || !origin) return { unsupported: "A legend entry of this axis is not written where it can be edited." };
+    if (!slotEntry || !origin) return { unsupported: "A legend entry cannot be edited here." };
     const content = contentFor(k);
     if (origin.kind === "addlegendentry") {
       lastStatement = statementOf(axis, origin.statementId);
@@ -326,7 +326,7 @@ export function reorderPlotsWithLegend(source: string, axis: AxisStatement, asso
       continue;
     }
     const container = containerOf(source, axis, slotEntry, cache);
-    if (!container || origin.span === null) return { unsupported: "The legend entries of this axis are not written as list items here (a `\\legend` with `...`, or `legend entries` set outside the axis options)." };
+    if (!container || origin.span === null) return { unsupported: "The legend entries are not written in this axis." };
     lastList = container; lastStatement = null;
     const list = listContents.get(container) ?? container.items.map((item) => sourceSlice(source, item));
     const moved = content.kind === "entry" ? entries[content.index] : undefined;
@@ -370,7 +370,7 @@ export function legendAssociationFor(source: string, axisId: string, parseOption
   return known ?? readLegendAssociation(source, axisId, parseOptions);
 }
 
-const PAD_NOTE = "Plots before this one have no legend entry: empty `\\addlegendentry{}` statements keep the new entry with its plot, and draw their images without text.";
+const PAD_NOTE = "Added empty `\\addlegendentry{}` lines for the plots before it.";
 
 function itemText(entry: LegendEntryText | null, raw: string, original: string | null): string {
   const text = `${entry?.options ? `[${entry.options}]` : ""}${raw}`;
@@ -397,17 +397,17 @@ export function setPlotLegendEntry(source: string, axis: AxisStatement, associat
   if (info.entry !== null) {
     const entry = entries[info.entry];
     const origin = entry?.origin;
-    if (!entry || !origin) return { unsupported: "The legend entry of this plot is not written where it can be edited." };
+    if (!entry || !origin) return { unsupported: "The legend entry cannot be edited here." };
     const isLast = info.entry === entries.length - 1;
     if (origin.kind === "addlegendentry") {
       const statement = statementOf(axis, origin.statementId);
       if (!statement) return { unsupported: "The legend entry was not found." };
       if (text.length > 0) return { replacements: [{ span: statement.textSpan, fragment: typed(text) }], notes: [] };
       if (isLast) return { replacements: [{ span: statementLineSpan(source, statement.span), fragment: EMPTY_FRAGMENT }], notes: [] };
-      return { replacements: [{ span: statement.textSpan, fragment: EMPTY_FRAGMENT }], notes: ["Plots after this one have legend entries: the entry is left empty (`\\addlegendentry{}`) so they keep theirs; its image is drawn without text."] };
+      return { replacements: [{ span: statement.textSpan, fragment: EMPTY_FRAGMENT }], notes: ["Left an empty `\\addlegendentry{}` to keep the later entries in place."] };
     }
     const container = containerOf(source, axis, entry, cache);
-    if (!container || origin.span === null) return { unsupported: "The legend entry of this plot is not written as a list item in this axis (a `\\legend` with `...`, or `legend entries` set outside the axis options)." };
+    if (!container || origin.span === null) return { unsupported: "The legend entry is not written in this axis." };
     const original = source.slice(origin.span.from, origin.span.to);
     if (text.length > 0) return { replacements: [{ span: origin.span, fragment: typed(itemText(entry, text, original)) }], notes: [] };
     const lastInList = origin.index === container.items.length - 1 && isLast;
@@ -427,13 +427,13 @@ export function setPlotLegendEntry(source: string, axis: AxisStatement, associat
   }
   if (lastOrigin && lastOrigin.kind !== "addlegendentry") {
     const container = containerOf(source, axis, last, cache);
-    if (!container || lastOrigin.span === null) return { unsupported: "The legend entries of this axis are not written as list items here (a `\\legend` with `...`, or `legend entries` set outside the axis options)." };
+    if (!container || lastOrigin.span === null) return { unsupported: "The legend entries are not written in this axis." };
     const contents = container.items.map((item) => sourceSlice(source, item));
     for (let j = entries.length; j < k; j += 1) contents.push(EMPTY_FRAGMENT);
     contents.push(typed(itemText(null, text, null)));
     return { replacements: [rebuildContainer(source, container, contents)], notes: [] };
   }
-  if (!lastOrigin) return { unsupported: "The legend entries of this axis are not written where they can be edited." };
+  if (!lastOrigin) return { unsupported: "The legend entries cannot be edited here." };
   // `\addlegendentry` form: after the plot, or after the last entry when that comes later in the body.
   const anchor = lastOrigin.span.from > plot.span.to ? lastOrigin.span : plot.span;
   const pads = Math.max(0, k - entries.length);

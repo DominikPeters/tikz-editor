@@ -57,7 +57,11 @@ describe("the conversion matrix (each offered switch checked against LuaLaTeX, E
     expect(actual).toEqual(EXPECTED[id]);
     // Every refusal says why.
     for (const [, elementId] of targets(source)) {
-      for (const option of conversions(source, elementId)) if (!option.available) expect(option.reason.length).toBeGreaterThan(10);
+      for (const option of conversions(source, elementId)) {
+        if (option.available) continue;
+        if (option.current) expect(option.reason).toBeUndefined();
+        else expect(option.reason.length).toBeGreaterThan(10);
+      }
     }
   });
 

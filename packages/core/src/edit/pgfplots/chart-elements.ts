@@ -114,7 +114,7 @@ export function readAxisElements(
   const legend: AxisElementState = present
     ? { present, enabled: true }
     : images === 0
-      ? { present, enabled: false, reason: "The axis has no plots to show in a legend." }
+      ? { present, enabled: false, reason: "The axis has no plots." }
       : { present, enabled: true };
   return { title: text("title"), xlabel: text("xlabel"), ylabel: text("ylabel"), legend };
 }
@@ -146,10 +146,10 @@ export function applySetAxisElementAction(
 ): EditActionResultLike {
   const parsed = parseTikzForEdit(source, parseOptions);
   const axis = findAxisStatement(parsed.figure.body, axisId);
-  if (!axis) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!axis) return { kind: "unsupported", reason: "The axis was not found." };
   if (element === "legend") return visible ? showLegend(source, axis, parseOptions) : hideLegend(source, axis, parseOptions);
   const target = resolveAxisTarget(source, axisId, parseOptions);
-  if (!target) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!target) return { kind: "unsupported", reason: "The axis was not found." };
   const existing = lastKv(axis.options?.entries, element);
   const writeKey = existing ? normalizeOptionKey(existing.key) : element;
   const partId = `${axisId}:${element}`;
@@ -185,10 +185,10 @@ function indentAt(source: string, at: number): string {
 
 function showLegend(source: string, axis: AxisStatement, parseOptions: EditParseOptions): EditActionResultLike {
   const association = readLegendAssociation(source, axis.id, parseOptions);
-  if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+  if (!association) return { kind: "unsupported", reason: "Legend entries could not be read." };
   if (legendDrawn(association)) return result(source, null, axis.id);
-  if (association.images.length === 0) return { kind: "unsupported", reason: "The axis has no plots to show in a legend." };
-  if (association.form !== "none") return { kind: "unsupported", reason: "The legend entries of this axis are empty; type them in each plot's Legend entry field." };
+  if (association.images.length === 0) return { kind: "unsupported", reason: "The axis has no plots." };
+  if (association.form !== "none") return { kind: "unsupported", reason: "The legend entries are empty." };
   // One `\addlegendentry` after each image, in the form the manual introduces first.
   const replacements: Replacement[] = legendImageStatements(axis, association).map((statement, index) => ({
     span: { from: statement.span.to, to: statement.span.to },
@@ -200,13 +200,13 @@ function showLegend(source: string, axis: AxisStatement, parseOptions: EditParse
 
 function hideLegend(source: string, axis: AxisStatement, parseOptions: EditParseOptions): EditActionResultLike {
   const association = readLegendAssociation(source, axis.id, parseOptions);
-  if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+  if (!association) return { kind: "unsupported", reason: "Legend entries could not be read." };
   if (!legendDrawn(association) && association.form === "none") return result(source, null, axis.id);
   const edit = removeAllLegendEntries(source, axis, association);
   if ("unsupported" in edit) return { kind: "unsupported", reason: edit.unsupported };
   const applied = applyReplacements(source, edit.replacements);
   const after = readLegendAssociation(applied.source, axis.id, parseOptions);
-  if (legendDrawn(after)) return { kind: "unsupported", reason: "The legend entries are set outside this axis (in a style); remove them there." };
+  if (legendDrawn(after)) return { kind: "unsupported", reason: "The legend entries are set in a style." };
   return { kind: "success", newSource: applied.source, patches: applied.patches, changedSourceIds: [axis.id] };
 }
 
@@ -285,7 +285,7 @@ function copiedOptions(source: string, plot: AddPlotStatement): TikzFragment {
  */
 export function applyInsertAxisPlotAction(source: string, axisId: string, parseOptions: EditParseOptions = {}): EditActionResultLike {
   const axis = findAxisStatement(parseTikzForEdit(source, parseOptions).figure.body, axisId);
-  if (!axis) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!axis) return { kind: "unsupported", reason: "The axis was not found." };
   const plots = axis.body.filter((item): item is AddPlotStatement => item.kind === "AddPlot");
   const last = plots.at(-1);
   let statement: TikzFragment;
@@ -299,7 +299,7 @@ export function applyInsertAxisPlotAction(source: string, axisId: string, parseO
     let data: TikzFragment | null = null;
     if (last.input.kind === "coordinates") data = nextCoordinates(source, last);
     else if (last.input.kind === "expression") data = tikz`{x}`;
-    if (!data) return { kind: "unsupported", reason: "New plots copy the last plot's data form; this works for coordinates and expression plots." };
+    if (!data) return { kind: "unsupported", reason: "The last plot must use coordinates or an expression." };
     const trailing = last.trailingPath ? tikz` ${sourceSlice(source, last.trailingPath.span)}` : EMPTY_FRAGMENT;
     const command = sourceSlice(source, last.commandSpan);
     statement = tikz`${command}${copiedOptions(source, last)} ${data}${trailing};`;

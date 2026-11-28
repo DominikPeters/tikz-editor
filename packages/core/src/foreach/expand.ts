@@ -402,7 +402,7 @@ function expandAxisForeachStatement(
     context.diagnostics.push({
       severity: "warning",
       code: "pgfplots-foreach-late-variable",
-      message: "Inside an axis, pgfplots evaluates plot options and TikZ statements after the loop has ended, so TeX stops here with an undefined control sequence. Use `\\pgfplotsinvokeforeach{list}{… #1 …}` instead; the editor draws each iteration.",
+      message: "Use `\\pgfplotsinvokeforeach` instead of `\\foreach` inside an axis.",
       span: statement.span
     });
   };

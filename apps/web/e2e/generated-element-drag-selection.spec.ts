@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { canvasViewport, expectSourceCanvasConsistency, gotoApp, readSelectedSourceIds, readSource, resetStorageBeforeNavigation, setCanvasTransform, setSource, waitForHitRegions } from "./helpers";
+import { TREE_CHILD_MOVE_BLOCK_REASON } from "../../../packages/core/src/edit/tree-child-placement";
 
 // Elements that TikZ generates from one statement item (a pic, graph nodes,
 // matrix cells, tree children, a decorated path): after a drag they stay
@@ -85,7 +86,7 @@ test("an arrow-key nudge leaves a selected tree child in place", async ({ page }
   if (await page.getByTestId("canvas-text-edit-textarea").isVisible()) await page.keyboard.press("Escape");
   await canvasViewport(page).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByTestId("canvas-warning-message")).toContainText("Tree children are placed by the tree layout");
+  await expect(page.getByTestId("canvas-warning-message")).toContainText(TREE_CHILD_MOVE_BLOCK_REASON);
   expect(await readSource(page)).toBe(source);
   await expect.poll(() => readSelectedSourceIds(page)).toEqual(selected);
 });

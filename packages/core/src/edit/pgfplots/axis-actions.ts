@@ -110,9 +110,9 @@ export function applyMoveAxisAction(
   geometry?: EditGeometrySession
 ): EditActionResultLike {
   const target = resolveAxisTarget(source, axisId, parseOptions);
-  if (!target) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!target) return { kind: "unsupported", reason: "The axis was not found." };
   const info = readAxisEditInfo(sceneElements(source, parseOptions, geometry), axisId);
-  if (!info) return { kind: "unsupported", reason: "The axis has no rendered geometry to move (is it drawn?)." };
+  if (!info) return { kind: "unsupported", reason: "The axis is not drawn yet." };
   const localDelta = frameInverseLinear(info, delta);
   if (!localDelta) return { kind: "unsupported", reason: "Cannot invert the axis frame." };
   if (Math.abs(localDelta.x) < 1e-9 && Math.abs(localDelta.y) < 1e-9) {
@@ -160,15 +160,15 @@ export function applyResizeAxisAction(
 ): EditActionResultLike {
   const axisId = action.elementId;
   const target = resolveAxisTarget(source, axisId, parseOptions);
-  if (!target) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!target) return { kind: "unsupported", reason: "The axis was not found." };
   const info = readAxisEditInfo(sceneElements(source, parseOptions, geometry), axisId);
-  if (!info) return { kind: "unsupported", reason: "The axis has no rendered geometry to resize." };
+  if (!info) return { kind: "unsupported", reason: "The axis is not drawn yet." };
   if (!isAxisAligned(info)) return { kind: "unsupported", reason: "Resizing a rotated or mirrored axis is not supported." };
   const role = action.role;
   const affectsX = role.includes("left") || role.includes("right");
   const affectsY = role.includes("top") || role.includes("bottom");
   if ((affectsX && info.size.xUnit !== undefined) || (affectsY && info.size.yUnit !== undefined)) {
-    return { kind: "unsupported", reason: "This axis is sized by unit vectors (`x=`/`y=`); change them in the inspector." };
+    return { kind: "unsupported", reason: "This axis is sized by `x=` and `y=`." };
   }
   const outer: Box = info.bbox;
   const reference = action.referenceBounds ? referenceToLocal(info, action.referenceBounds) ?? outer : outer;
@@ -260,9 +260,9 @@ export function applyMoveLegendAction(
   geometry?: EditGeometrySession
 ): EditActionResultLike {
   const target = resolveAxisTarget(source, axisId, parseOptions);
-  if (!target) return { kind: "unsupported", reason: `Axis ${axisId} was not found.` };
+  if (!target) return { kind: "unsupported", reason: "The axis was not found." };
   const info = readAxisEditInfo(sceneElements(source, parseOptions, geometry), axisId);
-  if (!info?.legend) return { kind: "unsupported", reason: "The axis draws no legend to move." };
+  if (!info?.legend) return { kind: "unsupported", reason: "The axis has no legend." };
   const localDelta = frameInverseLinear(info, delta);
   if (!localDelta) return { kind: "unsupported", reason: "Cannot invert the axis frame." };
   const { x0, y0, x1, y1 } = info.box;
@@ -351,11 +351,11 @@ export function applyReorderPlotsAction(
   // A plot moved into or out of a scope would take that scope's options (behaviour AC5): refused.
   const scopes = axisScopePaths(axis);
   if (order.some((id, slot) => next[slot] !== id && scopes.get(next[slot] ?? "") !== scopes.get(id))) {
-    return { kind: "unsupported", reason: "This would move a plot into or out of a `scope`, whose options would then change it; move it in the source instead." };
+    return { kind: "unsupported", reason: "A plot cannot move into or out of a scope." };
   }
   // Legend entries move with their plots, by the renderer's association (legend-edits.ts).
   const association = readLegendAssociation(source, axis.id, parseOptions);
-  if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+  if (!association) return { kind: "unsupported", reason: "Legend entries could not be read." };
   const edit = reorderPlotsWithLegend(source, axis, association, order, next);
   if ("unsupported" in edit) return { kind: "unsupported", reason: edit.unsupported };
   const applied = applyReplacements(source, edit.replacements);
@@ -384,7 +384,7 @@ export function applyDeletePlotPointAction(
   const plot = findCoordinatesPlot(source, plotId, parseOptions);
   if (!handle || plot?.input.kind !== "coordinates") return { kind: "unsupported", reason: "Choose a data point of a coordinates plot." };
   const point = plot.input.points.find((candidate) => candidate.coordinateSpan.from === handle.sourceRef.sourceSpan.from && candidate.coordinateSpan.to === handle.sourceRef.sourceSpan.to);
-  if (!point) return { kind: "unsupported", reason: "The data point was not found in the source." };
+  if (!point) return { kind: "unsupported", reason: "The data point was not found." };
   let from = point.span.from;
   while (from > plot.input.bodySpan.from && /[ \t]/u.test(source[from - 1] ?? "")) from -= 1;
   let to = point.span.to;

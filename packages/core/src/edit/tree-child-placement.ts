@@ -7,7 +7,7 @@
 // so moving or arranging one refuses rather than rewriting the child.
 
 export const TREE_CHILD_MOVE_BLOCK_REASON =
-  "Tree children are placed by the tree layout and cannot be moved directly. Move the tree root, or change level distance, sibling distance or grow.";
+  "Tree children follow the tree layout and cannot be moved.";
 
 export function isTreeChildSourceId(sourceId: string): boolean {
   return sourceId.includes(":tree-child:");

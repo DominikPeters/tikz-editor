@@ -130,7 +130,7 @@ function deleteAxisDescriptions(source: string, ids: readonly string[], parseOpt
     patches.push(rewritten.patch);
     changed.push(parsedId.axisId);
   }
-  if (patches.length === 0) return { kind: "unsupported", reason: "The selected axis description is not written in the axis options." };
+  if (patches.length === 0) return { kind: "unsupported", reason: "This label is not written in the axis options." };
   return { kind: "success", newSource: current, patches, selectedSourceIds: [], changedSourceIds: changed };
 }
 

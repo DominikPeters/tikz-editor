@@ -48,7 +48,7 @@ function chartTypeProperty(source: string, elementId: string, elements: readonly
     kind: "enum", id: `pgfplots-${list.scope === "axis" ? "chart" : "plot"}-type`, label,
     value: current?.kind ?? "",
     options: [
-      ...(current ? [] : [{ value: "", label: "Mixed", disabled: true, reason: "The chart is not one of these types (its plots differ, or it uses a type the switch does not change)." }]),
+      ...(current ? [] : [{ value: "", label: "Mixed", disabled: true, reason: "Not one of these types." }]),
       ...options.map((option) => (option.available || option.current ? { value: option.kind, label: option.label } : { value: option.kind, label: option.label, disabled: true, reason: option.reason }))
     ],
     write: write(elementId, PGFPLOTS_CHART_TYPE_KEY, anyAvailable, anyAvailable ? undefined : reason)
@@ -184,7 +184,7 @@ function elementOfKey(key: string): AxisElementKind | null {
 }
 
 const ELEMENT_NOTES: Partial<Record<AxisElementKind, string>> = {
-  legend: "pgfplots draws a legend when the axis has legend entries: showing it adds one per plot, hiding it removes them (Undo brings them back)."
+  legend: "Adds or removes the legend entries."
 };
 
 /** One-click add/remove of the title, the axis labels and the legend, with the grid choice. */
@@ -509,7 +509,7 @@ export function applyPgfplotsSetProperty(
       return { kind: "success", newSource: updated.source, patches: [{ oldSpan: plot.input.expressionSpan, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [axisId] };
     }
     const association = readLegendAssociation(source, axis.id, parseOptions);
-    if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+    if (!association) return { kind: "unsupported", reason: "Legend entries could not be read." };
     const edit = setPlotLegendEntry(source, axis, association, plot.id, action.value);
     if ("unsupported" in edit) return { kind: "unsupported", reason: edit.unsupported };
     if (edit.replacements.length === 0) return { kind: "unsupported", reason: "setProperty would not change the source." };
@@ -539,7 +539,7 @@ export function applyPgfplotsSetProperty(
     const listed = (resolved.target.options?.entries ?? []).filter((candidate) => candidate.raw.trim().length > 0);
     const index = listed.findIndex((candidate) => candidate.raw.trim().toLowerCase() === NUMBER_FORMAT_FIXED);
     const entry = listed[index];
-    if (!entry) return { kind: "unsupported", reason: "The number format is set in a way this field cannot change; edit it in the source." };
+    if (!entry) return { kind: "unsupported", reason: "Number format is set elsewhere. Edit it in Source." };
     const next = listed[index + 1];
     const previous = listed[index - 1];
     // The entry with one separating comma (a comment between entries stays).

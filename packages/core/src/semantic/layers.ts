@@ -92,7 +92,7 @@ export function enterLayer(
     diagnostics.push({
       severity: "error",
       code: "pgf-layer-undeclared",
-      message: `Layer \`${name}\` is not declared; PGF stops with "the requested layer '${name}' could not be found". Declare it with \`\\pgfdeclarelayer{${name}}\` and list it in \`\\pgfsetlayers\`. The editor draws the content on the current layer.`,
+      message: `Layer \`${name}\` is not declared.`,
       span
     });
     return { layer: frame.layer, switched: false, declared: false, clipChain: frame.clipChain };
@@ -105,7 +105,7 @@ export function enterLayer(
     diagnostics.push({
       severity: "warning",
       code: "pgf-layer-main-lost",
-      message: "Content put on the `main` layer from another layer is lost: PGF cannot add to `main` with `{pgfonlayer}` there (the main layer's box is rebuilt around it). The editor does not draw it.",
+      message: "Content put on the `main` layer from another layer is lost.",
       span
     });
     return { layer: LOST_LAYER, switched: true, declared: true, clipChain: [] };
@@ -114,7 +114,7 @@ export function enterLayer(
     diagnostics.push({
       severity: "error",
       code: "pgf-layer-not-listed",
-      message: `Layer \`${name}\` is not part of the layer list (\`\\pgfsetlayers{${effectiveLayerList(context).join(",")}}\`); PGF reports an error here and paints the content only if a later \`\\pgfsetlayers\` in the picture lists the layer.`,
+      message: `Layer \`${name}\` is not in \`\\pgfsetlayers{${effectiveLayerList(context).join(",")}}\`.`,
       span
     });
   }
@@ -193,7 +193,7 @@ export function finalizeLayers(
       diagnostics.push({
         severity: "warning",
         code: "pgf-layer-not-painted",
-        message: `Layer \`${layer}\` is not in the picture's layer list (\`\\pgfsetlayers{${finalList.join(",")}}\`), so PGF does not paint its content; the editor does not draw it either.`,
+        message: `Layer \`${layer}\` is not in \`\\pgfsetlayers{${finalList.join(",")}}\` and is not drawn.`,
         span
       });
     }

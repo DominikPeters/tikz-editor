@@ -226,7 +226,7 @@ x,y
     expect(artifact.complete).toBe(false);
     const files = artifact.diagnostics.filter((diagnostic) => diagnostic.code === "standalone-export-external-file");
     expect(files.map((diagnostic) => diagnostic.symbolName)).toEqual(["measurements.dat", "other.csv"]);
-    expect(artifact.text).toMatch(/% - \(warning\) standalone-export-external-file: The picture reads the data file 'measurements\.dat'/u);
+    expect(artifact.text).toMatch(/% - \(warning\) standalone-export-external-file: .*'measurements\.dat'/u);
   });
 
   it("carries \\pgfmathsetmacro, length registers, colours and declared functions the axis uses, and nothing unused", () => {

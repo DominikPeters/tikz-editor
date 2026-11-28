@@ -80,7 +80,7 @@ export function beamerPgfplotsInsertionEdits(
   }));
   edits.push({ span: { from: at, to: at }, insert: tikz`${block}${layout(tail)}` });
   if (!height.fits) {
-    return { edits, note: "This slide has less room left than the smallest chart the editor inserts (0.3\\textheight): the chart may run past the bottom of the slide. Make room, or put the chart on a new slide." };
+    return { edits, note: "Not enough room on the slide. The chart may overflow." };
   }
   return { edits };
 }

@@ -60,14 +60,14 @@ const NO_IO: PlotDataIo = { tableKeys: [], readFile: () => ({ status: "unavailab
 /** `expand` expands macros in coordinate and table text (identity when there are none). */
 export function collectPlotData(statement: AddPlotStatement, plot: PlotModel, source: string, expand: (text: string) => string = (text) => text, env: PlotMathEnvironment = DEFAULT_MATH_ENVIRONMENT, io: PlotDataIo = NO_IO): PlotData {
   const input = statement.input;
-  if (statement.dimension === 3) return { kind: "unsupported", reason: "\\addplot3 (3D plots)", span: statement.commandSpan };
+  if (statement.dimension === 3) return { kind: "unsupported", reason: "`\\addplot3`", span: statement.commandSpan };
   let raw: PlotData;
   if (input.kind === "coordinates") raw = collectCoordinates(statement, expand, io.symbolic ?? {});
   else if (input.kind === "table") raw = collectTable(input, source, plot, io, expand);
   else if (input.kind === "expression") raw = sampleExpressions(null, expand(input.expression), plot, input.expressionSpan, env);
   else if (input.kind === "parametric") {
     const [xc, yc, ...rest] = input.components;
-    if (!xc || !yc || rest.length > 0) return { kind: "unsupported", reason: "parametric plots other than (x expr, y expr)", span: input.span };
+    if (!xc || !yc || rest.length > 0) return { kind: "unsupported", reason: "this parametric form", span: input.span };
     raw = sampleExpressions(expand(stripBraces(xc.raw)), expand(stripBraces(yc.raw)), plot, input.span, env);
   }
   else return { kind: "unsupported", reason: `\`${input.name}\` input`, span: input.nameSpan };
@@ -94,7 +94,7 @@ function collectCoordinates(statement: AddPlotStatement, expand: (text: string) 
   for (const point of input.points) {
     const [xRaw, yRaw] = point.components;
     if (!xRaw || !yRaw || point.components.length > 2) {
-      return { kind: "unsupported", reason: "coordinates other than (x,y)", span: point.span };
+      return { kind: "unsupported", reason: "coordinates with more than x and y", span: point.span };
     }
     const x = symbolic.x ? symbolicIndex(expand(xRaw.raw), symbolic.x) : readCoordinateNumber(expand(xRaw.raw));
     const y = symbolic.y ? symbolicIndex(expand(yRaw.raw), symbolic.y) : readCoordinateNumber(expand(yRaw.raw));
@@ -208,7 +208,7 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
     for (const problem of problems) {
       notes.push({
         code: problem.reason === "unsupported" ? `unsupported-pgfplots-key:table/${problem.key}` : `invalid-pgfplots-value:table/${problem.key}`,
-        message: problem.reason === "unsupported" ? `Table key \`${problem.key}\` is not supported yet; it is ignored.` : `Cannot read \`${problem.key}=${problem.value}\`; it is ignored.`,
+        message: problem.reason === "unsupported" ? `Table key \`${problem.key}\` is not supported yet.` : `Cannot read \`${problem.key}=${problem.value}\`.`,
         span: problem.span
       });
     }
@@ -232,8 +232,8 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
         kind: "unavailable",
         code: TABLE_UNREADABLE,
         message: read.status === "missing"
-          ? `This plot is not drawn: the table file \`${name}\` was not found next to the document.`
-          : `This plot is not drawn: the table file \`${name}\` cannot be read here (the editor has no access to the document's folder, e.g. in the browser or before the document is saved).`,
+          ? `Table file \`${name}\` was not found.`
+          : `Table file \`${name}\` cannot be read here. Save the document first.`,
         span: tableSource.span
       };
     }
@@ -243,7 +243,7 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
   } else {
     const table = io.tableMacro(tableSource.name);
     if (!table) {
-      return { kind: "unsupported", reason: `table from macro \`${tableSource.name}\` (no \`\\pgfplotstableread\` defines it before the picture)`, span: tableSource.span };
+      return { kind: "unsupported", reason: `undefined table \`${tableSource.name}\``, span: tableSource.span };
     }
     note(applyTableKeys(settings, table.options, true));
     if (table.inline) {
@@ -256,7 +256,7 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
         return {
           kind: "unavailable",
           code: TABLE_UNREADABLE,
-          message: `This plot is not drawn: the table file \`${table.data.trim()}\` read into \`${tableSource.name}\` ${read.status === "missing" ? "was not found next to the document" : "cannot be read here (the editor has no access to the document's folder)"}.`,
+          message: `Table file \`${table.data.trim()}\` ${read.status === "missing" ? "was not found" : "cannot be read here"}.`,
           span: tableSource.span
         };
       }
@@ -293,7 +293,7 @@ function collectTable(input: PlotTableInput, source: string, plot: PlotModel, io
   const errorGetters: Array<[keyof NonNullable<PlotPoint["error"]>, Getter]> = [];
   for (const [key, spec] of Object.entries(settings.errors)) {
     const g = getter(key.startsWith("x") ? "x" : "y", spec);
-    if (typeof g === "string") return { kind: "unsupported", reason: `error column: ${g}`, span: input.span };
+    if (typeof g === "string") return { kind: "unsupported", reason: `error column ${g}`, span: input.span };
     const field = key === "x plus" ? "xPlus" : key === "x minus" ? "xMinus" : key === "y plus" ? "yPlus" : "yMinus";
     errorGetters.push([field, g]);
   }

@@ -625,7 +625,5 @@ export function isUngroupableScopeStatement(statement: Statement): boolean {
 
 /** Why a PGF environment is not ungrouped: removing it would change what its statements are drawn on or how. */
 export function pgfEnvironmentUngroupReason(name: string): string {
-  return name === "pgfonlayer"
-    ? "Ungroup does not remove a `{pgfonlayer}` environment: its statements would move to the main layer."
-    : `Ungroup does not remove a \`{${name}}\` environment.`;
+  return `A \`{${name}}\` environment cannot be ungrouped.`;
 }

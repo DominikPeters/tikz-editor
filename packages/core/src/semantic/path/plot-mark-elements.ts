@@ -181,7 +181,7 @@ export function emitPlotMarks(params: {
   if (name == null || points.length === 0) return [];
   if (!isPlotMarkName(name)) {
     markFeature("plot_marks", "unsupported");
-    pushDiagnostic(`unknown-plot-mark:${name}`, `PGF defines no plot mark named \`${name}\`; nothing is drawn.`, span.from, span.to);
+    pushDiagnostic(`unknown-plot-mark:${name}`, `Unknown plot mark \`${name}\`.`, span.from, span.to);
     return [];
   }
   if (plotMarkRequiresLibrary(name)) markFeature("plot_marks_library", "supported");

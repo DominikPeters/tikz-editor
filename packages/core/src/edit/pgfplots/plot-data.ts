@@ -128,29 +128,29 @@ function locate(source: string, plotId: string, parseOptions: EditParseOptions):
   const plot = axis?.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === plotId);
   if (!axis || !plot) return { kind: "none", reason: "The plot was not found." };
   const input = plot.input;
-  if (plot.dimension === 3) return { kind: "readonly", reason: "The grid edits 2D plots; this is an `\\addplot3`.", axis, plot };
+  if (plot.dimension === 3) return { kind: "readonly", reason: "3D plot data is read-only.", axis, plot };
   if (input.kind === "coordinates") {
-    if (input.unparsed.length > 0) return { kind: "readonly", reason: "Part of this coordinate list could not be read; edit it in the source.", axis, plot };
+    if (input.unparsed.length > 0) return { kind: "readonly", reason: "Part of the coordinate list could not be read. Edit it in Source.", axis, plot };
     return { kind: "coordinates", axis, plot, points: input.points, body: input.bodySpan };
   }
-  if (input.kind === "expression" || input.kind === "parametric") return { kind: "none", reason: "An expression plot has no data table: its expression, domain and samples are in the inspector." };
-  if (input.kind !== "table") return { kind: "none", reason: "This plot's input is not coordinates or a table." };
+  if (input.kind === "expression" || input.kind === "parametric") return { kind: "none", reason: "Expression plots have no data table." };
+  if (input.kind !== "table") return { kind: "none", reason: "This plot has no data table." };
   const axisTableLists = (axis.options?.entries ?? []).filter((entry) => entry.kind === "kv" && /^(?:\/pgfplots\/)?table\//u.test(entry.key.trim()));
-  if (axisTableLists.length > 0) return { kind: "readonly", reason: "The axis sets table options; edit this table in the source.", axis, plot };
-  if (input.source.kind === "file") return { kind: "readonly", reason: `The data is in the file \`${input.source.name}\`; edit it outside the editor (the editor does not write data files).`, axis, plot };
+  if (axisTableLists.length > 0) return { kind: "readonly", reason: "The axis sets table options. Edit the table in Source.", axis, plot };
+  if (input.source.kind === "file") return { kind: "readonly", reason: `The data is in the file \`${input.source.name}\`.`, axis, plot };
   if (input.source.kind === "inline") {
-    if (!input.source.terminated) return { kind: "readonly", reason: "The table is not closed; fix it in the source.", axis, plot };
+    if (!input.source.terminated) return { kind: "readonly", reason: "The table is not closed.", axis, plot };
     const format = tableFormat([input.options]);
-    if ("unsupported" in format) return { kind: "readonly", reason: `The table uses ${format.unsupported}; edit it in the source.`, axis, plot };
+    if ("unsupported" in format) return { kind: "readonly", reason: `Unsupported table option: ${format.unsupported}.`, axis, plot };
     return { kind: "table", axis, plot, dataSpan: input.source.span, options: format };
   }
   // `\pgfplotstableread{…}\macro`: the read statement's data, shared by every plot of that table.
   const macro = input.source.name;
   const read = [...walkStatements(parsed.figure.body)].filter((statement): statement is PgfplotsTableReadStatement => statement.kind === "PgfplotsTableRead" && statement.macroName === macro).at(-1);
-  if (!read) return { kind: "readonly", reason: `The table \`${macro}\` is read outside this picture; edit it there.`, axis, plot };
-  if (!/[\n]|\\\\/u.test(read.dataRaw)) return { kind: "readonly", reason: `\`${macro}\` is read from the file \`${read.dataRaw.trim()}\`; edit it outside the editor.`, axis, plot };
+  if (!read) return { kind: "readonly", reason: `The table \`${macro}\` is read outside this picture.`, axis, plot };
+  if (!/[\n]|\\\\/u.test(read.dataRaw)) return { kind: "readonly", reason: `The table \`${macro}\` is read from the file \`${read.dataRaw.trim()}\`.`, axis, plot };
   const format = tableFormat([read.options, input.options]);
-  if ("unsupported" in format) return { kind: "readonly", reason: `The table uses ${format.unsupported}; edit it in the source.`, axis, plot };
+  if ("unsupported" in format) return { kind: "readonly", reason: `Unsupported table option: ${format.unsupported}.`, axis, plot };
   const users = [...walkPlots(parsed.figure.body)].filter((other) => other.input.kind === "table" && other.input.source.kind === "macro" && other.input.source.name === macro).length;
   return { kind: "table", axis, plot, dataSpan: read.dataSpan, options: format, shared: { macro, users } };
 }
@@ -201,7 +201,7 @@ export function readPlotDataGrid(source: string, plotId: string, parseOptions: E
   const width = Math.max(reading.header?.cells.length ?? 0, ...reading.rows.map((row) => row.cells.length));
   const columns = Array.from({ length: width }, (_, index): PlotDataColumn => ({ id: `c${String(index)}`, label: reading.header?.cells[index]?.raw ?? String(index), editable: true }));
   const rows = reading.rows.map((row) => Array.from({ length: width }, (_, index) => row.cells[index]?.raw ?? ""));
-  const note = located.shared ? `Table \`${located.shared.macro}\`, used by ${String(located.shared.users)} plot${located.shared.users === 1 ? "" : "s"}: edits change all of them.` : undefined;
+  const note = located.shared ? `Table \`${located.shared.macro}\` is used by ${String(located.shared.users)} plot${located.shared.users === 1 ? "" : "s"}.` : undefined;
   return { kind: "table", columns, rows, headerEditable: reading.header !== undefined, ...(note ? { note } : {}) };
 }
 
@@ -250,7 +250,7 @@ function coordinateEdits(source: string, located: Extract<Located, { kind: "coor
     if (text.length === 0 || Number.isFinite(Number(text)) || text.startsWith("{")) return;
     if (categories === null) {
       if (points.some((point) => !Number.isFinite(Number(point.components[0]?.raw)))) {
-        throw new Refusal("The axis' `symbolic x coords` list is not in its options (a style?); add the category there.");
+        throw new Refusal("The `symbolic x coords` list is not in the axis options.");
       }
       return;
     }
@@ -261,19 +261,19 @@ function coordinateEdits(source: string, located: Extract<Located, { kind: "coor
       const component = point.components[column];
       if (!component) throw new Refusal("This coordinate has no such component.");
       if (column === 0) checkCategory(value);
-      if (value.trim().length === 0) throw new Refusal("A coordinate cannot be empty; delete the row instead.");
+      if (value.trim().length === 0) throw new Refusal("A coordinate cannot be empty.");
       edits.push({ span: component.span, text: coordinateText(value) });
       return;
     }
     const errorIndex = column - 2;
     if (errorIndex < layout.errors) {
       const component = point.errors[0]?.components[errorIndex];
-      if (!component) throw new Refusal("This point has no error part to edit; add it in the source.");
+      if (!component) throw new Refusal("This point has no error value.");
       edits.push({ span: component.span, text: coordinateText(value) });
       return;
     }
     if (layout.meta) {
-      if (!point.meta) throw new Refusal("This point has no meta value to edit; add it in the source.");
+      if (!point.meta) throw new Refusal("This point has no meta value.");
       edits.push({ span: { from: point.meta.bracketSpan.from + 1, to: point.meta.bracketSpan.to - 1 }, text: value.trim() });
       return;
     }
@@ -314,7 +314,7 @@ function coordinateEdits(source: string, located: Extract<Located, { kind: "coor
         const point = points[change.row + offset];
         if (point) values.forEach((value, index) => { if (change.column + index < 2 + layout.errors + (layout.meta ? 1 : 0)) setCell(point, change.column + index, value); });
         else if (change.column === 0) appended.push(newPoint(values));
-        else throw new Refusal("Rows past the end need their x value: paste from the first column.");
+        else throw new Refusal("New rows need an x value.");
       });
       insertAt(points.length, appended);
       break;
@@ -327,7 +327,7 @@ function coordinateEdits(source: string, located: Extract<Located, { kind: "coor
     }
     case "deleteRows": {
       const doomed = new Set(change.rows);
-      if (doomed.size >= points.length) throw new Refusal("A plot keeps at least one point; delete the plot instead.");
+      if (doomed.size >= points.length) throw new Refusal("A plot needs at least one point.");
       for (const index of [...doomed].sort((a, b) => a - b)) {
         const point = points[index];
         if (!point) continue;
@@ -341,11 +341,11 @@ function coordinateEdits(source: string, located: Extract<Located, { kind: "coor
       break;
     }
     case "renameColumn":
-      throw new Refusal("Coordinate columns are x and y; their names are not in the source.");
+      throw new Refusal("Coordinate columns cannot be renamed.");
   }
   if (newCategories.length > 0) {
     const entry = (axis.options?.entries ?? []).filter((candidate): candidate is Extract<OptionEntry, { kind: "kv" }> => candidate.kind === "kv" && plain(candidate.key) === "symbolic x coords").at(-1);
-    if (!entry?.valueSpan) throw new Refusal("The axis' `symbolic x coords` list is not in its options (a style?); add the category there.");
+    if (!entry?.valueSpan) throw new Refusal("The `symbolic x coords` list is not in the axis options.");
     const inner = { from: entry.valueSpan.from, to: entry.valueSpan.to };
     const raw = source.slice(inner.from, inner.to);
     const closing = raw.trimEnd().endsWith("}") ? inner.from + raw.trimEnd().length - 1 : inner.to;
@@ -362,8 +362,8 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
   const width = Math.max(reading.header?.cells.length ?? 0, ...rows.map((row) => row.cells.length));
   const setCell = (row: InlineTableRow, column: number, value: string) => {
     const cell = row.cells[column];
-    if (!cell) throw new Refusal("This row has no such cell; edit it in the source.");
-    if (value.trim().length === 0) throw new Refusal("A cell cannot be empty (TeX would shift the row); write `nan` for a missing value.");
+    if (!cell) throw new Refusal("This row has no such cell.");
+    if (value.trim().length === 0) throw new Refusal("A cell cannot be empty. Use `nan` for a missing value.");
     edits.push({ span: cell.span, text: cellText(value, separator) });
   };
   const joinOf = (row: InlineTableRow | undefined) => {
@@ -394,7 +394,7 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
       const lineGap = gap.replace(/^\s*\\\\/u, "");
       const closing = located.options.rowSeparator === "\\\\" && trailingSep ? " \\\\" : "";
       edits.push({ span: { from: at, to: at }, text: texts.map((text) => `${lineGap}${text}${closing}`).join("") });
-    } else throw new Refusal("The table has no rows to follow; add one in the source.");
+    } else throw new Refusal("The table has no rows.");
   };
   switch (change.type) {
     case "set": {
@@ -409,7 +409,7 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
         const row = rows[change.row + offset];
         if (row) values.forEach((value, index) => { if (change.column + index < width) setCell(row, change.column + index, value); });
         else if (change.column === 0) appended.push(rowText(values, rows.at(-1)));
-        else throw new Refusal("Rows past the end need every value: paste from the first column.");
+        else throw new Refusal("New rows need every value.");
       });
       insertAt(rows.length, appended);
       break;
@@ -422,7 +422,7 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
     }
     case "deleteRows": {
       const doomed = [...new Set(change.rows)].sort((a, b) => a - b);
-      if (doomed.length >= rows.length) throw new Refusal("A table keeps at least one row; delete the plot instead.");
+      if (doomed.length >= rows.length) throw new Refusal("A table needs at least one row.");
       for (const index of doomed) {
         const row = rows[index];
         if (!row) continue;
@@ -445,7 +445,7 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
     case "renameColumn": {
       const header = reading.header;
       const cell = header?.cells[change.column];
-      if (!header || !cell) throw new Refusal("The table has no header row to rename.");
+      if (!header || !cell) throw new Refusal("The table has no header row.");
       const name = change.name.trim();
       if (name.length === 0 || /[\s{}\\]/u.test(name)) throw new Refusal("A column name is one word without braces or backslashes.");
       if (header.cells.some((other, index) => index !== change.column && other.raw === name)) throw new Refusal(`The table already has a column \`${name}\`.`);
@@ -469,7 +469,7 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
           }
         }
       }
-      if (located.shared) throw new Refusal(`The table \`${located.shared.macro}\` is shared; rename its columns in the source, where every plot that uses it can be checked.`);
+      if (located.shared) throw new Refusal(`The table \`${located.shared.macro}\` is shared by several plots.`);
       break;
     }
   }
@@ -491,7 +491,7 @@ export function applyEditPlotDataAction(source: string, plotId: string, change: 
   if (effective.length === 0) return { kind: "unsupported", reason: "The data would not change." };
   const sorted = [...effective].sort((a, b) => a.span.from - b.span.from || a.span.to - b.span.to);
   for (let index = 1; index < sorted.length; index += 1) {
-    if ((sorted[index]?.span.from ?? 0) < (sorted[index - 1]?.span.to ?? 0)) return { kind: "unsupported", reason: "These changes overlap; make them one at a time." };
+    if ((sorted[index]?.span.from ?? 0) < (sorted[index - 1]?.span.to ?? 0)) return { kind: "unsupported", reason: "These changes overlap." };
   }
   const replacements: Replacement[] = sorted.map((edit) => ({ span: edit.span, fragment: edit.text.length > 0 ? userText(edit.text, "inspector-value") : EMPTY_FRAGMENT }));
   const applied = applyReplacements(source, replacements);

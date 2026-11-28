@@ -101,9 +101,13 @@ describe("pgfplots tables from files (the document's resolver)", () => {
 
   it("says which file is missing, and why it cannot be read without a folder", () => {
     const missing = render("\\addplot table {gone.dat};", LIMITS, "", withFiles({}));
-    expect(missing.semantic.diagnostics.find((d) => d.code === "pgfplots-table-file-unavailable")?.message).toContain("`gone.dat` was not found next to the document");
+    const missingMessage = missing.semantic.diagnostics.find((d) => d.code === "pgfplots-table-file-unavailable")?.message;
+    expect(missingMessage).toContain("`gone.dat`");
     const noFolder = render("\\addplot table {gone.dat};");
-    expect(noFolder.semantic.diagnostics.find((d) => d.code === "pgfplots-table-file-unavailable")?.message).toContain("no access to the document's folder");
+    const noFolderMessage = noFolder.semantic.diagnostics.find((d) => d.code === "pgfplots-table-file-unavailable")?.message;
+    expect(noFolderMessage).toContain("`gone.dat`");
+    // The two cases say different things (not found / cannot be read here).
+    expect(noFolderMessage).not.toBe(missingMessage);
   });
 
   it("lists the table files a document reads, for the host to load", () => {

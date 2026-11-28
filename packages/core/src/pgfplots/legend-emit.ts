@@ -190,7 +190,7 @@ export function emitLegend(host: LegendHost): LegendResult | null {
   const texts = legendTexts(host);
   if (texts.length === 0) return null;
   if (model.legend.toName !== undefined) {
-    host.diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-key:legend to name", message: "`legend to name` stores the legend for `\\ref`; it is not drawn in the axis (as in TeX), and `\\ref` legends are not rendered by this editor.", span: host.axis.optionsSpan ?? host.axis.beginSpan });
+    host.diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-key:legend to name", message: "`legend to name` legends are not drawn.", span: host.axis.optionsSpan ?? host.axis.beginSpan });
     return null;
   }
   const style = readLegendStyle(model);
@@ -219,7 +219,7 @@ export function emitLegend(host: LegendHost): LegendResult | null {
       if (!builder) {
         if (!warned.has(kind)) {
           warned.add(kind);
-          host.diagnostics.push({ severity: "warning", code: `unsupported-pgfplots-key:${kind}`, message: `Legend images of \`${kind}\` are not drawn yet; the legend shows the entry without its image.`, span: source.span });
+          host.diagnostics.push({ severity: "warning", code: `unsupported-pgfplots-key:${kind}`, message: `Legend images of \`${kind}\` are not drawn yet.`, span: source.span });
         }
         return { kind: "image", source, geometry: { pieces: [] }, pathStyle: host.pathStyle(source.plot, style.image), marks: null, box: null };
       }
@@ -247,7 +247,7 @@ export function emitLegend(host: LegendHost): LegendResult | null {
   // The legend node.
   const at = host.resolvePoint(style.at);
   if (!at) {
-    host.diagnostics.push({ severity: "warning", code: "invalid-pgfplots-value:legend style", message: `Cannot read the legend position \`at=${style.at}\`; the legend is not drawn.`, span: host.axis.optionsSpan ?? host.axis.beginSpan });
+    host.diagnostics.push({ severity: "warning", code: "invalid-pgfplots-value:legend style", message: `Cannot read the legend position \`at=${style.at}\`.`, span: host.axis.optionsSpan ?? host.axis.beginSpan });
     return null;
   }
   const nodeKeys = style.node.map((use) => (use.value === null ? use.key : `${use.key}=${use.value}`));

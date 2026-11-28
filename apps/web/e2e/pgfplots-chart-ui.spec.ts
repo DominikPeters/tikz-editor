@@ -16,6 +16,7 @@ import {
 import { parseTikz } from "../../../packages/core/src/parser/index";
 import { evaluateTikzFigure } from "../../../packages/core/src/semantic/evaluate";
 import { CHART_KINDS } from "../../../packages/core/src/edit/pgfplots/chart-kinds";
+import { readChartTypeConversions } from "../../../packages/core/src/edit/pgfplots/chart-type";
 
 // The chart UI (Escape step-out, inspector placeholders and Elements, Objects
 // panel parts, toolbar gallery, chart context menus, legend-entry text edit).
@@ -87,6 +88,15 @@ function diagnostics(source: string): string[] {
   const parsed = parseTikz(source, { includeContextDefinitions: true, recover: true });
   const result = evaluateTikzFigure(parsed.figure, source);
   return [...parsed.diagnostics, ...result.diagnostics].map((d) => `${d.severity}: ${d.message}`);
+}
+
+/** The reason core gives for a refused chart or plot type (so the test does not repeat its wording). */
+function refusal(source: string, elementId: string, kind: string): string {
+  const parsed = parseTikz(source, { includeContextDefinitions: true });
+  const list = readChartTypeConversions(source, elementId, evaluateTikzFigure(parsed.figure, source).scene.elements);
+  const option = (list?.options ?? []).find((candidate) => candidate.kind === kind);
+  if (!option || option.available || option.current) throw new Error(`${kind} is not refused for ${elementId}`);
+  return option.reason;
 }
 
 function inspector(page: Page) {
@@ -356,7 +366,7 @@ test("change chart type in the inspector: unavailable kinds show their reason; o
   // Scatter is not offered: the first plot is `\addplot[…]` without marks.
   const scatter = page.getByRole("option", { name: /^Scatter Plot/u });
   await expect(scatter).toHaveAttribute("aria-disabled", "true");
-  await expect(scatter).toContainText("Choose a Mark first");
+  await expect(scatter).toContainText(refusal(SOURCE, AXIS, "scatter"));
   await shot(page, "chart-type-unavailable");
   await page.getByRole("option", { name: "Bar Chart", exact: true }).click();
   const bar = SOURCE.replace("\\begin{axis}[xlabel", "\\begin{axis}[ybar, xlabel");
@@ -396,7 +406,7 @@ test("change plot type from the context menu; a refused type is disabled with it
   await page.getByTestId("canvas-context-menu").getByRole("menuitem", { name: "Change Plot Type" }).hover();
   const bar = page.getByTestId("canvas-context-cmd-chart.plot-type-bar");
   await expect(bar).toBeDisabled();
-  await expect(bar).toHaveAttribute("title", /legend/u);
+  await expect(bar).toHaveAttribute("title", refusal(SOURCE, `${AXIS}:plot:1`, "bar"));
   await shot(page, "context-menu-plot-type");
   await runContextCommand(page, "chart.plot-type-smooth");
   await expect.poll(() => readSource(page)).toBe(SOURCE.replace("\\addplot coordinates {(0,2)", "\\addplot+[smooth] coordinates {(0,2)"));
@@ -428,4 +438,33 @@ test("edit a legend entry in place (\\addlegendentry form)", async ({ page }) =>
   await page.keyboard.press("Escape");
   await expect.poll(() => readSource(page)).toBe(SOURCE.replace("{measured}", "{measured data}"));
   await settled(page);
+});
+
+test("plot inspector: Type and Mark replace the old checkboxes; Mark None and back are clean edits", async ({ page }) => {
+  await select(page, `${AXIS}:plot:1`);
+  const panel = page.locator("[class*='_panel_']").filter({ has: page.getByText("Legend entry", { exact: true }) }).first();
+  const markField = panel.getByRole("button", { name: "Mark", exact: true });
+  await expect(panel.getByRole("button", { name: "Type", exact: true })).toBeVisible();
+  for (const gone of ["Only marks", "No markers", "Smooth"]) await expect(panel.getByRole("checkbox", { name: gone })).toHaveCount(0);
+  await markField.click();
+  await expect(page.getByRole("option", { name: "None", exact: true })).toBeVisible();
+  await shot(page, "plot-inspector-mark-none");
+  // The bare `\addplot` takes its mark from the cycle list: None writes `mark=none` (with `+`, so the colour stays).
+  await page.getByRole("option", { name: "None", exact: true }).click();
+  const none = SOURCE.replace("\\addplot coordinates {(0,2)", "\\addplot+[mark=none] coordinates {(0,2)");
+  await expect.poll(() => readSource(page)).toBe(none);
+  await settled(page);
+  await expect(markField).toContainText("None");
+  await markField.click();
+  await page.getByRole("option", { name: /^Default/u }).click();
+  await expect.poll(() => readSource(page)).toBe(SOURCE);
+  await settled(page);
+  // Scatter comes from the Type field; a scatter plot keeps a mark, so None is not offered.
+  await panel.getByRole("button", { name: "Type", exact: true }).click();
+  await page.getByRole("option", { name: "Scatter", exact: true }).click();
+  await expect.poll(() => readSource(page)).toBe(SOURCE.replace("\\addplot coordinates {(0,2)", "\\addplot+[only marks] coordinates {(0,2)"));
+  await settled(page);
+  await markField.click();
+  await expect(page.getByRole("option", { name: /^None/u })).toHaveAttribute("aria-disabled", "true");
+  await shot(page, "plot-inspector-scatter-mark");
 });

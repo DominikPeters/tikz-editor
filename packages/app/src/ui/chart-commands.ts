@@ -165,7 +165,7 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
     const legendId = `${selection.axisId}:legend`;
     bindings[APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY] = span && onEditChartText
       ? { enabled: true, run: () => { dispatch({ type: "SELECT", id: legendId, additive: false }); onEditChartText(legendId, span); } }
-      : disabled(entry === null ? "A `forget plot` has no legend entry." : "The plot has no legend entry to edit; type one in the inspector's Legend entry field.");
+      : disabled(entry === null ? "A `forget plot` has no legend entry." : "The plot has no legend entry.");
   } else {
     bindings[APP_MENU_COMMAND_IDS.CHART_RESET_PLOT_STYLE] = disabled();
     bindings[APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY] = disabled();
@@ -180,7 +180,7 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
     if (!option || !typeTarget) { bindings[commandId] = disabled(); return; }
     bindings[commandId] = option.available
       ? { enabled: true, run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "changeChartType", elementId: typeTarget, chartType: kind } }); } }
-      : { enabled: false, checked: option.current, reason: option.reason, run: () => {} };
+      : { enabled: false, checked: option.current, ...(option.reason === undefined ? {} : { reason: option.reason }), run: () => {} };
   };
   for (const kind of CHART_KINDS) bindType(CHART_TYPE_COMMAND_IDS[kind.id], kind.id, "axis");
   for (const type of PLOT_TYPES) bindType(PLOT_TYPE_COMMAND_IDS[type.id], type.id, "plot");

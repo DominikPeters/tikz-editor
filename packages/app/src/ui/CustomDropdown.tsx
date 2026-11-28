@@ -52,7 +52,6 @@ const MENU_VIEWPORT_PADDING_PX = 8;
 const MENU_MAX_HEIGHT_PX = 220;
 const MENU_REASON_MAX_HEIGHT_PX = 360;
 const MENU_MIN_HEIGHT_PX = 80;
-const MENU_REASON_MIN_WIDTH_PX = 280;
 
 export function CustomDropdown<TValue extends string>({
   ariaLabel,
@@ -181,7 +180,7 @@ export function CustomDropdown<TValue extends string>({
       }
 
       const rootRect = rootElement.getBoundingClientRect();
-      // A list with reasons under greyed-out choices gets room to read them, kept inside the window.
+      // A list with reasons under greyed-out choices gets more height for the reason lines.
       const hasReasons = options.some((item) => isCustomDropdownOption(item) && item.disabled === true && item.reason !== undefined);
       const spaceBelow = window.innerHeight - rootRect.bottom - MENU_VIEWPORT_PADDING_PX - MENU_GAP_PX;
       const spaceAbove = rootRect.top - MENU_VIEWPORT_PADDING_PX - MENU_GAP_PX;
@@ -197,8 +196,8 @@ export function CustomDropdown<TValue extends string>({
       const top = openUp
         ? rootRect.top - MENU_GAP_PX
         : rootRect.bottom + MENU_GAP_PX;
-      const width = hasReasons ? Math.max(rootRect.width, MENU_REASON_MIN_WIDTH_PX) : rootRect.width;
-      const left = Math.max(MENU_VIEWPORT_PADDING_PX, Math.min(rootRect.left, window.innerWidth - width - MENU_VIEWPORT_PADDING_PX));
+      const left = rootRect.left;
+      const width = rootRect.width;
 
       setMenuFixedStyle((current) =>
         current.top === top && current.left === left && current.width === width && current.openUp === openUp
