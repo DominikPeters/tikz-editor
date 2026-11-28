@@ -21,6 +21,8 @@ import { resolveEquationNodeTarget } from "../equation-utils";
 import type { ClientPoint, WorldPoint } from "../coords/types";
 import { resolveFocusedScopeIdForSelection, type ScopeOverlayIndex } from "./scope-overlay";
 import { resolveCanvasContextMenuTarget } from "./context-menu-target";
+import { readChartElements } from "../chart-commands";
+import type { ChartMenuElements } from "../../context-menu/canvas-context-menu";
 import { viewportToWorldPoint } from "./geometry";
 import {
   isPathContextMenuSource,
@@ -234,6 +236,13 @@ export function useCanvasContextMenuController({
     [editParseOptions, source]
   );
 
+  const resolveChartMenuElements = useCallback(
+    (axisId: string): ChartMenuElements | null => {
+      const state = readChartElements(source, axisId, snapshot.source === source ? snapshot.scene?.elements ?? null : null, editParseOptions);
+      return state ? { title: state.title.present, xlabel: state.xlabel.present, ylabel: state.ylabel.present, legend: state.legend.present } : null;
+    },
+    [editParseOptions, snapshot, source]
+  );
   /** Everything a menu on `target` offers beyond its fixed items, for the element it opens on. */
   const resolveMenuOptions = useCallback(
     (target: CanvasContextMenuTarget, sourceId: string | null): CanvasContextMenuOptions => ({
@@ -242,7 +251,8 @@ export function useCanvasContextMenuController({
       includePathSubmenuForSingleSelection: resolveIncludePathSubmenuForSingleSelection(target, sourceId),
       includeFlattenForeach: commandBindings[APP_MENU_COMMAND_IDS.FLATTEN_FOREACH]?.enabled ?? false,
       ...resolveMatrixMultiContextMenuOptions(target, selectedElementIds),
-      shapeOverlay: target.startsWith("selection-single") ? resolveShapeOverlay(sourceId) : null
+      shapeOverlay: target.startsWith("selection-single") ? resolveShapeOverlay(sourceId) : null,
+      chartElements: target === "selection-single-axis" && sourceId ? resolveChartMenuElements(sourceId) : null
     }),
     [
       commandBindings,
@@ -251,6 +261,7 @@ export function useCanvasContextMenuController({
       resolveMatrixMultiContextMenuOptions,
       resolveNodePositioningAction,
       resolveShapeOverlay,
+      resolveChartMenuElements,
       selectedElementIds
     ]
   );

@@ -2938,6 +2938,19 @@ export const CanvasPanel = memo(function CanvasPanel({
     });
     requestAdornmentTextEdit(result.pendingTextTargetId);
   }, [contextMenuContextRef, dispatch, requestAdornmentTextEdit]);
+  // Chart context menu: edit an axis part's text in place, as a double-click does. A part added by
+  // the same command is not drawn yet, so it waits like a new label's text; `within` picks a legend entry.
+  const handleEditChartText = useCallback((targetId: string, within?: { from: number; to: number }) => {
+    if (!within) {
+      requestAdornmentTextEdit(targetId);
+      return;
+    }
+    const candidates = rectHitRegionsForTargetId(hitRegions, targetId)
+      .map((region) => resolveEditableTextTarget(targetId, region))
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
+    const target = candidates.find((candidate) => candidate.sourceSpan.from >= within.from && candidate.sourceSpan.to <= within.to) ?? candidates[0];
+    if (target) startTextEditingSession(target, 0, target.text.length);
+  }, [hitRegions, requestAdornmentTextEdit, resolveEditableTextTarget, startTextEditingSession]);
   const handlePositionNodeRelativeToCommand = useCallback(() => {
     const state = canvasCommandStateRef.current;
     const selectedSourceId = state?.selectedElementIds.size === 1 ? [...state.selectedElementIds][0] ?? null : null;
@@ -2967,6 +2980,7 @@ export const CanvasPanel = memo(function CanvasPanel({
 
   const commandRuntime = useEditorCommandRuntime({
     onAddNodeAdornment: handleAddNodeAdornmentCommand,
+    onEditChartText: handleEditChartText,
     onPositionNodeRelativeTo: handlePositionNodeRelativeToCommand,
     onConvertNodePositionToAbsolute: handleConvertNodePositionToAbsoluteCommand,
     onOpenEditEquation: handleOpenEditEquationCommand,

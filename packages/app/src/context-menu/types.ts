@@ -10,6 +10,9 @@ export type CanvasContextMenuTarget =
   | "selection-single-matrix-cell"
   | "selection-single-path-point"
   | "selection-single-path-point-tree"
+  | "selection-single-axis"
+  | "selection-single-plot"
+  | "selection-single-axis-part"
   | "selection-multi";
 
 export type CanvasContextMenuCommandId = AppMenuCommandId;

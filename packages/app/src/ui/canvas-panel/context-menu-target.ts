@@ -5,6 +5,7 @@ import type { PathStatement, Statement } from "@tikz-editor/core/ast/types";
 import type { ToolMode } from "../../store/types";
 import { clamp } from "./geometry";
 import { nestedStatements } from "@tikz-editor/core/ast/walk";
+import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "@tikz-editor/core/pgfplots/edit-ids";
 
 export type ContextMenuSelectionAction =
   | { kind: "preserve" }
@@ -33,6 +34,21 @@ export function resolveCanvasContextMenuTarget(
     return {
       target: "canvas-empty",
       selectionAction: { kind: "clear" }
+    };
+  }
+
+  // pgfplots: an axis, one of its plots, or its title, labels or legend.
+  const chartTarget: CanvasContextMenuTarget | null = isAxisId(clickedSourceId)
+    ? "selection-single-axis"
+    : parseAxisPlotId(clickedSourceId)
+      ? "selection-single-plot"
+      : parseAxisDescriptionId(clickedSourceId)
+        ? "selection-single-axis-part"
+        : null;
+  if (chartTarget && !(selectedElementIds.has(clickedSourceId) && selectedElementIds.size > 1)) {
+    return {
+      target: chartTarget,
+      selectionAction: selectedElementIds.has(clickedSourceId) ? { kind: "preserve" } : { kind: "select-only", sourceId: clickedSourceId }
     };
   }
 

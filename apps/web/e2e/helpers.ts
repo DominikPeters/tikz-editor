@@ -49,6 +49,9 @@ async function prepareMenuCommand(page: Page, section: MenuSection, commandId: s
   ) {
     await page.getByRole("menuitem", { name: "Export" }).hover();
   }
+  if (section === "insert" && /^insert\.(function-plot|data-plot|scatter-plot|bar-chart|stacked-bar-chart|area-plot|log-plot)$/u.test(commandId)) {
+    await page.getByRole("menuitem", { name: "Chart" }).hover();
+  }
   if (section === "edit" && commandId.startsWith("edit.align-")) {
     await page.getByRole("menuitem", { name: "Align" }).hover();
   }

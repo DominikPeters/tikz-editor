@@ -143,6 +143,7 @@ function ContextMenuPopup({
             role={role}
             aria-checked={binding?.checked}
             disabled={!binding?.enabled}
+            title={!binding?.enabled && binding?.reason ? binding.reason : undefined}
             className={[css.item, hasCheckItems ? "" : css.itemNoCheck].filter(Boolean).join(" ")}
             data-testid={`canvas-context-cmd-${item.commandId}`}
             onClick={() => {

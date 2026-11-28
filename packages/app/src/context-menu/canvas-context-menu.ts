@@ -487,8 +487,55 @@ function withMatrixCellItems(items: readonly AppMenuItem[]): readonly AppMenuIte
   return withPrependedItems(items, MATRIX_CELL_ITEMS);
 }
 
+/** Which elements the axis shows, for the chart menus' "Add …"/"Remove …" labels. */
+export type ChartMenuElements = { title: boolean; xlabel: boolean; ylabel: boolean; legend: boolean };
+
+const GRID_ITEMS: readonly AppMenuItem[] = [
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_GRID_NONE, label: "None" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_GRID_MAJOR, label: "Major" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_GRID_MINOR, label: "Minor" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_GRID_BOTH, label: "Both" }
+];
+
+/** An axis: its elements (the inspector's Elements group), Insert Plot, then the usual selection commands. */
+function buildAxisItems(elements: ChartMenuElements, selectionItems: readonly AppMenuItem[]): readonly AppMenuItem[] {
+  const toggle = (commandId: AppMenuCommandId, name: string, present: boolean): AppMenuItem => ({ kind: "command", commandId, label: `${present ? "Remove" : "Add"} ${name}` });
+  return [
+    toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_TITLE, "Title", elements.title),
+    toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_XLABEL, "X Label", elements.xlabel),
+    toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_YLABEL, "Y Label", elements.ylabel),
+    toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_LEGEND, "Legend", elements.legend),
+    { kind: "submenu", label: "Grid", items: GRID_ITEMS },
+    { kind: "separator" },
+    { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_INSERT_PLOT, label: "Insert Plot" },
+    { kind: "separator" },
+    ...selectionItems.map((item) => (item.kind === "command" && item.commandId === APP_MENU_COMMAND_IDS.DELETE ? { ...item, label: "Delete Axis" } : item))
+  ];
+}
+
+/** A plot: its legend entry, draw order within the axis, style reset, delete. */
+const PLOT_ITEMS: readonly AppMenuItem[] = [
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY, label: "Edit Legend Entry" },
+  { kind: "separator" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.BRING_FORWARD, label: "Bring Forward" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.SEND_BACKWARD, label: "Send Backward" },
+  { kind: "separator" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_RESET_PLOT_STYLE, label: "Reset Plot Style" },
+  { kind: "separator" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.DELETE, label: "Delete Plot", accelerator: "Delete" }
+];
+
+/** A title, axis label or the legend: edit its text in place, or remove it. */
+const AXIS_PART_ITEMS: readonly AppMenuItem[] = [
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_EDIT_TEXT, label: "Edit Text" },
+  { kind: "separator" },
+  { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_REMOVE_PART, label: "Remove" }
+];
+
 /** What a canvas context menu offers beyond its target's fixed items, decided when it opens. */
 export type CanvasContextMenuOptions = {
+  /** For a pgfplots axis: which elements it shows. */
+  chartElements?: ChartMenuElements | null;
   includeEditEquationForSingleNode?: boolean;
   nodePositioningAction?: "position-relative" | "convert-absolute" | null;
   includePathSubmenuForSingleSelection?: boolean;
@@ -607,6 +654,9 @@ export function buildCanvasContextMenuDefinition(options: CanvasContextMenuOptio
     "selection-single-node-tree": [...single(withTreeItems(selectionSingleNodeItems))],
     "selection-single-matrix": [...single(withMatrixStatementItems(singleMatrixItems))],
     "selection-single-matrix-cell": [...withMatrixCellItems(selectionSingleNodeItems)],
+    "selection-single-axis": [...buildAxisItems(options.chartElements ?? { title: false, xlabel: false, ylabel: false, legend: false }, buildSelectionCommandItems(includeFlattenForeach))],
+    "selection-single-plot": [...PLOT_ITEMS],
+    "selection-single-axis-part": [...AXIS_PART_ITEMS],
     "selection-multi": [...selectionMultiItems]
   } as const satisfies CanvasContextMenuDefinition;
 }

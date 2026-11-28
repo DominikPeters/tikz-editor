@@ -75,12 +75,16 @@ import {
 import { requestSourceFormat } from "./source-sync";
 import { resolveOpenedFileForDocument, resolveOpenedPowerPointForDocument } from "./svg-import";
 import { resolveNodePositioningContextMenuAction } from "./canvas-panel/node-positioning-context-action";
+import { buildChartCommandBindings } from "./chart-commands";
+import type { Span } from "@tikz-editor/core/ast/types";
 
 export type CommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
 
 export type CommandBinding = {
   enabled: boolean;
   checked?: boolean;
+  /** Why a disabled command cannot run (shown on hover in the canvas context menu). */
+  reason?: string;
   run: (origin: CommandOrigin) => void | Promise<void>;
 };
 
@@ -138,6 +142,8 @@ type RuntimeInput = {
   onRequestQuitApp?: () => void;
   onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
   onAddNodeAdornment?: (kind: "label" | "pin") => void;
+  /** In-place text editing of a pgfplots axis part (chart context menu). */
+  onEditChartText?: (targetId: string, within?: Span) => void;
   onPositionNodeRelativeTo?: () => void;
   onConvertNodePositionToAbsolute?: () => void;
   onShowCompiledPicture?: () => void;
@@ -210,6 +216,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     onRequestQuitApp,
     onRequestSaveDocument,
     onAddNodeAdornment,
+    onEditChartText,
     onPositionNodeRelativeTo,
     onConvertNodePositionToAbsolute,
     onShowCompiledPicture,
@@ -286,10 +293,15 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     };
   };
 
-  // pgfplots insert templates: an axis appended to the picture (core `insertPgfplotsTemplate`).
-  const pgfplotsTemplateBinding = (template: "function" | "data" | "bar"): CommandBinding => ({
-    enabled: snapshot.parseResult != null,
-    run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "insertPgfplotsTemplate", template } }); }
+  // Chart commands (pgfplots): insert a chart kind, and the chart context-menu entries (chart-commands.ts).
+  const chartBindings = buildChartCommandBindings({
+    source,
+    sceneElements: snapshot.source === source ? snapshot.scene?.elements ?? null : null,
+    selectedElementIds,
+    parseOptions,
+    canEdit: snapshot.parseResult != null,
+    dispatch,
+    ...(onEditChartText === undefined ? {} : { onEditChartText })
   });
 
   const runSvgExport = () => {
@@ -429,6 +441,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   const bindings: Record<AppMenuCommandId, CommandBinding> = {
+    ...chartBindings,
     [APP_MENU_COMMAND_IDS.PRESENT_CURRENT]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current"); } },
     [APP_MENU_COMMAND_IDS.PRESENT_BEGINNING]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("beginning"); } },
     [APP_MENU_COMMAND_IDS.PRESENT_WINDOW]: { enabled: (input.documentKind ?? documentKindForSource(source)) === "beamer" && !input.presentation?.active, run: () => { launchPresentation("current", "window"); } },
@@ -782,12 +795,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     },
     [APP_MENU_COMMAND_IDS.SEND_BACKWARD]: {
       enabled: availability["reorder-sendBackward"].enabled,
+      ...(availability["reorder-sendBackward"].reason ? { reason: availability["reorder-sendBackward"].reason } : {}),
       run: () => {
         reorderSelection(commandContext, "sendBackward");
       }
     },
     [APP_MENU_COMMAND_IDS.BRING_FORWARD]: {
       enabled: availability["reorder-bringForward"].enabled,
+      ...(availability["reorder-bringForward"].reason ? { reason: availability["reorder-bringForward"].reason } : {}),
       run: () => {
         reorderSelection(commandContext, "bringForward");
       }
@@ -896,9 +911,6 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     },
     [APP_MENU_COMMAND_IDS.INSERT_NODE]: insertBinding("addNode"),
     [APP_MENU_COMMAND_IDS.INSERT_MATRIX]: insertBinding("addMatrix"),
-    [APP_MENU_COMMAND_IDS.INSERT_FUNCTION_PLOT]: pgfplotsTemplateBinding("function"),
-    [APP_MENU_COMMAND_IDS.INSERT_DATA_PLOT]: pgfplotsTemplateBinding("data"),
-    [APP_MENU_COMMAND_IDS.INSERT_BAR_CHART]: pgfplotsTemplateBinding("bar"),
     [APP_MENU_COMMAND_IDS.INSERT_SHAPE]: insertBinding("addShape"),
     [APP_MENU_COMMAND_IDS.INSERT_PATH]: insertBinding("addPath"),
     [APP_MENU_COMMAND_IDS.INSERT_FREEHAND]: insertBinding("addFreehand"),
@@ -1181,6 +1193,7 @@ export function useEditorCommandRuntime(
     onRequestQuitApp?: () => void;
     onRequestSaveDocument?: (documentId: string, mode: "save" | "save-as") => void | Promise<void>;
     onAddNodeAdornment?: (kind: "label" | "pin") => void;
+    onEditChartText?: (targetId: string, within?: Span) => void;
     onPositionNodeRelativeTo?: () => void;
     onConvertNodePositionToAbsolute?: () => void;
     onShowCompiledPicture?: () => void;
@@ -1312,6 +1325,7 @@ export function useEditorCommandRuntime(
         ...(options.onRequestQuitApp === undefined ? {} : { onRequestQuitApp: options.onRequestQuitApp }),
         ...(options.onRequestSaveDocument === undefined ? {} : { onRequestSaveDocument: options.onRequestSaveDocument }),
         ...(options.onAddNodeAdornment === undefined ? {} : { onAddNodeAdornment: options.onAddNodeAdornment }),
+        ...(options.onEditChartText === undefined ? {} : { onEditChartText: options.onEditChartText }),
         ...(options.onPositionNodeRelativeTo === undefined ? {} : { onPositionNodeRelativeTo: options.onPositionNodeRelativeTo }),
         ...(options.onConvertNodePositionToAbsolute === undefined ? {} : { onConvertNodePositionToAbsolute: options.onConvertNodePositionToAbsolute }),
         ...(options.onShowCompiledPicture === undefined ? {} : { onShowCompiledPicture: options.onShowCompiledPicture }),
@@ -1371,6 +1385,7 @@ export function useEditorCommandRuntime(
       options.onRequestQuitApp,
       options.onRequestSaveDocument,
       options.onAddNodeAdornment,
+      options.onEditChartText,
       options.onPositionNodeRelativeTo,
       options.onConvertNodePositionToAbsolute,
       options.onShowCompiledPicture,

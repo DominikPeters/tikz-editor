@@ -9,14 +9,26 @@ describe("canvas context menu definition", () => {
       "canvas-empty",
       "selection-multi",
       "selection-single",
+      "selection-single-axis",
+      "selection-single-axis-part",
       "selection-single-matrix",
       "selection-single-matrix-cell",
       "selection-single-node",
       "selection-single-node-tree",
       "selection-single-path-point",
       "selection-single-path-point-tree",
+      "selection-single-plot",
       "selection-single-tree"
     ]);
+  });
+
+  it("chart menus: axis elements with Add/Remove labels, plot and part entries", () => {
+    const labels = (items: readonly AppMenuItem[]): string[] => items.flatMap((item) => item.kind === "command" ? [item.label] : item.kind === "submenu" ? [`${item.label} >`] : []);
+    const axis = buildCanvasContextMenuDefinition({ chartElements: { title: true, xlabel: false, ylabel: false, legend: true } })["selection-single-axis"];
+    expect(labels(axis).slice(0, 6)).toEqual(["Remove Title", "Add X Label", "Add Y Label", "Remove Legend", "Grid >", "Insert Plot"]);
+    expect(labels(axis)).toContain("Delete Axis");
+    expect(labels(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-plot"])).toEqual(["Edit Legend Entry", "Bring Forward", "Send Backward", "Reset Plot Style", "Delete Plot"]);
+    expect(labels(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-axis-part"])).toEqual(["Edit Text", "Remove"]);
   });
 
   it("uses only known app command ids", () => {
@@ -30,7 +42,10 @@ describe("canvas context menu definition", () => {
       .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-matrix-cell"]))
       .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-tree"]))
       .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single"]))
-      .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-multi"]));
+      .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-multi"]))
+      .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-axis"]))
+      .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-plot"]))
+      .concat(collectCommandIds(CANVAS_CONTEXT_MENU_DEFINITION["selection-single-axis-part"]));
 
     for (const commandId of commandIds) {
       expect(knownCommandIds.has(commandId as any)).toBe(true);

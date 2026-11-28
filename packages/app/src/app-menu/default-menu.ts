@@ -1,4 +1,5 @@
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuDefinition, type AppMenuItem, type AppMenuPlatformTarget } from "./types.js";
+import { CHART_INSERT_MENU_ITEMS } from "./chart-menu.js";
 
 /**
  * A View menu panel toggle. Option-Command-digit is offered on macOS only:
@@ -496,19 +497,9 @@ export const APP_MENU_DEFINITION = [
       },
       { kind: "separator" },
       {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.INSERT_FUNCTION_PLOT,
-        label: "Function Plot"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.INSERT_DATA_PLOT,
-        label: "Data Plot"
-      },
-      {
-        kind: "command",
-        commandId: APP_MENU_COMMAND_IDS.INSERT_BAR_CHART,
-        label: "Bar Chart"
+        kind: "submenu",
+        label: "Chart",
+        items: CHART_INSERT_MENU_ITEMS
       }
     ]
   },
