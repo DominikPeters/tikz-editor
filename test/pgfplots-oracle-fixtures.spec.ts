@@ -56,6 +56,7 @@ const SKIP: Record<string, Partial<Record<"probes" | "map" | "tickPlacement" | "
     .map((name) => [name, { tickPlacement: "log labels print b^k (or a fixed-point value), not \\tick (behaviour Q4)" }])),
   ...Object.fromEntries(["axis-lines-left", "axis-lines-middle", "axis-lines-center-offset", "axis-lines-right"]
     .map((name) => [name, { tickPlacement: "ticks and labels hang on the axis lines, centred (behaviour R3, R5)", clip: "no closed box path: separate axis lines (R2)" }])),
+  "context-enclosing-scope": { tickPlacement: "axis lines=left: ticks and labels hang on the axis lines (behaviour R3, R5)", clip: "no closed box path: separate axis lines (R2)" },
   "axis-lines-mixed": { tickPlacement: "ticks on the axis lines (R3)", clip: "separate axis lines (R2)", singleAxis: "two axes" },
   "axis-lines-styles": { tickPlacement: "ticks on the axis lines (R3); hide x axis has no x ticks", clip: "separate axis lines (R2)", singleAxis: "two axes" },
   "axis-lines-hide": { probes: "hide axis: no ticks, so no tick probe", tickPlacement: "no ticks", clip: "no axis lines" },
