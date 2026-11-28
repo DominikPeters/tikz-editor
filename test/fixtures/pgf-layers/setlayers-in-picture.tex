@@ -1,0 +1,30 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{backgrounds}
+\pgfdeclarelayer{fg}
+\pgfdeclarelayer{discard}
+\begin{document}
+\begin{tikzpicture}
+  \draw[black, line width=3pt] (0,0) -- (3,3);
+  % fg is not listed yet (PGF reports an error) but is painted: the list at
+  % the end of the picture counts.
+  \begin{pgfonlayer}{fg}
+    \draw[green, line width=3pt] (0,3) -- (3,0);
+  \end{pgfonlayer}
+  \begin{pgfonlayer}{background}
+    \fill[yellow] (0.5,0.5) rectangle (2.5,2.5);
+    \begin{pgfonlayer}{background}
+      \fill[orange] (1,1) rectangle (2,2);
+    \end{pgfonlayer}
+    % Lost: the main layer's box is rebuilt around it.
+    \begin{pgfonlayer}{main}
+      \fill[purple] (0,0) rectangle (0.5,0.5);
+    \end{pgfonlayer}
+  \end{pgfonlayer}
+  \begin{pgfonlayer}{main}
+    \draw[cyan, line width=3pt] (0,1.5) -- (3,1.5);
+  \end{pgfonlayer}
+  \begin{scope}\pgfsetlayers{main}\end{scope}
+  \pgfsetlayers{fg,main,background}
+\end{tikzpicture}
+\end{document}

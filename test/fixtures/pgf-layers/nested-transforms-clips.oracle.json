@@ -1,0 +1,275 @@
+{
+ "sourceSha256": "9138f727ed1e49a382c3bc83739e0a35abd83ae1a98bb3340bb709f58ce40c0b",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -0.2,
+  "minY": -0.2,
+  "maxX": 114.011,
+  "maxY": 85.5582
+ },
+ "texErrors": [],
+ "tier2": {
+  "page": {
+   "width": 114.2107,
+   "height": 85.7584
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 7.7854,
+      "y": 29.4133
+     },
+     {
+      "op": "L",
+      "x": 87.9973,
+      "y": 58.6083
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 41.8215,
+      "y": 19.0919
+     },
+     {
+      "op": "L",
+      "x": 36.9557,
+      "y": 32.4606
+     },
+     {
+      "op": "L",
+      "x": 50.3243,
+      "y": 37.3264
+     },
+     {
+      "op": "L",
+      "x": 55.1901,
+      "y": 23.9578
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 50.3243,
+      "y": 37.3264
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      0,
+      1
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 2,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0003,
+      "y": -0.0004
+     },
+     {
+      "op": "L",
+      "x": -0.0003,
+      "y": 85.3589
+     },
+     {
+      "op": "L",
+      "x": 113.8122,
+      "y": 85.3589
+     },
+     {
+      "op": "L",
+      "x": 113.8122,
+      "y": -0.0004
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 113.8122,
+      "y": 85.3589
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0.5
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 3,
+    "operation": "clip",
+    "segments": [
+     {
+      "op": "M",
+      "x": 28.4528,
+      "y": 14.2261
+     },
+     {
+      "op": "L",
+      "x": 13.8553,
+      "y": 54.3321
+     },
+     {
+      "op": "L",
+      "x": 53.9613,
+      "y": 68.9296
+     },
+     {
+      "op": "L",
+      "x": 68.5588,
+      "y": 28.8237
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 53.9613,
+      "y": 68.9296
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero"
+   },
+   {
+    "type": "path",
+    "order": 4,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 11.4472,
+      "y": -22.2429
+     },
+     {
+      "op": "L",
+      "x": -27.4795,
+      "y": 84.7063
+     },
+     {
+      "op": "L",
+      "x": 79.4697,
+      "y": 123.6331
+     },
+     {
+      "op": "L",
+      "x": 118.3965,
+      "y": 16.6839
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 79.4697,
+      "y": 123.6331
+     }
+    ],
+    "clipDepth": 1,
+    "clipBox": {
+     "minX": 13.8553,
+     "minY": 14.2261,
+     "maxX": 68.5588,
+     "maxY": 68.9296
+    },
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 5,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 28.4528,
+      "y": 14.2261
+     },
+     {
+      "op": "L",
+      "x": 62.4641,
+      "y": 87.1641
+     }
+    ],
+    "clipDepth": 1,
+    "clipBox": {
+     "minX": 13.8553,
+     "minY": 14.2261,
+     "maxX": 68.5588,
+     "maxY": 68.9296
+    },
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      1,
+      0,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "dash": {
+     "array": [
+      3,
+      3
+     ],
+     "phase": 0
+    },
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   }
+  ],
+  "textBoxes": []
+ }
+}

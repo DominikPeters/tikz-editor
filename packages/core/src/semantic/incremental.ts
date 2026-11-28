@@ -1080,6 +1080,9 @@ function containsStatefulGraphicsState(source: string, figure?: TikzFigure): boo
     /use as bounding box/.test(source) ||
     /\boverlay\b/.test(source) ||
     /on background layer/.test(source) ||
+    // PGF's layers and the environments that change the bounding box or the canvas.
+    /\\(?:(?:begin|end)\s*\{|end|start|stop)?pgf(?:onlayer|interruptboundingbox|lowlevelscope|viewboxscope)\b/.test(source) ||
+    /\\pgf(?:setlayers|declarelayer)\b/.test(source) ||
     /show background (?:rectangle|grid|top|bottom|left|right)/.test(source) ||
     /\b(?:framed|gridded|tight background|loose background)\b/.test(source) ||
     /\b(?:inner|outer) frame (?:xsep|ysep|sep)\b/.test(source)

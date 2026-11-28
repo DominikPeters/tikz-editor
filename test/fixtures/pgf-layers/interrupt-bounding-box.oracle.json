@@ -1,0 +1,175 @@
+{
+ "sourceSha256": "2a73aad6e08d62990f508195e2eead8113d75e03f10b43f1c04afdcc8e9c549c",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -0.2,
+  "minY": -0.2,
+  "maxX": 57.1055,
+  "maxY": 28.6527
+ },
+ "texErrors": [],
+ "tier2": {
+  "page": {
+   "width": 57.3051,
+   "height": 28.8528
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0003,
+      "y": -0.0003
+     },
+     {
+      "op": "L",
+      "x": -0.0003,
+      "y": 28.4528
+     },
+     {
+      "op": "L",
+      "x": 56.906,
+      "y": 28.4528
+     },
+     {
+      "op": "L",
+      "x": 56.906,
+      "y": -0.0003
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 56.906,
+      "y": 28.4528
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 28.4528,
+      "y": 14.2262
+     },
+     {
+      "op": "L",
+      "x": 85.3591,
+      "y": 14.2262
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      1,
+      0,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 2,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 42.6794,
+      "y": 5.6902
+     },
+     {
+      "op": "L",
+      "x": 42.6794,
+      "y": 22.7623
+     },
+     {
+      "op": "L",
+      "x": 51.2154,
+      "y": 22.7623
+     },
+     {
+      "op": "L",
+      "x": 51.2154,
+      "y": 5.6902
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 51.2154,
+      "y": 22.7623
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      0,
+      1
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 3,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0003,
+      "y": -0.0003
+     },
+     {
+      "op": "L",
+      "x": 56.906,
+      "y": 28.4528
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   }
+  ],
+  "textBoxes": []
+ }
+}

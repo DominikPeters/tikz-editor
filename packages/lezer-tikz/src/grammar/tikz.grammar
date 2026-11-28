@@ -19,13 +19,13 @@ TikzEnvironment {
   BeginTikz Comment* (OptionList pictureItem* | bodyStart pictureItem*)? EndTikz
 }
 
-bodyStart { Statement | StrayToken | UnknownEnvironmentStatement | AxisStatement }
+bodyStart { Statement | StrayToken | UnknownEnvironmentStatement | AxisStatement | PgfEnvironmentStatement }
 
 // An item of a picture's body (a tikzpicture, scope, \tikz or overlay body).
 // Only here is an unknown environment a statement: around a picture, in a
 // document's preamble or body, `\begin{document}` or `\begin{figure}` would
 // otherwise swallow the pictures and definitions inside it.
-pictureItem { BodyItem | UnknownEnvironmentStatement | AxisStatement }
+pictureItem { BodyItem | UnknownEnvironmentStatement | AxisStatement | PgfEnvironmentStatement }
 
 BodyItem {
   Comment |
@@ -56,6 +56,7 @@ Statement {
   UsePgfplotsLibraryStatement |
   PgfplotsTableReadStatement |
   TexLengthStatement |
+  PgfLayerStatement |
   UnknownStatement
 }
 
@@ -73,6 +74,20 @@ StyleDefinitionStatement {
 
 ScopeStatement {
   BeginScope Comment* (OptionList pictureItem* | bodyStart pictureItem*)? EndScope
+}
+
+// PGF's environments in a picture: `{pgfonlayer}{name}`, `{pgfscope}`,
+// `{pgfinterruptboundingbox}`, `{pgftransparencygroup}[options]`,
+// `{pgflowlevelscope}{code}`, `{pgfviewboxscope}{..}{..}{..}{..}{meet}`, and
+// their plain TeX and ConTeXt forms. The begin token holds the arguments
+// (pgf-environment-tokens.ts); the body is picture statements.
+PgfEnvironmentStatement {
+  BeginPgfEnvironment pictureItem* EndPgfEnvironment
+}
+
+// `\pgfdeclarelayer{name}` and `\pgfsetlayers{list}`.
+PgfLayerStatement {
+  (PgfDeclareLayerCmd | PgfSetLayersCmd) Group
 }
 
 // The generic environment fallback: `\begin{x}…\end{x}` for an environment
@@ -1080,7 +1095,11 @@ TableKw { @specialize<Identifier, "table"> }
   TableData,
   PlotExpressionData,
   insertSemicolon,
-  insertPlotSemicolon
+  insertPlotSemicolon,
+  BeginPgfEnvironment,
+  EndPgfEnvironment,
+  PgfDeclareLayerCmd,
+  PgfSetLayersCmd
 }
 
 @external tokens unknownEnvironmentTokens from "./environment-tokens.js" {

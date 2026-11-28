@@ -1,0 +1,13 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\begin{document}
+\begin{tikzpicture}
+  \draw[red] (0,0) -- (2,0);
+  % Not declared: PGF stops with "the requested layer 'nosuch' could not be
+  % found"; in nonstop mode the content is drawn where it stands.
+  \begin{pgfonlayer}{nosuch}
+    \draw[blue] (0,0.5) -- (2,0.5);
+  \end{pgfonlayer}
+  \draw[green] (0,1) -- (2,1);
+\end{tikzpicture}
+\end{document}

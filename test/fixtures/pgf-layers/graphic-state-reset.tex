@@ -1,0 +1,21 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{backgrounds}
+\begin{document}
+\begin{tikzpicture}
+  \begin{scope}[dashed, opacity=0.5, draw=red, text=blue, line width=3pt]
+    \begin{pgfonlayer}{background}
+      % Black, 0.4pt, solid and opaque on the layer; the text stays blue.
+      \draw (0,0) -- (1,1);
+      \node at (2,0) {X};
+      \clip (0,0) rectangle (3,0.5);
+      \draw[orange] (0,0.25) -- (4,0.25);
+    \end{pgfonlayer}
+    \draw (0,1) -- (2,2);
+  \end{scope}
+  % The clip set on the layer outside a scope holds for its later content.
+  \begin{pgfonlayer}{background}
+    \draw[green] (0,0.4) -- (4,0.4);
+  \end{pgfonlayer}
+\end{tikzpicture}
+\end{document}

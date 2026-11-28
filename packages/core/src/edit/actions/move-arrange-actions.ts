@@ -38,7 +38,7 @@ import { normalizeOptionKey } from "../option-key.js";
 import { FIT_DIRECT_MANIPULATION_BLOCK_REASON, sourceUsesFitNodeFromParseResult } from "../fit.js";
 import { findPathStatementById, normalizeElementIds, uniqueStrings } from "../statement-find.js";
 import type { SiteContext } from "../../semantic/site-context.js";
-import { nestedStatements } from "../../ast/walk.js";
+import { expandPgfEnvironmentIds, nestedStatements } from "../../ast/walk.js";
 
 const ARRANGE_EPSILON = 1e-6;
 
@@ -80,7 +80,11 @@ export function applyMoveElementsAction(
   const parsed = parseTikzForEdit(source, {
     ...parseOptions,
   });
-  const normalizedIds = collapseMovedScopeDescendants(parsed.figure.body, requestedIds, editHandles);
+  const normalizedIds = collapseMovedScopeDescendants(
+    parsed.figure.body,
+    expandPgfEnvironmentIds(parsed.figure.body, requestedIds),
+    editHandles
+  );
   const fitBlockedId = normalizedIds.find((elementId) =>
     sourceUsesFitNodeFromParseResult(source, parsed, elementId)
   );

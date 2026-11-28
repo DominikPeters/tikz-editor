@@ -6,6 +6,7 @@ import {
   legendStatementId,
   pgfplotsExtraId,
   pgfplotsLibraryStatementId,
+  pgfLayerStatementId,
   pgfplotsSetStatementId,
   colorletStatementId,
   defineColorStatementId,
@@ -1331,6 +1332,14 @@ function reindexStatementsInPlace(
     if (statement.kind === "PgfplotsSet" || statement.kind === "PgfplotsLibrary") {
       if (!preserveExistingId) {
         statement.id = statement.kind === "PgfplotsSet" ? pgfplotsSetStatementId(statementIndex) : pgfplotsLibraryStatementId(statementIndex);
+        templateLocalIdByExpandedId.set(statement.id, previousId);
+      }
+      continue;
+    }
+
+    if (statement.kind === "PgfLayer") {
+      if (!preserveExistingId) {
+        statement.id = pgfLayerStatementId(statementIndex);
         templateLocalIdByExpandedId.set(statement.id, previousId);
       }
       continue;

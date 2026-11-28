@@ -153,6 +153,24 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports background scopes and documented end-picture background rectangle/grid/side hooks via semantic scene layers."
   },
+  pgf_layers: {
+    parser: "stable",
+    semantic: "stable",
+    svg: "stable",
+    edit: "partial",
+    fixtures: ["pgf_layers"],
+    notes:
+      "Layers declared before or in the picture, painted in the order of the list at the picture's end; layer content resets the PDF graphic state and escapes enclosing clips as in pdfTeX; unlisted, discard and lost-to-main content is dropped with diagnostics. `on background layer` shares the mechanism. Statements inside are edited like a scope's; the environment cannot take options."
+  },
+  pgf_environments: {
+    parser: "stable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["pgf_environments"],
+    notes:
+      "{pgfscope} groups like a scope; {pgfinterruptboundingbox} keeps its content out of the bounding box; {pgflowlevelscope} and {pgfviewboxscope} apply their canvas transformation to coordinates only (line widths and text unscaled) and leave the bounding box alone; {pgftransparencygroup} draws its content ungrouped. Each warns where it differs from TeX."
+  },
   arrow_tips: {
     parser: "stable",
     semantic: "stable",

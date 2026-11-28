@@ -1,0 +1,34 @@
+{
+ "sourceSha256": "e6b9bac72d65bf683d6c21f36afe3de80f053d5edfff3dc98b66894dc72dda8c",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -0.2,
+  "minY": -0.2,
+  "maxX": 57.1055,
+  "maxY": 28.6527
+ },
+ "texErrors": [
+  "Package pgf Error: Sorry, the requested layer 'nosuch' could not be found. Ma",
+  "LaTeX Error: \\begin{tikzpicture} on input line 7 ended by \\end{pgfonlayer}.",
+  "Undefined control sequence.",
+  "Undefined control sequence.",
+  "Missing number, treated as zero.",
+  "Illegal unit of measure (pt inserted).",
+  "Missing } inserted.",
+  "Extra }, or forgotten \\endgroup.",
+  "Missing } inserted.",
+  "Extra }, or forgotten \\endgroup.",
+  "LaTeX Error: \\begin{document} ended by \\end{tikzpicture}.",
+  "Missing } inserted.",
+  "Extra \\endgroup.",
+  "Too many }'s."
+ ],
+ "tier2": {
+  "page": {
+   "width": 57.3051,
+   "height": 28.8528
+  },
+  "primitives": [],
+  "textBoxes": []
+ }
+}

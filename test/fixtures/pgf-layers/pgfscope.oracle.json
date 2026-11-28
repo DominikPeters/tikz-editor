@@ -1,0 +1,144 @@
+{
+ "sourceSha256": "c3052c2729c70790abb8711aab3c916f5558e2c992fc15a272255aeb94c831bc",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -0.5,
+  "minY": -0.5,
+  "maxX": 57.4055,
+  "maxY": 43.1791
+ },
+ "texErrors": [],
+ "tier2": {
+  "page": {
+   "width": 57.9053,
+   "height": 43.6792
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0001,
+      "y": -0.0002
+     },
+     {
+      "op": "L",
+      "x": 56.9061,
+      "y": -0.0002
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      0,
+      1
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 1,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0001,
+      "y": 14.2263
+     },
+     {
+      "op": "L",
+      "x": 56.9061,
+      "y": 14.2263
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      1,
+      0,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 1,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 2,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0001,
+      "y": 28.4529
+     },
+     {
+      "op": "L",
+      "x": 56.9061,
+      "y": 28.4529
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      0,
+      1
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 1,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 3,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0001,
+      "y": 42.6794
+     },
+     {
+      "op": "L",
+      "x": 56.9061,
+      "y": 42.6794
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 1,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   }
+  ],
+  "textBoxes": []
+ }
+}

@@ -1,0 +1,84 @@
+{
+ "sourceSha256": "38bf041e567ee7edabadca06e3e92f135ed3b97c25aa9c3ac220ec14ca54eb08",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -0.2,
+  "minY": -28.6527,
+  "maxX": 142.4637,
+  "maxY": 28.6527
+ },
+ "texErrors": [
+  "Package pgf Error: Sorry, the requested layer 'unlisted' is not part of the l"
+ ],
+ "tier2": {
+  "page": {
+   "width": 142.664,
+   "height": 57.3051
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0003,
+      "y": 0.0007
+     },
+     {
+      "op": "L",
+      "x": 56.906,
+      "y": 0.0007
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      1,
+      0,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0003,
+      "y": 14.2272
+     },
+     {
+      "op": "L",
+      "x": 56.906,
+      "y": 14.2272
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   }
+  ],
+  "textBoxes": []
+ }
+}

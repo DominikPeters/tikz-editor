@@ -308,7 +308,7 @@ function translateSingleStatementSnippet(
   }
 
   // A scope without options of its own is shifted in place: nothing in it reads the shift.
-  if (statement.kind === "Scope" && (statement.options?.entries.length ?? 0) === 0) {
+  if (statement.kind === "Scope" && !statement.environment && (statement.options?.entries.length ?? 0) === 0) {
     const shift = geometry.writer.translated({ kind: "context", context: statementEntryContext(geometry, ref.id) }, steps);
     if (shift.kind !== "ok") throw new CoordinateWriteRefused(shift.reason);
     const result = applySetPropertyAction(source, { elementId: statement.id, key: "shift", value: `{${shift.fragment}}` }, parseOptions);

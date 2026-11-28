@@ -720,7 +720,8 @@ function findTargetInStatements(statements: Statement[], source: string, element
 
     if (statement.kind === "Scope") {
       if (statement.id === elementId) {
-        return makeScopeTarget(statement, source);
+        // A PGF environment (`{pgfonlayer}{name}`, ...) takes no TikZ options.
+        return statement.environment ? null : makeScopeTarget(statement, source);
       }
       const nested = findTargetInStatements(statement.body, source, elementId);
       if (nested) {

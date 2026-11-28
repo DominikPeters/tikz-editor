@@ -7,6 +7,10 @@ import {
   AddPlotCmd,
   AxisLabelCmd,
   BeginAxis,
+  BeginPgfEnvironment,
+  EndPgfEnvironment,
+  PgfDeclareLayerCmd,
+  PgfSetLayersCmd,
   BeginAxisFontEnv,
   EndAxis,
   EndAxisFontEnv,
@@ -22,6 +26,7 @@ import {
   insertPlotSemicolon,
   insertSemicolon
 } from "./tikz-parser.terms.js";
+import { readPgfEnvironmentDelimiter } from "./pgf-environment-tokens.js";
 
 /**
  * The pgfplots axis environments the grammar's `AxisStatement` reads. A later
@@ -52,7 +57,11 @@ const COMMAND_TERMS: ReadonlyMap<string, number> = new Map([
   ["usepgfplotslibrary", UsePgfplotsLibraryCmd],
   ["pgfplotsinvokeforeach", PgfplotsInvokeForeachCmd],
   ["pgfplotsforeachungrouped", PgfplotsForeachUngroupedCmd],
-  ["label", AxisLabelCmd]
+  ["label", AxisLabelCmd],
+  // PGF's layer declarations (pgfcorelayers): statements of their own in a
+  // preamble or a picture.
+  ["pgfdeclarelayer", PgfDeclareLayerCmd],
+  ["pgfsetlayers", PgfSetLayersCmd]
 ]);
 
 /** LaTeX's font size environments (`\begin{scriptsize}`), read as containers inside an axis body. */
@@ -126,6 +135,18 @@ export const pgfplotsTokens = new ExternalTokenizer(
       input.acceptToken(insertSemicolon);
       return;
     }
+    // PGF's environments (`\begin{pgfonlayer}{name}`, `\endpgfscope`, ...):
+    // a statement still open before one ends there, like before `\end{axis}`.
+    const pgfEnvironment = readPgfEnvironmentDelimiter(input, name, length);
+    if (pgfEnvironment) {
+      const term = pgfEnvironment.kind === "begin" ? BeginPgfEnvironment : EndPgfEnvironment;
+      if (stack.canShift(term)) {
+        input.acceptToken(term, pgfEnvironment.length);
+      } else if (stack.canShift(insertSemicolon)) {
+        input.acceptToken(insertSemicolon);
+      }
+      return;
+    }
     if (name === "begin" || name === "end") {
       const environment = readEnvironmentName(input, length);
       if (environment && FONT_SIZE_ENVIRONMENTS.has(environment.name)) {
@@ -166,7 +187,8 @@ export const pgfplotsTokens = new ExternalTokenizer(
     // Like `\tikzset`, these start a statement of their own wherever one can
     // start, so in a preamble the command before them (`\usepackage{…}`,
     // read as an unknown statement) ends there instead of swallowing them.
-    if ((term === PgfplotsSetCmd || term === UsePgfplotsLibraryCmd || term === PgfplotsTableReadCmd) && stack.canShift(insertSemicolon)) {
+    if ((term === PgfplotsSetCmd || term === UsePgfplotsLibraryCmd || term === PgfplotsTableReadCmd || term === PgfDeclareLayerCmd || term === PgfSetLayersCmd) &&
+      stack.canShift(insertSemicolon)) {
       input.acceptToken(insertSemicolon);
     }
   },
