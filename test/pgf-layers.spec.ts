@@ -5,6 +5,8 @@ import { applyEditAction } from "../packages/core/src/edit/actions.js";
 import { createStandaloneLatexExportArtifact } from "../packages/core/src/export/standalone-latex.js";
 import { createIncrementalParseSession, parseTikz } from "../packages/core/src/parser/index.js";
 import { renderTikzToSvg } from "../packages/core/src/render/index.js";
+import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
+import { createIncrementalSemanticSession } from "../packages/core/src/semantic/incremental.js";
 import type { SceneElement, ScenePath } from "../packages/core/src/semantic/types.js";
 import { evaluateSemantic } from "./semantic/helpers.js";
 
@@ -188,6 +190,16 @@ describe("PGF layers: paint order", () => {
   \end{pgfonlayer}
   \draw[blue] (0,1) -- (1,1);`) + "\n\\end{document}\n";
     expect(strokeOrder(source, { includeContextDefinitions: true })).toEqual([BLUE, RED]);
+  });
+
+  it("keeps an earlier picture's layer declaration but not its \\pgfsetlayers", () => {
+    const source = picture("  \\pgfdeclarelayer{back}\n  \\pgfsetlayers{back,main}\n  \\draw (0,0) -- (1,0);") + "\n" +
+      picture("  \\draw[red] (0,0) -- (1,0);\n  \\begin{pgfonlayer}{back}\n    \\draw[blue] (0,1) -- (1,1);\n  \\end{pgfonlayer}");
+    const semantic = evaluateSemantic(source, undefined, { includeContextDefinitions: true, activeFigureId: "figure:1" });
+    expect(paths(semantic.scene.elements).map((path) => path.style.stroke)).toEqual([RED]);
+    const codes = semantic.diagnostics.map((diagnostic) => diagnostic.code);
+    expect(codes).toContain("pgf-layer-not-listed");
+    expect(codes).not.toContain("pgf-layer-undeclared");
   });
 
   it("uses the list at the picture's top level when the picture ends (\\pgfsetlayers in the picture)", () => {
@@ -487,6 +499,42 @@ describe("PGF environments: incremental parsing matches a full parse", () => {
       expect(result.parse.figure).toEqual(full.figure);
       expect(result.parse.diagnostics).toEqual(full.diagnostics);
       if (edit.strategy) expect(result.stats.strategy).toBe(edit.strategy);
+    });
+  }
+});
+
+describe("PGF layers: incremental evaluation matches a full one", () => {
+  const BASE = picture(String.raw`  \pgfdeclarelayer{front}
+  \pgfsetlayers{background,main,front}
+  \draw[red] (0,0) -- (1,1);
+  \begin{pgfonlayer}{front}
+    \draw[green] (0,1) -- (1,2);
+  \end{pgfonlayer}
+  \begin{scope}[line width=2pt]
+    \begin{pgfonlayer}{background}
+      \clip (0,0) rectangle (3,3);
+      \draw[blue] (3,3) -- (4,4);
+    \end{pgfonlayer}
+    \draw (5,5) -- (6,6);
+  \end{scope}
+  \begin{pgfonlayer}{background}
+    \draw[blue] (0,0) -- (4,4);
+  \end{pgfonlayer}`);
+
+  const edits: Array<{ name: string; next: string; changedSourceIds: string[] }> = [
+    { name: "a coordinate on a layer", next: BASE.replace("(0,1) -- (1,2)", "(0,1) -- (2,3)"), changedSourceIds: ["path:4"] },
+    { name: "a coordinate after the layers", next: BASE.replace("(5,5) -- (6,6)", "(5,5) -- (7,7)"), changedSourceIds: ["path:9"] },
+    { name: "the layer list", next: BASE.replace("{background,main,front}", "{front,main,background}"), changedSourceIds: ["pgf-layer:1"] }
+  ];
+  for (const edit of edits) {
+    it(`after editing ${edit.name}`, () => {
+      const session = createIncrementalSemanticSession();
+      session.evaluate({ source: BASE, figure: parseTikz(BASE).figure });
+      const parsed = parseTikz(edit.next);
+      const result = session.evaluate({ source: edit.next, figure: parsed.figure, hints: { trigger: "drag-element", changedSourceIds: edit.changedSourceIds } });
+      const full = evaluateTikzFigure(parsed.figure, edit.next);
+      expect(result.semantic.scene).toEqual(full.scene);
+      expect(result.semantic.diagnostics).toEqual(full.diagnostics);
     });
   }
 });
