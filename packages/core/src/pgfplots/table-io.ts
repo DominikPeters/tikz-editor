@@ -5,21 +5,18 @@
  */
 import type { PgfplotsTableReadStatement } from "../ast/types.js";
 import type { OptionEntry, OptionListAst } from "../options/types.js";
-import { readContextMacroBinding, writeContextMacroBinding, type SemanticContext } from "../semantic/context.js";
+import { defineContextSymbol, readContextStateBinding, resolveContextSymbol, writeContextStateBinding, type SemanticContext } from "../semantic/context.js";
 import type { ReadTableMacro, TableFileRead } from "./data.js";
 import { stripBraces } from "./model.js";
 
 const BINDING_PREFIX = "\\pgfplots table ";
 
 /**
- * `\pgfplotstableread[options]{data}\macro`. With `format=auto` (initial) the
- * argument is inline data when it holds a row separator (a newline, or `\\`
- * with `row sep=\\`), otherwise a file name (manual pgfplotstable.tex,
- * `table/format`; E17 `pgfplotstableread*`).
+ * The options in effect for a `\pgfplotstableread` (the `table/…` keys of the
+ * `\pgfplotsset`/`\pgfplotstableset` settings before it, then its own, V11)
+ * and whether its argument is inline data rather than a file name.
  */
-export function recordPgfplotsTableRead(context: SemanticContext, statement: PgfplotsTableReadStatement, settings: readonly OptionListAst[] = []): void {
-  if (!statement.macroName) return;
-  // The format keys in effect when the table is read (`\pgfplotstableset` before it), then its own options (V11).
+export function pgfplotsTableReadFormat(statement: PgfplotsTableReadStatement, settings: readonly OptionListAst[] = []): { inline: boolean; options: OptionEntry[] } {
   const contextKeys = settings.flatMap((list) => list.entries).filter((entry) => entry.kind !== "unknown" && /^(?:\/pgfplots\/)?table\//u.test(entry.key.trim()));
   const options = [...contextKeys, ...(statement.options?.entries ?? [])];
   let format = "auto";
@@ -31,17 +28,33 @@ export function recordPgfplotsTableRead(context: SemanticContext, statement: Pgf
     if (key === "row sep") backslashRows = ["\\\\", "crcr"].includes(stripBraces(entry.valueRaw));
   }
   const inline = format === "inline" || (format !== "file" && (/[\n\r]/u.test(statement.dataRaw) || (backslashRows && statement.dataRaw.includes("\\\\"))));
+  return { inline, options };
+}
+
+/**
+ * `\pgfplotstableread[options]{data}\macro`. With `format=auto` (initial) the
+ * argument is inline data when it holds a row separator (a newline, or `\\`
+ * with `row sep=\\`), otherwise a file name (manual pgfplotstable.tex,
+ * `table/format`; E17 `pgfplotstableread*`).
+ */
+export function recordPgfplotsTableRead(context: SemanticContext, statement: PgfplotsTableReadStatement, settings: readonly OptionListAst[] = []): void {
+  if (!statement.macroName) return;
+  const { inline, options } = pgfplotsTableReadFormat(statement, settings);
   const table: ReadTableMacro = { data: statement.dataRaw, offset: statement.dataSpan.from, inline, options };
-  writeContextMacroBinding(context, `${BINDING_PREFIX}${statement.macroName}`, { kind: "text", value: JSON.stringify(table), provenance: [] });
+  // The table itself is internal state; the user macro `\macro` is a symbol defined by this statement,
+  // so whatever reads the table depends on it (the standalone export carries it).
+  writeContextStateBinding(context, `${BINDING_PREFIX}${statement.macroName}`, JSON.stringify(table));
+  defineContextSymbol(context, { kind: "macro", name: statement.macroName, statementId: statement.id, span: statement.span });
 }
 
 export function readPgfplotsTableMacro(context: SemanticContext, name: string): ReadTableMacro | null {
-  const binding = readContextMacroBinding(context, `${BINDING_PREFIX}${name.trim()}`);
-  if (binding?.kind !== "text") return null;
+  void resolveContextSymbol(context, "macro", name.trim());
+  const value = readContextStateBinding(context, `${BINDING_PREFIX}${name.trim()}`);
+  if (value === undefined) return null;
   try {
     // Written by recordPgfplotsTableRead above.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    const parsed = JSON.parse(binding.value) as { data: string; offset: number; inline: boolean; options: OptionEntry[] };
+    const parsed = JSON.parse(value) as { data: string; offset: number; inline: boolean; options: OptionEntry[] };
     return parsed;
   } catch {
     return null;

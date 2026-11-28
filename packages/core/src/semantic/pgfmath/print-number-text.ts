@@ -54,11 +54,10 @@ export function readPgfNumberFormat(bindings: ReadonlyMap<string, MacroBinding>)
   return formatFromState(stateOf(bindings));
 }
 
-/** The binding that records `entries` (relative `/pgf/number format/` keys) after the current state. */
-export function pgfNumberFormatStateBinding(bindings: ReadonlyMap<string, MacroBinding>, entries: readonly string[]): MacroBinding {
+/** The state that records `entries` (relative `/pgf/number format/` keys) after the current state (an internal binding). */
+export function pgfNumberFormatState(bindings: ReadonlyMap<string, MacroBinding>, entries: readonly string[]): string {
   const previous = stateOf(bindings);
-  const value = [previous, ...entries].filter(entry => entry.length > 0).join(",");
-  return { kind: "text", value, provenance: [] };
+  return [previous, ...entries].filter(entry => entry.length > 0).join(",");
 }
 
 /** Validate number-format keys the way applying them would (unknown keys, bad values). */

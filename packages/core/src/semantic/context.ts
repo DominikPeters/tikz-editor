@@ -685,9 +685,31 @@ export function readContextMacroBinding(
   name: string,
   explicitConsumerStatementId?: string | null
 ): MacroBinding | undefined {
-  void resolveContextSymbol(context, "macro", name, explicitConsumerStatementId);
   const frame = currentFrame(context);
-  return frame.macroBindings.get(name);
+  const binding = frame.macroBindings.get(name);
+  if (isInternalMacroBinding(binding)) return binding;
+  void resolveContextSymbol(context, "macro", name, explicitConsumerStatementId);
+  return binding;
+}
+
+/** Whether a binding is editor-internal state rather than a user macro (see `TextMacroBinding.internal`). */
+export function isInternalMacroBinding(binding: MacroBinding | undefined): boolean {
+  return binding?.kind === "text" && binding.internal === true;
+}
+
+/**
+ * Editor-internal state scoped like a macro (it follows TeX grouping), under
+ * a name that is not a control sequence. It defines no symbol, so it never
+ * appears among a document's macros, dependencies or unresolved symbols.
+ */
+export function writeContextStateBinding(context: SemanticContext, name: string, value: string): void {
+  currentFrame(context).macroBindings.set(name, { kind: "text", value, provenance: [], internal: true });
+}
+
+/** Reads state written by `writeContextStateBinding`, without resolving a symbol. */
+export function readContextStateBinding(context: SemanticContext, name: string): string | undefined {
+  const binding = currentFrame(context).macroBindings.get(name);
+  return binding?.kind === "text" ? binding.value : undefined;
 }
 
 export function deleteContextMacroBinding(context: SemanticContext, name: string): void {

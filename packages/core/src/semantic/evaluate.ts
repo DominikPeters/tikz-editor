@@ -70,6 +70,8 @@ import {
   withDependencySource,
   writeContextColorAlias,
   writeContextMacroBinding,
+  writeContextStateBinding,
+  readContextStateBinding,
   snapshotSemanticContext,
   type SemanticContextSnapshot,
   type SemanticContext,
@@ -125,7 +127,7 @@ import {
   collectPgfNumberFormatKeys,
   partitionPgfNumberFormatKeys,
   diagnosePgfNumberFormatKeys,
-  pgfNumberFormatStateBinding
+  pgfNumberFormatState
 } from "./pgfmath/print-number-text.js";
 import { worldPoint, worldBounds } from "../coords/points.js";
 import type { WorldBounds, WorldPoint } from "../coords/points.js";
@@ -1461,9 +1463,9 @@ function evaluateStatement(
   if (statement.kind === "PgfplotsSet") {
     markFeature(featureUsage, "pgfplots_pgfplotsset", "supported");
     const payload = statement.optionList.raw.replace(/^\[|\]$/gu, "");
-    const previous = readContextMacroBinding(context, PGFPLOTS_SETTINGS_BINDING);
-    const value = previous?.kind === "text" && previous.value.length > 0 ? `${previous.value}\u0000${payload}` : payload;
-    writeContextMacroBinding(context, PGFPLOTS_SETTINGS_BINDING, { kind: "text", value, provenance: [] });
+    const previous = readContextStateBinding(context, PGFPLOTS_SETTINGS_BINDING);
+    const value = previous !== undefined && previous.length > 0 ? `${previous}\u0000${payload}` : payload;
+    writeContextStateBinding(context, PGFPLOTS_SETTINGS_BINDING, value);
     return [];
   }
 
@@ -2090,7 +2092,7 @@ function applyNumberFormatKeys(
     diagnostics.push({ severity: "warning", code: `pgf-number-format-${problem.code}`, message: problem.message, span });
   }
   const frame = currentFrame(context);
-  writeContextMacroBinding(context, PGF_NUMBER_FORMAT_STATE_BINDING, pgfNumberFormatStateBinding(frame.macroBindings, entries));
+  writeContextStateBinding(context, PGF_NUMBER_FORMAT_STATE_BINDING, pgfNumberFormatState(frame.macroBindings, entries));
 }
 
 function applyTikzStyleStatement(
