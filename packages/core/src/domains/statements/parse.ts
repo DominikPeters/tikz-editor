@@ -62,7 +62,7 @@ function mapBodyChild(child: SyntaxNode, source: string, state: StatementMapping
   const maybeStatement = unwrapStatementLikeNode(child);
 
   if (maybeStatement.type.name === "OverlayGroupStatement") {
-    return mapOverlayGroupStatement(maybeStatement, source, state);
+    return mapOverlayGroupStatement<Statement>(maybeStatement, source, state, (member) => mapBodyChild(member, source, state));
   }
   const mapped = mapStatementNode(maybeStatement, source, state);
   return mapped ? [mapped] : [];
@@ -77,12 +77,12 @@ const OVERLAY_GROUP_COMMANDS: readonly OverlayGroupCommand[] = ["only", "uncover
  * An overlay command around statements, as its head followed by the
  * statements of its bodies, each naming the head and its body.
  */
-export function mapOverlayGroupStatement<Member extends { overlayGroups?: Statement["overlayGroups"] } = Statement>(
+export function mapOverlayGroupStatement<Member extends { overlayGroups?: Statement["overlayGroups"] }>(
   node: SyntaxNode,
   source: string,
   state: StatementMappingState,
-  // Inside an axis, the axis maps the members (they may be `\addplot`s).
-  mapMember: (child: SyntaxNode) => Member[] = (child) => mapBodyChild(child, source, state) as unknown as Member[]
+  // Maps one item of a body: a statement, or inside an axis an axis item (an `\addplot`).
+  mapMember: (child: SyntaxNode) => Member[]
 ): Array<OverlayGroupStatement | Member> {
   const statementIndex = allocateStatementIndex(state);
   const commandNode = findFirstChildByName(node, "OverlayGroupCmd") ?? findFirstChildByName(node, "OnslideCmd");

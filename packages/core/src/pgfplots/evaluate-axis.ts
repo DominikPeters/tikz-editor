@@ -1455,7 +1455,7 @@ function isBodyTextKey(key: string): boolean {
  */
 function axisOnOverlayStep(axis: AxisStatement, context: SemanticContext): AxisStatement {
   const visibility = context.overlayVisibilityOf;
-  if (!visibility || !axis.body.some((item) => item.overlayGroups?.length || item.kind === "OverlayGroup" || item.kind === "OverlayDeclaration")) return axis;
+  if (!visibility || !axis.body.some((item) => (item.overlayGroups?.length ?? 0) > 0 || item.kind === "OverlayGroup" || item.kind === "OverlayDeclaration")) return axis;
   const body = axis.body.filter((item) => visibility(item) !== "removed");
   return body.length === axis.body.length ? axis : { ...axis, body };
 }

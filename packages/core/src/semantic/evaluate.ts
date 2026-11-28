@@ -416,10 +416,12 @@ export function createSemanticEvaluationRun(
   const sourceStatementSpanById = buildSourceStatementSpanById(figure.body);
   const overlayVisibility = opts.overlayVisibility;
   if (overlayVisibility) {
-    context.overlayVisibilityOf = (item, at) => {
-      const statement = item as Statement;
-      const origin = expanded.statementAttribution.get(statement);
-      const sourceMap = expanded.statementSourceMaps.get(statement);
+    // An axis body item is asked too; only statements are in the expansion maps.
+    const attribution: { get(key: object): ReturnType<typeof expanded.statementAttribution.get> } = expanded.statementAttribution;
+    const sourceMaps: { get(key: object): ReturnType<typeof expanded.statementSourceMaps.get> } = expanded.statementSourceMaps;
+    context.overlayVisibilityOf = (statement, at) => {
+      const origin = attribution.get(statement);
+      const sourceMap = sourceMaps.get(statement);
       const sourceSpan = sourceMap ? mapExpansionSpan(sourceMap, statement.span) : sourceStatementSpanById.get(origin?.sourceId ?? statement.id) ?? statement.span;
       return overlayVisibility(at === "end" ? { from: sourceSpan.to, to: sourceSpan.to } : sourceSpan, origin?.foreachStack.map((frame) => frame.iterationIndex) ?? []);
     };

@@ -28,8 +28,7 @@ import type {
   PlotInput,
   PlotSourceText,
   PlotTableSource,
-  Span,
-  Statement
+  Span
 } from "../../ast/types.js";
 import { parseOptionListRaw, parseStyleValueAsOptionList } from "../../options/parse.js";
 import type { OptionListAst } from "../../options/types.js";

@@ -68,7 +68,7 @@ export function reconcileEditingIdentities(
     // its own id (`pic-operation:N:M`): that id is an object too. Its kind tells
     // it from the statement with the same span.
     if (element.identityRef && element.sourceRef.sourceId !== element.identityRef.sourceId) {
-      add(element.sourceRef.sourceId, `${element.kind}@${element.sourceRef.sourceKind ?? "source"}`, element.sourceRef.sourceSpan);
+      add(element.sourceRef.sourceId, `${element.kind}@${element.sourceRef.sourceId.replace(/[:\d]+$/u, "")}`, element.sourceRef.sourceSpan);
     }
   }
   const rootId = editingIdentityRootId(snapshot);
