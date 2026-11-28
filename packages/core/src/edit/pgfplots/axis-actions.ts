@@ -5,7 +5,7 @@
  * axis description coordinates (behaviour L1/L2). All are option-list edits
  * of the axis; the rest of the list keeps its text, comments and order.
  */
-import type { AddLegendEntryStatement, AddPlotStatement, AxisStatement, Span, Statement } from "../../ast/types.js";
+import type { AddPlotStatement, AxisStatement, Statement } from "../../ast/types.js";
 import { nestedStatements } from "../../ast/walk.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { parseOptionListRaw } from "../../options/parse.js";
@@ -18,12 +18,12 @@ import { parseAxisDescriptionId, parseAxisPlotId } from "../../pgfplots/edit-ids
 import { sourceSlice, tikz, unchangedSource, userText } from "../fragment.js";
 import { rewriteCoordinate } from "../rewrite.js";
 import { replaceSpan } from "../patch.js";
-import type { SourcePatch } from "../types.js";
 import { readLengthWithUnit, stripBraces, writeAxisAt, writeAxisLength } from "../writer/pgfplots-values.js";
 import type { EditGeometrySession } from "../geometry-session.js";
 import { applyOptionMutationsToTarget, type OptionMutation } from "../option-mutations.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
+import { applyReplacements, readLegendAssociation, reorderPlotsWithLegend } from "./legend-edits.js";
 import { resolvePropertyTarget, type PropertyTarget } from "../property-target.js";
 import { shortestDecimal, writeTolerancePt, type DragFormatPrecision } from "../format.js";
 import type { EditActionResultLike } from "../result-types.js";
@@ -307,43 +307,12 @@ function legendStyleWithout(raw: string, keys: readonly string[]): string | null
   return kept.length > 0 ? kept.join(", ") : null;
 }
 
-/**
- * Spans an `\addplot` deletion removes: the statement and the `\addlegendentry`
- * directly after it (only blanks between), with the line they occupy.
- */
-export function plotDeletionSpans(source: string, axis: AxisStatement, plot: AddPlotStatement): Span[] {
-  const index = axis.body.indexOf(plot);
-  const next = axis.body[index + 1];
-  const entry = next?.kind === "AddLegendEntry" && /^\s*$/u.test(source.slice(plot.span.to, next.span.from)) ? next : null;
-  return [lineSpan(source, { from: plot.span.from, to: (entry ?? plot).span.to })];
-}
-
-/** The pair a plot forms with its directly following legend entry. */
-export function plotWithLegendEntry(source: string, axis: AxisStatement, plot: AddPlotStatement): { span: Span; entry: AddLegendEntryStatement | null } {
-  const index = axis.body.indexOf(plot);
-  const next = axis.body[index + 1];
-  const entry = next?.kind === "AddLegendEntry" && /^\s*$/u.test(source.slice(plot.span.to, next.span.from)) ? next : null;
-  return { span: { from: plot.span.from, to: (entry ?? plot).span.to }, entry };
-}
-
-/** Widens a span to whole lines when only blanks surround it on its lines. */
-export function lineSpan(source: string, span: Span): Span {
-  let from = span.from;
-  while (from > 0 && (source[from - 1] === " " || source[from - 1] === "\t")) from -= 1;
-  let to = span.to;
-  while (to < source.length && (source[to] === " " || source[to] === "\t")) to += 1;
-  const startsLine = from === 0 || source[from - 1] === "\n";
-  const endsLine = to === source.length || source[to] === "\n";
-  if (startsLine && endsLine) return { from, to: to < source.length ? to + 1 : to };
-  return span;
-}
-
 export { parseAxisDescriptionId, parseAxisPlotId };
 
 /**
- * Reorders plots of one axis: each `\addplot` moves together with the
- * `\addlegendentry` right after it; other statements of the body stay where
- * they are (the plots trade places). Plot order sets the cycle list index
+ * Reorders plots of one axis: the plots trade places, other statements of
+ * the body stay where they are, and each plot's legend entry follows it
+ * wherever it is written (legend-edits.ts). Plot order sets the cycle list index
  * (behaviour G1), so styling follows the new order as in TeX.
  */
 export function applyReorderPlotsAction(
@@ -359,9 +328,8 @@ export function applyReorderPlotsAction(
   const axis = findAxisStatement(parsed.figure.body, axisId);
   if (!axis) return { kind: "unsupported", reason: "The axis of the selected plots was not found." };
   const plots = axis.body.filter((item): item is AddPlotStatement => item.kind === "AddPlot");
-  const units = plots.map((plot) => ({ id: plot.id, span: plotWithLegendEntry(source, axis, plot).span }));
   const selected = new Set(plotIds);
-  const order = units.map((unit) => unit.id);
+  const order = plots.map((plot) => plot.id);
   const moved = order.filter((id) => selected.has(id));
   let next: string[];
   if (direction === "bringToFront") next = [...order.filter((id) => !selected.has(id)), ...moved];
@@ -380,22 +348,15 @@ export function applyReorderPlotsAction(
     }
   }
   if (next.join("\n") === order.join("\n")) return { kind: "unsupported", reason: "The plots are already in that order." };
-  const textById = new Map(units.map((unit) => [unit.id, source.slice(unit.span.from, unit.span.to)]));
-  let current = unchangedSource(source);
-  const patches: SourcePatch[] = [];
-  for (let slot = units.length - 1; slot >= 0; slot -= 1) {
-    const unit = units[slot];
-    const replacementText = textById.get(next[slot] ?? "");
-    if (!unit || replacementText === undefined || replacementText === source.slice(unit.span.from, unit.span.to)) continue;
-    const fragment = sourceSlice(source, findUnitSpan(units, next[slot] ?? ""));
-    const updated = replaceSpan(current, unit.span, fragment);
-    patches.unshift({ oldSpan: unit.span, newSpan: updated.changedSpan, replacement: fragment });
-    current = updated.source;
-  }
-  return {
-    kind: "success", newSource: current, patches, changedSourceIds: [axis.id],
-    selectedSourceIds: plotIds.map((id) => `${axis.id}:plot:${String(next.indexOf(id))}`)
-  };
+  // Legend entries move with their plots, by the renderer's association (legend-edits.ts).
+  const association = readLegendAssociation(source, axis.id, parseOptions);
+  if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+  const edit = reorderPlotsWithLegend(source, axis, association, order, next);
+  if ("unsupported" in edit) return { kind: "unsupported", reason: edit.unsupported };
+  const applied = applyReplacements(source, edit.replacements);
+  const selectedSourceIds = plotIds.map((id) => `${axis.id}:plot:${String(next.indexOf(id))}`);
+  if (edit.notes.length > 0) return { kind: "partial", newSource: applied.source, patches: applied.patches, changedSourceIds: [axis.id], skippedHandles: [], reason: edit.notes.join(" "), selectedSourceIds };
+  return { kind: "success", newSource: applied.source, patches: applied.patches, changedSourceIds: [axis.id], selectedSourceIds };
 }
 
 function findCoordinatesPlot(source: string, plotId: string, parseOptions: EditParseOptions): AddPlotStatement | null {
@@ -455,6 +416,3 @@ export function applyInsertPlotPointAction(
   return { kind: "success", newSource: updated.source, patches: [{ oldSpan: at, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [plot.axisId] };
 }
 
-function findUnitSpan(units: ReadonlyArray<{ id: string; span: Span }>, id: string): Span {
-  return units.find((unit) => unit.id === id)?.span ?? { from: 0, to: 0 };
-}

@@ -50,7 +50,8 @@ import { axisDescriptionTextSpan, axisSubSelectionId } from "./edit-ids.js";
 import { applyPgfMathScopeOptions, readPgfMathScope } from "../semantic/pgfmath/scope.js";
 import { collectPlotData, filterPlotPoints, type PlotMathEnvironment, type PlotPoint } from "./data.js";
 import { cachedPlotData, stableKeyText } from "./eval-cache.js";
-import { emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
+import { axisLegendEntries, emitLegend, type LegendImageSource, type LegendMarks } from "./legend-emit.js";
+import { associateLegend, type LegendAssociation } from "./legend.js";
 import { plotHandlerCommands } from "./plot-handlers.js";
 import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyUse } from "./keys.js";
 import { applyUnitVectorRatio, axisLineCoordinate, boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
@@ -115,6 +116,8 @@ export type AxisEvaluation = {
    * label geometry are in the untransformed frame; map them with this.
    */
   canvas?: WorldTransform;
+  /** The plot-to-legend association as drawn (L4): shared with the edit actions. */
+  legend: LegendAssociation;
 };
 
 const axisEvaluations = new WeakMap<SemanticContext, AxisEvaluation[]>();
@@ -123,7 +126,12 @@ const sceneAxisEvaluations = new WeakMap<object, readonly AxisEvaluation[]>();
 /** Keeps the context's axis evaluations with the scene that the run produced. */
 export function rememberAxisEvaluations(scene: object, context: SemanticContext): void {
   const list = axisEvaluations.get(context);
-  if (list && list.length > 0) sceneAxisEvaluations.set(scene, list);
+  if (list && list.length > 0) {
+    sceneAxisEvaluations.set(scene, list);
+    // Editing code often holds only the element list of the scene.
+    const elements = "elements" in scene ? scene.elements : undefined;
+    if (Array.isArray(elements)) sceneAxisEvaluations.set(elements, list);
+  }
 }
 
 /** The axes of an evaluated scene (full evaluations only), for the oracle adapter and editing. */
@@ -1204,7 +1212,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   // The editing geometry rides on the axis' first own path (the box, or the first axis line, tick or grid path).
   const editCarrier = [...decorations, ...elements].find((element): element is ScenePath => element.kind === "Path" && element.sourceRef.sourceId === axis.id);
   if (editCarrier) editCarrier.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null, parent.axisBasis);
-  const evaluation: AxisEvaluation = { axisId: axis.id, model, layout, frameTransform, labels: labelRecords, clip: model.clip ? clip : null };
+  const legendAssociation = associateLegend(axisLegendEntries({ axis, model, expand: (text) => expandMacroBindings(text, parent.macroBindings) }),
+    legendImages.map((image) => ({ sourceId: image.sourceId, kind: image.plot.statement.plotIndex < 0 ? "image" as const : "plot" as const })));
+  const evaluation: AxisEvaluation = { axisId: axis.id, model, layout, frameTransform, labels: labelRecords, clip: model.clip ? clip : null, legend: legendAssociation };
   const list = axisEvaluations.get(context) ?? [];
   list.push(evaluation);
   axisEvaluations.set(context, list);

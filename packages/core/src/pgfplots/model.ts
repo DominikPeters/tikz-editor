@@ -196,7 +196,26 @@ export function isSurveyPlotKey(key: string): boolean {
 
 /** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
 /** `keep`: an `\addlegendentry{}` keeps its pair even when empty (behaviour Z8); empty `\legend` items do not. */
-export type LegendEntryText = { text: string; options: string; span: Span; /** Where the entry text is written, for canvas text editing (editing only). */ textSpan?: Span; keep?: boolean };
+export type LegendEntryText = {
+  text: string; options: string; span: Span;
+  /** Where the entry text is written, for canvas text editing (editing only). */
+  textSpan?: Span;
+  keep?: boolean;
+  /** Where the entry comes from (editing: the plot-to-entry association, legend.ts). */
+  origin?: LegendEntryOrigin;
+};
+
+/**
+ * The source of one legend entry (L4): an `\addlegendentry` statement, the
+ * i-th item of a `\legend{…}` list, or the i-th item of the `legend
+ * entries` key. `span` is the item as written (null when it is not in the
+ * document as such: a `\legend` list with `...`, `legend entries` set outside
+ * the axis options).
+ */
+export type LegendEntryOrigin =
+  | { kind: "addlegendentry"; statementId: string; span: Span }
+  | { kind: "legend"; statementId: string; index: number; span: Span | null }
+  | { kind: "legend entries"; index: number; span: Span | null };
 
 export type LegendModel = {
   /** `legend entries={…}`: used only when the axis has no legend command (manual). */
@@ -400,6 +419,38 @@ export function splitTopLevelList(raw: string): string[] {
   }
   out.push(current);
   return out.map((item) => item.trim());
+}
+
+/**
+ * The items of `splitTopLevelList(stripBraces(raw))` as offsets into `raw`
+ * (trimmed), for editing a list where it is written.
+ */
+export function splitTopLevelListSpans(raw: string): Array<{ from: number; to: number }> {
+  let from = 0;
+  let to = raw.length;
+  for (;;) {
+    while (from < to && /\s/u.test(raw.charAt(from))) from += 1;
+    while (to > from && /\s/u.test(raw.charAt(to - 1))) to -= 1;
+    if (raw.charAt(from) === "{" && raw.charAt(to - 1) === "}" && balancedOuter(raw.slice(from, to))) { from += 1; to -= 1; continue; }
+    break;
+  }
+  const out: Array<{ from: number; to: number }> = [];
+  const push = (a: number, b: number) => {
+    while (a < b && /\s/u.test(raw.charAt(a))) a += 1;
+    while (b > a && /\s/u.test(raw.charAt(b - 1))) b -= 1;
+    out.push({ from: a, to: b });
+  };
+  let depth = 0;
+  let start = from;
+  for (let i = from; i < to; i += 1) {
+    const c = raw.charAt(i);
+    if (c === "\\") { i += 1; continue; }
+    if (c === "{") depth += 1;
+    else if (c === "}") depth -= 1;
+    else if (c === "," && depth === 0) { push(start, i); start = i + 1; }
+  }
+  push(start, to);
+  return out;
 }
 
 function readEnlarge(value: string | null): EnlargeSpec | null {
@@ -736,12 +787,15 @@ defineAxisKey("legend entries", (ctx, v, use) => {
   const origin = use.origin;
   const base = origin.kind === "kv" && origin.valueSpan && v !== null && v === origin.valueRaw ? origin.valueSpan.from : null;
   let cursor = 0;
-  ctx.model.legend.entries = entries.map((entry) => {
-    if (base === null || v === null || entry.text.length === 0) return entry;
+  const items = base === null || v === null ? null : splitTopLevelListSpans(v);
+  ctx.model.legend.entries = entries.map((entry, index) => {
+    const item = items?.[index];
+    const origin: LegendEntryOrigin = { kind: "legend entries", index, span: item && base !== null ? { from: base + item.from, to: base + item.to } : null };
+    if (base === null || v === null || entry.text.length === 0) return { ...entry, origin };
     const at = v.indexOf(entry.text, cursor);
-    if (at < 0) return entry;
+    if (at < 0) return { ...entry, origin };
     cursor = at + entry.text.length;
-    return { ...entry, textSpan: { from: base + at, to: base + at + entry.text.length } };
+    return { ...entry, origin, textSpan: { from: base + at, to: base + at + entry.text.length } };
   });
   return true;
 });

@@ -21,16 +21,64 @@ import type { LegendEntryText, LegendModel } from "./model.js";
 /** A drawn legend entry: text and the index of its image (into the image list), in grid order. */
 export type LegendPair = { entry: LegendEntryText; image: number };
 
-/** Images and texts pair up in order; empty `\legend` items drop their pair (an `\addlegendentry{}` does not, Z8); the shorter list ends the legend (L4). */
+/** How image i of the legend pairs (L4): with entry i when there is one; `drawn` when the pair is in the legend. */
+export type LegendImagePairing = { entry: number | null; drawn: boolean };
+
+/**
+ * Images and texts pair up in order: image i with entry i. Empty `\legend`
+ * items drop their pair (an `\addlegendentry{}` does not, Z8); the shorter
+ * list ends the legend (L4). The renderer and the edit actions both pair
+ * through this function.
+ */
+export function pairLegendImages(entries: readonly LegendEntryText[], imageCount: number): LegendImagePairing[] {
+  return Array.from({ length: imageCount }, (_, i) => {
+    const entry = entries[i];
+    return entry ? { entry: i, drawn: entry.text.trim() !== "" || entry.keep === true } : { entry: null, drawn: false };
+  });
+}
+
+/** The drawn pairs in grid order (`reverse legend` reverses them). */
 export function legendPairs(entries: readonly LegendEntryText[], imageCount: number, model: LegendModel): LegendPair[] {
   const pairs: LegendPair[] = [];
-  const n = Math.min(entries.length, imageCount);
-  for (let i = 0; i < n; i += 1) {
-    const entry = entries[i];
-    if (!entry || (entry.text.trim() === "" && !entry.keep)) continue;
-    pairs.push({ entry, image: i });
-  }
+  pairLegendImages(entries, imageCount).forEach((pairing, image) => {
+    const entry = pairing.entry === null ? undefined : entries[pairing.entry];
+    if (entry && pairing.drawn) pairs.push({ entry, image });
+  });
   return model.reverse ? pairs.reverse() : pairs;
+}
+
+/** A legend image: an `\addplot` that is not `forget plot`, or an `\addlegendimage` (L4). */
+export type LegendImageRef = { sourceId: string; kind: "plot" | "image" };
+
+/**
+ * The plot-to-legend association of an axis, as the renderer pairs it: the
+ * effective entries (with where each is written), the images in order and
+ * how they pair. Kept with the axis evaluation for the edit actions.
+ */
+export type LegendAssociation = {
+  /** `commands`: `\addlegendentry`/`\legend` (they beat `legend entries`); `legend entries`; `none`. */
+  form: "commands" | "legend entries" | "none";
+  entries: LegendEntryText[];
+  images: LegendImageRef[];
+  pairing: LegendImagePairing[];
+};
+
+export function associateLegend(entries: { entries: LegendEntryText[]; commands: boolean }, images: readonly LegendImageRef[]): LegendAssociation {
+  return {
+    form: entries.commands ? "commands" : entries.entries.length > 0 ? "legend entries" : "none",
+    entries: entries.entries,
+    images: [...images],
+    pairing: pairLegendImages(entries.entries, images.length)
+  };
+}
+
+/** The entry of a plot or legend image: its image index, entry index (null when it has none) and entry. Null for a plot that is no legend image (`forget plot`). */
+export function legendEntryOf(association: LegendAssociation, sourceId: string): { image: number; entry: number | null; text: LegendEntryText | null; drawn: boolean } | null {
+  const image = association.images.findIndex((ref) => ref.sourceId === sourceId);
+  if (image < 0) return null;
+  const pairing = association.pairing[image];
+  const entry = pairing?.entry ?? null;
+  return { image, entry, text: entry === null ? null : association.entries[entry] ?? null, drawn: pairing?.drawn ?? false };
 }
 
 /** Rows of pairs: `legend columns` per row (−1: one row), then `transpose legend` (L4). */
@@ -188,8 +236,13 @@ export function collectLegendEntries(
 ): { entries: LegendEntryText[]; commands: boolean } {
   let fromCommands: LegendEntryText[] | null = null;
   for (const item of body) {
-    if (item.kind === "AddLegendEntry") (fromCommands ??= []).push(read.addLegendEntry(item));
-    else if (item.kind === "Legend") fromCommands = read.legend(item);
+    if (item.kind === "AddLegendEntry") (fromCommands ??= []).push({ ...read.addLegendEntry(item), origin: { kind: "addlegendentry", statementId: item.id, span: item.span } });
+    else if (item.kind === "Legend") {
+      const list = read.legend(item);
+      // Item spans hold when the list was read item for item (no `...` expansion).
+      const asWritten = list.length === item.entries.length && !item.entries.some((entry) => entry.raw.trim() === "...");
+      fromCommands = list.map((entry, index) => ({ ...entry, origin: { kind: "legend", statementId: item.id, index, span: asWritten ? item.entries[index]?.span ?? null : null } }));
+    }
   }
   if (fromCommands) return { entries: fromCommands, commands: true };
   return { entries: model.entries ?? [], commands: false };

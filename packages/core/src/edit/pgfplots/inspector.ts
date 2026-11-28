@@ -11,7 +11,7 @@ import { isPlotMarkName, PLOT_MARK_NAMES } from "../../semantic/path/plot-marks.
 import type { SceneElement } from "../../semantic/types.js";
 import { owningAxisId, parseAxisPlotId } from "../../pgfplots/edit-ids.js";
 import { COLOR_CYCLE_LIST } from "../../pgfplots/model.js";
-import { EMPTY_FRAGMENT, userText } from "../fragment.js";
+import { userText } from "../fragment.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { applySetPropertyActionRaw } from "../actions/set-property.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
@@ -22,7 +22,9 @@ import { colorOptionsForValue, normalizeInspectorColorValue } from "../inspector
 import { DASH_STYLE_OPTIONS } from "../inspector/presets.js";
 import { dashStylePresetFromStyle, lineWidthPresetLabel } from "../inspector/preset-values.js";
 import type { InspectorDescriptor, InspectorProperty, InspectorSection, SetPropertyWriteTarget } from "../inspector/types.js";
-import { findAxisStatement, plotWithLegendEntry, readAxisEditInfo } from "./axis-actions.js";
+import { findAxisStatement, readAxisEditInfo } from "./axis-actions.js";
+import { applyReplacements, legendAssociationFor, readLegendAssociation, setPlotLegendEntry } from "./legend-edits.js";
+import { legendEntryOf } from "../../pgfplots/legend.js";
 
 /** Keys the pgfplots inspector writes that are not option keys. */
 export const PGFPLOTS_LEGEND_ENTRY_KEY = "__pgfplots_legend_entry__";
@@ -82,7 +84,7 @@ export function buildPgfplotsInspectorDescriptor(
   const plotRef = parseAxisPlotId(elementId);
   if (plotRef) {
     const plot = axis.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === elementId);
-    return plot ? buildPlotDescriptor(source, axis, plot, elements) : null;
+    return plot ? buildPlotDescriptor(source, axis, plot, elements, parseOptions) : null;
   }
   return buildAxisDescriptor(axis, elementId, elements);
 }
@@ -157,7 +159,7 @@ function cycleMark(index: number): string {
   return /mark=([^,]+)/u.exec(entry)?.[1]?.trim() ?? "none";
 }
 
-function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotStatement, elements: readonly SceneElement[]): InspectorDescriptor {
+function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotStatement, elements: readonly SceneElement[], parseOptions: EditParseOptions): InspectorDescriptor {
   const entries = plot.options?.entries;
   const id = plot.id;
   const line = elements.find((e) => e.sourceRef.sourceId === id && e.id.endsWith(":line"))
@@ -178,7 +180,9 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
     kind: "boolean", id: `pgfplots-${key.replace(/\s+/gu, "-")}`, label, value: lastEntry(entries, key) !== null && authored(entries, key) !== "false",
     trueValue: "true", falseValue: "", write: write(id, key)
   });
-  const pair = plotWithLegendEntry(source, axis, plot);
+  // The entry the renderer pairs with this plot, wherever it is written (L4).
+  const association = legendAssociationFor(source, axis.id, parseOptions, elements);
+  const legendEntry = association ? legendEntryOf(association, plot.id) : null;
   const style: InspectorSection = {
     id: "pgfplots-plot-style", title: "Plot", sourceLevel: "command",
     properties: [
@@ -195,7 +199,7 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
   const data: InspectorSection = {
     id: "pgfplots-plot-data", title: "Data", sourceLevel: "command",
     properties: [
-      { kind: "text", id: "pgfplots-plot-legend-entry", label: "Legend entry", value: pair.entry?.text ?? "", write: write(id, PGFPLOTS_LEGEND_ENTRY_KEY) }
+      { kind: "text", id: "pgfplots-plot-legend-entry", label: "Legend entry", value: legendEntry?.text?.text ?? "", write: write(id, PGFPLOTS_LEGEND_ENTRY_KEY, legendEntry !== null, legendEntry === null ? "A `forget plot` has no legend entry." : undefined) }
     ]
   };
   if (plot.input.kind === "expression") {
@@ -242,25 +246,14 @@ export function applyPgfplotsSetProperty(
       const updated = replaceSpan(source, plot.input.expressionSpan, fragment);
       return { kind: "success", newSource: updated.source, patches: [{ oldSpan: plot.input.expressionSpan, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [axisId] };
     }
-    const { entry } = plotWithLegendEntry(source, axis, plot);
-    const text = action.value;
-    if (entry) {
-      if (text.length === 0) {
-        const span = { from: plot.span.to, to: entry.span.to };
-        const updated = replaceSpan(source, span, EMPTY_FRAGMENT);
-        return { kind: "success", newSource: updated.source, patches: [{ oldSpan: span, newSpan: updated.changedSpan, replacement: EMPTY_FRAGMENT }], changedSourceIds: [axisId] };
-      }
-      const fragment = userText(text, "inspector-value");
-      const updated = replaceSpan(source, entry.textSpan, fragment);
-      return { kind: "success", newSource: updated.source, patches: [{ oldSpan: entry.textSpan, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [axisId] };
-    }
-    if (text.length === 0) return { kind: "unsupported", reason: "setProperty would not change the source." };
-    const lineStart = source.lastIndexOf("\n", plot.span.from - 1) + 1;
-    const indent = /^[ \t]*/u.exec(source.slice(lineStart, plot.span.from))?.[0] ?? "";
-    const fragment = userText(`\n${indent}\\addlegendentry{${text}}`, "inspector-value");
-    const at = { from: plot.span.to, to: plot.span.to };
-    const updated = replaceSpan(source, at, fragment);
-    return { kind: "success", newSource: updated.source, patches: [{ oldSpan: at, newSpan: updated.changedSpan, replacement: fragment }], changedSourceIds: [axisId] };
+    const association = readLegendAssociation(source, axis.id, parseOptions);
+    if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };
+    const edit = setPlotLegendEntry(source, axis, association, plot.id, action.value);
+    if ("unsupported" in edit) return { kind: "unsupported", reason: edit.unsupported };
+    if (edit.replacements.length === 0) return { kind: "unsupported", reason: "setProperty would not change the source." };
+    const applied = applyReplacements(source, edit.replacements);
+    if (edit.notes.length > 0) return { kind: "partial", newSource: applied.source, patches: applied.patches, changedSourceIds: [axisId], skippedHandles: [], reason: edit.notes.join(" ") };
+    return { kind: "success", newSource: applied.source, patches: applied.patches, changedSourceIds: [axisId] };
   }
   const key = plainKey(action.key);
   let value = action.value.trim();

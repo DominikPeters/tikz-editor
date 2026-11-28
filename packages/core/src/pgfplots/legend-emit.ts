@@ -144,6 +144,11 @@ function columnCellStyle(style: LegendStyle, column: number): OptionListAst[] {
 }
 
 function legendTexts(host: LegendHost): LegendEntryText[] {
+  return axisLegendEntries(host).entries;
+}
+
+/** The legend entries of an axis with their origins (L4), as the legend draws them. */
+export function axisLegendEntries(host: Pick<LegendHost, "axis" | "model" | "expand">): { entries: LegendEntryText[]; commands: boolean } {
   return collectLegendEntries(host.axis.body, host.model.legend, {
     addLegendEntry: (item) => ({ text: host.expand(item.text), options: item.options ? item.options.entries.map((e) => e.raw).join(",") : "", span: item.span, textSpan: item.textSpan, keep: true }),
     legend: (item) => {
@@ -153,7 +158,7 @@ function legendTexts(host: LegendHost): LegendEntryText[] {
       // Editing keeps a span per item when the list was not expanded (no dots).
       return list.map((raw, i) => ({ ...legendEntryText(host.expand(raw), item.span), ...(list === raws && item.entries[i] ? { textSpan: item.entries[i].span } : {}) }));
     }
-  }).entries;
+  });
 }
 
 /** `\legend{1,2,...,5}`: the `\foreach` dots for numbers (manual `\legend`). */

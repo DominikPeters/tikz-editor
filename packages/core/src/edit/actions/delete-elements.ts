@@ -2,7 +2,9 @@ import { EMPTY_FRAGMENT, joinFragments, sliceFragment, tikz, unchangedSource, us
 import { requireDefined } from "../../utils/invariants.js";
 import type { EditActionResultLike } from "../result-types.js";
 import type { AddPlotStatement, NodeItem, PathItem, Span, Statement } from "../../ast/types.js";
-import { parseAxisDescriptionId } from "../../pgfplots/edit-ids.js";
+import { parseAxisDescriptionId, parseAxisPlotId } from "../../pgfplots/edit-ids.js";
+import { findAxisStatement } from "../pgfplots/axis-actions.js";
+import { applyReplacements, legendEntriesForDeletedPlots, readLegendAssociation, type Replacement } from "../pgfplots/legend-edits.js";
 import { parseCoordinate } from "../../domains/coordinates/parse.js";
 import { replaceSpan } from "../patch.js";
 import { resolvePropertyTarget } from "../property-target.js";
@@ -54,26 +56,21 @@ export function applyDeleteElementsAction(
   }
   const deletedNamedNodes = collectDeletedNamedNodes(parsed.figure.body, collapsedTargets);
 
-  const sorted = [...collapsedTargets].sort((a, b) => {
-    if (a.span.from !== b.span.from) {
-      return b.span.from - a.span.from;
-    }
-    return b.span.to - a.span.to;
-  });
-
-  let currentSource = unchangedSource(source);
-  const patches: SourcePatch[] = [];
-
-  for (const target of sorted) {
-    const span = normalizeDeleteSpan(currentSource, target.span, target.scope);
-    const updated = replaceSpan(currentSource, span, EMPTY_FRAGMENT);
-    patches.push({
-      oldSpan: span,
-      newSpan: updated.changedSpan,
-      replacement: EMPTY_FRAGMENT
-    });
-    currentSource = updated.source;
+  // Deleted plots take their legend entries with them, wherever those are written (legend-edits.ts).
+  const replacements: Replacement[] = collapsedTargets.map((target) => ({ span: normalizeDeleteSpan(source, target.span, target.scope), fragment: EMPTY_FRAGMENT }));
+  for (const [axisId, plotIds] of deletedPlotsByAxis(parsed.figure.body, normalizedIds)) {
+    const axis = findAxisStatement(parsed.figure.body, axisId);
+    const association = axis ? readLegendAssociation(source, axisId, parseOptions) : null;
+    if (!axis || !association) continue;
+    const legend = legendEntriesForDeletedPlots(source, axis, association, plotIds);
+    if ("unsupported" in legend) return { kind: "unsupported", reason: legend.unsupported };
+    replacements.push(...legend.replacements);
   }
+  const merged = mergeRemovals(replacements);
+  if (!merged) return { kind: "unsupported", reason: "The deletions overlap in the source." };
+  const applied = applyReplacements(source, merged);
+  let currentSource = applied.source;
+  const patches: SourcePatch[] = [...applied.patches];
 
   const fitPruneResult = pruneFitReferencesAfterDelete(currentSource, deletedNamedNodes, parseOptions);
   currentSource = fitPruneResult.source;
@@ -143,15 +140,10 @@ function resolveDeleteTarget(statements: readonly Statement[], elementId: string
       return { span: statement.span, scope: "statement" };
     }
 
-    // An `\addplot` goes with the `\addlegendentry` right after it.
+    // An `\addplot`: its legend entry is handled with the association (applyDeleteElementsAction).
     if (statement.kind === "Axis") {
       const plot = statement.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === elementId);
-      if (plot) {
-        const index = statement.body.indexOf(plot);
-        const next = statement.body[index + 1];
-        const entry = next?.kind === "AddLegendEntry" && next.span.from >= plot.span.to ? next : null;
-        return { span: { from: plot.span.from, to: (entry ?? plot).span.to }, scope: "statement" };
-      }
+      if (plot) return { span: plot.span, scope: "statement" };
     }
 
     if (statement.kind === "Path") {
@@ -176,6 +168,38 @@ function resolveDeleteTarget(statements: readonly Statement[], elementId: string
   }
 
   return null;
+}
+
+/** The deleted `\addplot`s by axis id. */
+function deletedPlotsByAxis(statements: readonly Statement[], ids: readonly string[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const id of ids) {
+    const ref = parseAxisPlotId(id);
+    if (!ref || !findAxisStatement(statements, ref.axisId)) continue;
+    const set = out.get(ref.axisId) ?? new Set<string>();
+    set.add(id);
+    out.set(ref.axisId, set);
+  }
+  return out;
+}
+
+/** Joins overlapping or touching removals (a plot and its entry on one line); null when a removal overlaps another edit. */
+function mergeRemovals(replacements: readonly Replacement[]): Replacement[] | null {
+  const sorted = [...replacements].sort((a, b) => a.span.from - b.span.from || a.span.to - b.span.to);
+  const out: Replacement[] = [];
+  for (const next of sorted) {
+    const last = out[out.length - 1];
+    if (last && next.span.from < last.span.to) {
+      if (last.fragment.length > 0 || next.fragment.length > 0) {
+        if (next.span.to <= last.span.to && next.fragment.length === 0) continue;
+        return null;
+      }
+      out[out.length - 1] = { span: { from: last.span.from, to: Math.max(last.span.to, next.span.to) }, fragment: EMPTY_FRAGMENT };
+      continue;
+    }
+    out.push(next);
+  }
+  return out;
 }
 
 function resolveDeleteTargetInPath(items: PathItem[], elementId: string): DeleteTarget | null {
