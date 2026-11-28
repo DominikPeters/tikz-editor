@@ -1,0 +1,207 @@
+{
+ "sourceSha256": "07b39fd758bc8a89d4bddf53c510b48d4f45454f6d5f0a0f1b22f592c33e5bb4",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -1.5,
+  "minY": -1.5,
+  "maxX": 86.8582,
+  "maxY": 86.8582
+ },
+ "texErrors": [
+  "Package pgf Error: Sorry, the requested layer 'fg' is not part of the layer l"
+ ],
+ "tier2": {
+  "page": {
+   "width": 88.3581,
+   "height": 88.3581
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0004,
+      "y": 85.359
+     },
+     {
+      "op": "L",
+      "x": 85.3589,
+      "y": -0.0003
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 3,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0004,
+      "y": -0.0003
+     },
+     {
+      "op": "L",
+      "x": 85.3589,
+      "y": 85.359
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 3,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 2,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -0.0004,
+      "y": 42.6794
+     },
+     {
+      "op": "L",
+      "x": 85.3589,
+      "y": 42.6794
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceCMYK",
+     "components": [
+      1,
+      0,
+      0,
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 3,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 3,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 14.2261,
+      "y": 14.2263
+     },
+     {
+      "op": "L",
+      "x": 14.2261,
+      "y": 71.1325
+     },
+     {
+      "op": "L",
+      "x": 71.1324,
+      "y": 71.1325
+     },
+     {
+      "op": "L",
+      "x": 71.1324,
+      "y": 14.2263
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 71.1324,
+      "y": 71.1325
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceCMYK",
+     "components": [
+      0,
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 4,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 28.4527,
+      "y": 28.4528
+     },
+     {
+      "op": "L",
+      "x": 28.4527,
+      "y": 56.9059
+     },
+     {
+      "op": "L",
+      "x": 56.9058,
+      "y": 56.9059
+     },
+     {
+      "op": "L",
+      "x": 56.9058,
+      "y": 28.4528
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 56.9058,
+      "y": 56.9059
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceRGB",
+     "components": [
+      1,
+      0.5,
+      0
+     ],
+     "alpha": 1
+    }
+   }
+  ],
+  "textBoxes": []
+ }
+}

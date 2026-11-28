@@ -1,0 +1,13 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\usetikzlibrary{backgrounds}
+\begin{document}
+\begin{tikzpicture}
+  \node[draw, fill=white] (a) at (0,0) {A};
+  \node[draw, fill=white] (b) at (2,1) {B};
+  \draw[->] (a) -- (b);
+  \begin{pgfonlayer}{background}
+    \fill[yellow] (a.south west) rectangle (b.north east);
+  \end{pgfonlayer}
+\end{tikzpicture}
+\end{document}

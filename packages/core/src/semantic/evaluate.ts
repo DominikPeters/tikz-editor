@@ -3,7 +3,7 @@ import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { axisBodyStatements, nestedStatements } from "../ast/walk.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
-import { declareLayer, effectiveLayerList, enterLayer, finalizeLayers, leaveLayer, resetLayerGraphicState, setLayerList } from "./layers.js";
+import { PGF_LAYER_LINE_WIDTH, declareLayer, effectiveLayerList, enterLayer, finalizeLayers, layerEntryStyle, leaveLayer, setLayerList } from "./layers.js";
 import { parsePgfPoint, parsePgfTransformationCode, viewBoxTransform } from "./pgf-canvas.js";
 import { applyMatrix as applyWorldMatrix, multiplyMatrix as multiplyWorldMatrix } from "./transform.js";
 import type {
@@ -1086,6 +1086,9 @@ function popScopeFrame(context: SemanticContext): void {
   if (parent && frame.layer !== parent.layer) {
     leaveLayer(context, frame.layer, frame.clipChain);
   }
+  if (parent && frame.pgfLayerLineWidthReset) {
+    parent.style = { ...parent.style, lineWidth: PGF_LAYER_LINE_WIDTH };
+  }
   popFrame(context);
 }
 
@@ -1094,6 +1097,7 @@ type PgfEnvironmentEffect = {
   layer: string;
   clipChain: readonly SceneClipPath[];
   pictureSizeRelevant: boolean;
+  resetsParentLineWidth: boolean;
 };
 
 /**
@@ -1115,7 +1119,9 @@ function enterPgfEnvironment(
   resolved: ReturnType<typeof resolveContextDelta>
 ): PgfEnvironmentEffect {
   const parent = currentFrame(context);
-  const effect: PgfEnvironmentEffect = { resolved, layer: parent.layer, clipChain: parent.clipChain, pictureSizeRelevant: true };
+  const effect: PgfEnvironmentEffect = {
+    resolved, layer: parent.layer, clipChain: parent.clipChain, pictureSizeRelevant: true, resetsParentLineWidth: false
+  };
   const span = environment.beginSpan;
   if (!environment.terminated || environment.endName) {
     diagnostics.push({
@@ -1146,9 +1152,8 @@ function enterPgfEnvironment(
       const entry = enterLayer(context, environment.layer, span, diagnostics);
       effect.layer = entry.layer;
       effect.clipChain = entry.clipChain;
-      if (entry.switched) {
-        effect.resolved = { ...resolved, style: resetLayerGraphicState(resolved.style) };
-      }
+      effect.resolved = { ...resolved, style: layerEntryStyle(resolved.style, entry) };
+      effect.resetsParentLineWidth = entry.declared;
       return effect;
     }
     case "pgfscope":
@@ -1442,6 +1447,7 @@ function evaluateStatement(
     let scopeLayer = parent.layer;
     let scopeClipChain = parent.clipChain;
     let scopePictureSizeRelevant = parent.pictureSizeRelevant;
+    let resetsParentLineWidth = false;
     const environment = statement.environment;
     if (environment) {
       const effect = enterPgfEnvironment(statement, environment, context, diagnostics, featureUsage, scopeResolved);
@@ -1449,6 +1455,7 @@ function evaluateStatement(
       scopeLayer = effect.layer;
       scopeClipChain = effect.clipChain;
       scopePictureSizeRelevant &&= effect.pictureSizeRelevant;
+      resetsParentLineWidth = effect.resetsParentLineWidth;
     }
     const backgroundLayerOptionLayers = extractOnBackgroundLayerOptionLayers(resolved.expandedOptionLists, scopeSourceRef);
     const backgroundDiagnostics: StyleDiagnostic[] = [];
@@ -1463,7 +1470,7 @@ function evaluateStatement(
       scopeClipChain = entry.clipChain;
       const everyLayer = makeEveryOnBackgroundLayerOptionLayer(scopeSourceRef);
       scopeResolved = resolveContextDelta(
-        entry.switched ? resetLayerGraphicState(resolved.style) : resolved.style,
+        layerEntryStyle(resolved.style, entry),
         resolved.transform,
         [everyLayer, ...backgroundLayerOptionLayers].map((layer) => ({
           kind: "scope" as const,
@@ -1485,6 +1492,7 @@ function evaluateStatement(
       transform: scopeResolved.transform,
       axisBasis: scopeResolved.axisBasis,
       layer: scopeLayer,
+      ...(resetsParentLineWidth ? { pgfLayerLineWidthReset: true as const } : {}),
       clipChain: scopeClipChain,
       pictureSizeRelevant: scopePictureSizeRelevant,
       customStyles: scopedCustomStyles,

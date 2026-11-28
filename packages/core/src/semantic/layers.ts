@@ -58,6 +58,13 @@ export type LayerEntry = {
   layer: string;
   /** Whether the content leaves the current layer: a new box, with the graphic state reset. */
   switched: boolean;
+  /**
+   * Whether the layer was found. `\pgfonlayer` then sets the line width to
+   * 0.4pt before it opens the layer's box, in the enclosing stream: the
+   * content starts at 0.4pt even on the same layer, and so does what follows
+   * the environment in the enclosing PDF scope (checked against pdfTeX).
+   */
+  declared: boolean;
   /** The clips in force on that layer. */
   clipChain: readonly SceneClipPath[];
 };
@@ -88,11 +95,11 @@ export function enterLayer(
       message: `Layer \`${name}\` is not declared; PGF stops with "the requested layer '${name}' could not be found". Declare it with \`\\pgfdeclarelayer{${name}}\` and list it in \`\\pgfsetlayers\`. The editor draws the content on the current layer.`,
       span
     });
-    return { layer: frame.layer, switched: false, clipChain: frame.clipChain };
+    return { layer: frame.layer, switched: false, declared: false, clipChain: frame.clipChain };
   }
   if (name === frame.layer) {
     // "we are already on this layer": a group, nothing more.
-    return { layer: frame.layer, switched: false, clipChain: frame.clipChain };
+    return { layer: frame.layer, switched: false, declared: true, clipChain: frame.clipChain };
   }
   if (name === MAIN_SCENE_LAYER) {
     diagnostics.push({
@@ -101,7 +108,7 @@ export function enterLayer(
       message: "Content put on the `main` layer from another layer is lost: PGF cannot add to `main` with `{pgfonlayer}` there (the main layer's box is rebuilt around it). The editor does not draw it.",
       span
     });
-    return { layer: LOST_LAYER, switched: true, clipChain: [] };
+    return { layer: LOST_LAYER, switched: true, declared: true, clipChain: [] };
   }
   if (name !== DISCARD_LAYER && !effectiveLayerList(context).includes(name)) {
     diagnostics.push({
@@ -111,7 +118,7 @@ export function enterLayer(
       span
     });
   }
-  return { layer: name, switched: true, clipChain: state.clipChains[name] ?? [] };
+  return { layer: name, switched: true, declared: true, clipChain: state.clipChains[name] ?? [] };
 }
 
 /**
@@ -139,9 +146,18 @@ export function resetLayerGraphicState(style: ResolvedStyle): ResolvedStyle {
     lineJoin: initial.lineJoin,
     opacity: initial.opacity,
     strokeOpacity: initial.strokeOpacity,
-    fillOpacity: initial.fillOpacity
+    fillOpacity: initial.fillOpacity,
+    textOpacity: initial.textOpacity
   };
 }
+
+/** The style `\pgfonlayer` leaves: the line width reset (see `LayerEntry.declared`), the rest as `switched` says. */
+export function layerEntryStyle(style: ResolvedStyle, entry: LayerEntry): ResolvedStyle {
+  if (entry.switched) return resetLayerGraphicState(style);
+  return entry.declared ? { ...style, lineWidth: PGF_LAYER_LINE_WIDTH } : style;
+}
+
+export const PGF_LAYER_LINE_WIDTH = 0.4;
 
 /** A layer's content ends: clips it set outside a scope hold for its later content. */
 export function leaveLayer(context: SemanticContext, layer: string, clipChain: readonly SceneClipPath[]): void {

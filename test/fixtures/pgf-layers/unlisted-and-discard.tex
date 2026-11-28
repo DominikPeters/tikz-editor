@@ -1,0 +1,19 @@
+\documentclass{standalone}
+\usepackage{tikz}
+\pgfdeclarelayer{unlisted}
+\pgfdeclarelayer{discard}
+\begin{document}
+\begin{tikzpicture}
+  \draw[red] (0,0) -- (2,0);
+  % Declared but not in the layer list: PGF reports an error and does not
+  % paint it; it still counts for the bounding box.
+  \begin{pgfonlayer}{unlisted}
+    \draw[blue] (0,-1) -- (5,-1);
+  \end{pgfonlayer}
+  % The discard layer drops its content silently.
+  \begin{pgfonlayer}{discard}
+    \draw[magenta] (0,1) -- (2,1);
+  \end{pgfonlayer}
+  \draw[green] (0,0.5) -- (2,0.5);
+\end{tikzpicture}
+\end{document}

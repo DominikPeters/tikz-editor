@@ -306,7 +306,9 @@ describe("PGF layers: what layer content inherits", () => {
     const [layerPath, mainPath] = paths(semantic.scene.elements);
     expect(layerPath?.layer).toBe("background");
     expect(layerPath?.style).toMatchObject({ stroke: "black", lineWidth: 0.4, dashArray: null, opacity: 1, strokeOpacity: 1, fillOpacity: 1 });
-    expect(mainPath?.style.lineWidth).toBe(3);
+    // `\pgfonlayer` sets the line width to 0.4pt in the enclosing stream before
+    // it opens the layer's box: pdfTeX strokes the path after it at 0.4pt too.
+    expect(mainPath?.style.lineWidth).toBe(0.4);
     expect(mainPath?.style.dashArray).not.toBeNull();
     const text = semantic.scene.elements.find((element) => element.kind === "Text");
     expect(text?.style.textColor).toBe(BLUE);
@@ -340,16 +342,18 @@ describe("PGF layers: what layer content inherits", () => {
     // pdfTeX: the scope's red is not used by strokes on the layer; the key's green is.
     const viaKey = picture(String.raw`  \begin{scope}[blue, line width=2pt]
     \clip (0,0) rectangle (1,1);
+    \draw (0,0) -- (2,2);
     \begin{scope}[on background layer, red, xshift=1cm]
       \draw (0,0.5) -- (2,0.5);
     \end{scope}
     \begin{scope}[on background layer={green, thick}]
       \draw (0,0.2) -- (2,0.2);
     \end{scope}
-    \draw (0,0) -- (2,2);
+    \draw (0,1) -- (2,1);
   \end{scope}`);
     const viaEnvironment = picture(String.raw`  \begin{scope}[blue, line width=2pt]
     \clip (0,0) rectangle (1,1);
+    \draw (0,0) -- (2,2);
     \begin{scope}[red, xshift=1cm]
       \begin{pgfonlayer}{background}
         \draw (0,0.5) -- (2,0.5);
@@ -360,7 +364,7 @@ describe("PGF layers: what layer content inherits", () => {
         \draw (0,0.2) -- (2,0.2);
       \end{scope}
     \end{pgfonlayer}
-    \draw (0,0) -- (2,2);
+    \draw (0,1) -- (2,1);
   \end{scope}`);
     const summarize = (source: string) => paths(evaluateSemantic(source).scene.elements)
       .filter((path) => path.style.stroke !== null)
@@ -369,9 +373,16 @@ describe("PGF layers: what layer content inherits", () => {
     expect(key.map((entry) => [entry.layer, entry.stroke, entry.width, entry.clipped])).toEqual([
       ["background", "black", 0.4, false],
       ["background", GREEN, 0.8, false],
+      ["main", BLUE, 2, true],
       ["main", BLUE, 2, true]
     ]);
-    expect(summarize(viaEnvironment)).toEqual(key);
+    // The same, but for the path after the layer content: the key enters the
+    // layer inside its scope's graphic-state group, so the 0.4pt line width
+    // `\pgfonlayer` sets in the enclosing stream ends with that scope; the
+    // environment sets it in the enclosing scope itself.
+    const environment = summarize(viaEnvironment);
+    expect(environment.slice(0, 3)).toEqual(key.slice(0, 3));
+    expect(environment[3]).toEqual({ ...key[3], width: 0.4 });
   });
 });
 

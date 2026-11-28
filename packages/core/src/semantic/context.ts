@@ -134,6 +134,8 @@ export type SemanticContextFrame = {
    * (`SemanticLayerState.list`).
    */
   layerList?: readonly string[];
+  /** A `{pgfonlayer}`'s frame: leaving it, the enclosing scope's line width is 0.4pt (semantic/layers.ts). */
+  pgfLayerLineWidthReset?: true;
   /** Immutable by convention so child frames can share it until a clip operation replaces it. */
   clipChain: readonly SceneClipPath[];
   pictureSizeRelevant: boolean;
