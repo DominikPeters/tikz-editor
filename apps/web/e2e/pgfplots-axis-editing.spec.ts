@@ -190,9 +190,9 @@ test("drill into a plot, change its colour in the inspector", async ({ page }) =
   await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:plot:0`]);
   await expect(page.getByText("Plot", { exact: true }).first()).toBeVisible();
   await shot(page, "04-plot-selected");
-  await page.locator("xpath=//button[@aria-label='Color (cycle list)']").first().click();
+  await page.locator("xpath=//button[@aria-label='Color']").first().click();
   await shot(page, "04b-color-open");
-  await page.getByRole("button", { name: "Color (cycle list) red" }).click();
+  await page.getByRole("button", { name: "Color red" }).click();
   await expect.poll(() => readSource(page)).toBe(SOURCE.replace("\\addplot coordinates", "\\addplot+[color=red] coordinates"));
   await settled(page);
   // The plot stays selected across the edit of its axis.
