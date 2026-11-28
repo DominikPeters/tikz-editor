@@ -269,8 +269,14 @@ export type PgfplotsAxisEditInfo = {
 
 export type ScenePath = {
   kind: "Path";
-  /** On the box path of a pgfplots axis. */
+  /** The edit geometry of a pgfplots axis, on the axis' edit carrier. */
   pgfplotsAxis?: PgfplotsAxisEditInfo;
+  /**
+   * The element only carries editing metadata (a pgfplots axis' edit
+   * geometry, whatever the axis paints: `hide axis` included); it has no
+   * commands and paints nothing.
+   */
+  editCarrier?: true;
   id: string;
   runtimeId: string;
   layer: string;

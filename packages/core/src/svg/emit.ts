@@ -517,6 +517,8 @@ export function emitSvgModel(
   };
 
   for (const element of scene.elements) {
+    // Elements that only carry editing metadata (a pgfplots axis' edit geometry) paint nothing.
+    if (element.kind === "Path" && element.editCarrier) continue;
     let preparedGeometry: PreparedElementGeometry | undefined;
     if (reuseContext) {
       preparedGeometry = registerDefsForElement(element);

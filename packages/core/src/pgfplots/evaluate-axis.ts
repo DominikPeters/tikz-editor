@@ -290,7 +290,9 @@ export function evaluateAxisStatement(source: AxisStatement, context: SemanticCo
   const mappedElements = elements.map((element): SceneElement => ({
     ...element,
     transform: element.transform ? multiplyMatrix(canvas, element.transform) : canvas,
-    ...(element.clipChain ? { clipChain: element.clipChain.map(mapClip) } : {})
+    ...(element.clipChain ? { clipChain: element.clipChain.map(mapClip) } : {}),
+    // The edit geometry's frame maps local axis coordinates to the world: the canvas transformation applies to it too.
+    ...(element.kind === "Path" && element.pgfplotsAxis ? { pgfplotsAxis: { ...element.pgfplotsAxis, frame: multiplyMatrix(canvas, worldTransform(element.pgfplotsAxis.frame.a, element.pgfplotsAxis.frame.b, element.pgfplotsAxis.frame.c, element.pgfplotsAxis.frame.d, element.pgfplotsAxis.frame.e, element.pgfplotsAxis.frame.f)) } } : {})
   }));
   const list = axisEvaluations.get(context) ?? [];
   for (let index = before; index < list.length; index += 1) {
@@ -1209,9 +1211,14 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   registerAxisNode(context, "current axis", layout, toWorld, axis.id);
   if (model.name) registerAxisNode(context, model.name, layout, toWorld, axis.id);
 
-  // The editing geometry rides on the axis' first own path (the box, or the first axis line, tick or grid path).
-  const editCarrier = [...decorations, ...elements].find((element): element is ScenePath => element.kind === "Path" && element.sourceRef.sourceId === axis.id);
-  if (editCarrier) editCarrier.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null, parent.axisBasis);
+  // The editing geometry rides on a carrier that paints nothing, so it does not depend on
+  // what the axis draws (`hide axis`, `axis lines=none`, an empty or clipped axis).
+  const editCarrier = makePath(axis.id, "edit", { ...axisScope.style, stroke: null, fill: null, drawExplicit: false, markerStart: null, markerEnd: null }, axisFrame.styleChain, axis.span);
+  editCarrier.commands = [];
+  editCarrier.editCarrier = true;
+  editCarrier.pictureSizeRelevant = false;
+  editCarrier.pgfplotsAxis = axisEditInfo(axis.id, model, layout, frameTransform, legendResult ? { bbox: legendResult.bbox, anchor: legendResult.anchor } : null, parent.axisBasis);
+  elements.unshift(editCarrier);
   const legendAssociation = associateLegend(axisLegendEntries({ axis, model, expand: (text) => expandMacroBindings(text, parent.macroBindings) }),
     legendImages.map((image) => ({ sourceId: image.sourceId, kind: image.plot.statement.plotIndex < 0 ? "image" as const : "plot" as const })));
   const evaluation: AxisEvaluation = { axisId: axis.id, model, layout, frameTransform, labels: labelRecords, clip: model.clip ? clip : null, legend: legendAssociation };
