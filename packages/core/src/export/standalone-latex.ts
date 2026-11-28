@@ -69,22 +69,6 @@ export function normalizeStandaloneLatexExportFileName(fileName?: string): strin
   return `${candidate}.tex`;
 }
 
-function isDefinitionStatement(statement: Statement): boolean {
-  return (
-    statement.kind === "MacroDefinition" ||
-    statement.kind === "MacroAlias" ||
-    statement.kind === "MacroCommandDefinition" ||
-    statement.kind === "Colorlet" ||
-    statement.kind === "DefineColor" ||
-    statement.kind === "TikzSet" ||
-    statement.kind === "TikzStyle" ||
-    statement.kind === "Pgfkeys" ||
-    statement.kind === "TikzLibrary" ||
-    statement.kind === "PgfplotsTableRead" ||
-    (statement.kind === "PgfMath" && definedPgfMathMacro(statement) !== null)
-  );
-}
-
 /** The macro `\pgfmathsetmacro`/`\pgfmathtruncatemacro` defines. */
 function definedPgfMathMacro(statement: PgfMathStatement): string | null {
   if (statement.commandRaw !== "\\pgfmathsetmacro" && statement.commandRaw !== "\\pgfmathtruncatemacro") return null;
@@ -119,8 +103,23 @@ function statementDefinition(statement: Statement, source: string): ContextDefin
       return { span: statement.span, names: [statement.nameRaw.trim()], reads: [statement.specificationRaw] };
     case "Colorlet":
       return { span: statement.span, names: [statement.nameRaw.trim()], reads: [statement.valueRaw] };
-    default:
-      return isDefinitionStatement(statement) ? { span: statement.span, names: [], reads: [source.slice(statement.span.from, statement.span.to)] } : null;
+    // Carried when the evaluator saw the picture use them (styles, keys, libraries).
+    case "TikzSet":
+    case "TikzStyle":
+    case "Pgfkeys":
+    case "TikzLibrary":
+      return { span: statement.span, names: [], reads: [source.slice(statement.span.from, statement.span.to)] };
+    // The pgfplots settings are carried on their own; the rest are not definitions.
+    case "PgfplotsSet":
+    case "PgfplotsLibrary":
+    case "Path":
+    case "Scope":
+    case "Foreach":
+    case "OverlayGroup":
+    case "OverlayDeclaration":
+    case "Axis":
+    case "UnknownStatement":
+      return null;
   }
 }
 

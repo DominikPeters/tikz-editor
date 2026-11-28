@@ -1988,12 +1988,13 @@ function pgfMathRuntimeFor(context: SemanticContext, onWarning?: PgfMathRuntime[
  * gets one warning naming the first such expression, since TeX stops there.
  */
 function withStatementPgfMath<T>(context: SemanticContext, diagnostics: Diagnostic[], span: { from: number; to: number }, evaluate: () => T): T {
-  let overflowExpression: string | null = null;
+  const overflowExpressions: string[] = [];
   const result = withPgfMathRuntime(
-    pgfMathRuntimeFor(context, (_warning, expression) => { overflowExpression ??= expression; }),
+    pgfMathRuntimeFor(context, (_warning, expression) => { if (overflowExpressions.length === 0) overflowExpressions.push(expression); }),
     evaluate
   );
-  if (overflowExpression !== null) diagnostics.push(pgfMathDimensionTooLargeDiagnostic(overflowExpression, span));
+  const [overflowExpression] = overflowExpressions;
+  if (overflowExpression !== undefined) diagnostics.push(pgfMathDimensionTooLargeDiagnostic(overflowExpression, span));
   return result;
 }
 
