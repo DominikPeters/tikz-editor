@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { applyDeckEditAction, renderBeamerFrame } from "../packages/core/src/beamer/index.js";
 import { pgfplotsPreambleInsertions } from "../packages/core/src/edit/pgfplots/templates.js";
+import { CHART_KINDS } from "../packages/core/src/edit/pgfplots/chart-kinds.js";
+import { deckChartHeight } from "../packages/core/src/beamer/deck-insert-pgfplots.js";
 import { beamerPictureLengths } from "../packages/core/src/beamer/picture-lengths.js";
 import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js";
 import { parseTikz, renderTikzToSvgAsync } from "../packages/core/src/index.js";
@@ -220,5 +222,38 @@ ${body}
   it("reports an axis command in an overlay body outside an axis", async () => {
     const result = await renderTikzToSvgAsync(String.raw`\begin{tikzpicture}\only<2>{\addplot coordinates {(0,0) (1,1)};}\end{tikzpicture}`, {});
     expect(result.semantic.diagnostics.some((diagnostic) => diagnostic.code === "pgfplots-command-outside-axis")).toBe(true);
+  });
+});
+
+describe("every chart kind on a slide (the shared chart-kind list feeds the deck rule)", () => {
+  const DECK = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Plot}
+Some text.
+\end{frame}
+\end{document}`;
+  it("inserts each kind without diagnostics, sized to the slide", async () => {
+    const first = await renderBeamerFrame(DECK);
+    for (const kind of CHART_KINDS) {
+      const inserted = applyDeckEditAction(DECK, first.layout, { kind: "deckInsertPgfplotsTemplate", frameId: first.layout.frameId, template: kind.id, placement: { kind: "end" } });
+      expect(inserted.kind, kind.id).toBe("success");
+      if (inserted.kind !== "success") continue;
+      expect(inserted.newSource, kind.id).toMatch(/\\begin\{\w+\}\[width=0\.8\\linewidth, height=0\.6\\textheight, /u);
+      const rendered = await renderBeamerFrame(inserted.newSource);
+      expect(rendered.diagnostics, kind.id).toEqual([]);
+      const picture = rendered.layout.embeddedTikz[0];
+      expect((picture?.bounds.y ?? 0) + (picture?.bounds.height ?? 0), kind.id).toBeLessThan(273.14662);
+    }
+  });
+
+  it("a second chart takes the room that is left (at least 0.3\\textheight)", async () => {
+    const first = await renderBeamerFrame(DECK);
+    const once = applyDeckEditAction(DECK, first.layout, { kind: "deckInsertPgfplotsTemplate", frameId: first.layout.frameId, template: "data", placement: { kind: "end" } });
+    if (once.kind !== "success") throw new Error("first insert failed");
+    const second = await renderBeamerFrame(once.newSource);
+    expect(deckChartHeight(second.layout)).toBe("0.3");
+    const empty = await renderBeamerFrame(DECK.replace("Some text.\n", ""));
+    expect(deckChartHeight(empty.layout)).toBe("0.6");
   });
 });

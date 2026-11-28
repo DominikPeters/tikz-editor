@@ -3,7 +3,7 @@ import { PGFPLOTS_TEMPLATES, pgfplotsPreambleInsertions, type PgfplotsTemplateKi
 import type { BeamerGraphicsPlacement } from "./deck-insert-graphics.js";
 import { scanBeamerDocument } from "./scan.js";
 import type { BeamerStructuralEdit } from "./structural-edit.js";
-import type { BeamerFrameLayout } from "./types.js";
+import type { BeamerFrameLayout, BeamerFrameLayoutItem } from "./types.js";
 
 /**
  * Insert → Function Plot / Data Plot / Bar Chart on a slide: a centred
@@ -13,6 +13,31 @@ import type { BeamerFrameLayout } from "./types.js";
  * is a figure, not a word). The preamble gains `\usepackage{pgfplots}` and
  * `\pgfplotsset{compat=1.18}` when it has none.
  */
+/**
+ * The axis height on a slide, as a fraction of `\textheight` (the frame's text
+ * height: default 4:3 theme 269.14662pt, behaviour Y4): what is left below
+ * the frame's content, less the `center` environment's skips, at most 0.6
+ * (a chart under a frame title and a line of text) and at least 0.3 (below
+ * that the axis box is too small to edit; a slide that full overflows, as
+ * it would in TeX). `height` is pgfplots' total height with its labels (A2),
+ * so the picture takes about that much room.
+ */
+export function deckChartHeight(frameLayout: BeamerFrameLayout): string {
+  const text = frameLayout.page.textArea;
+  // Frames centre their content vertically: the room is the text area below the title, less the content's height.
+  const titleBottom = Math.max(text.y, ...frameLayout.items.filter((item) => item.kind === "frame-title" || item.kind === "frame-subtitle").map((item) => item.bounds.y + item.bounds.height));
+  const hasBody = frameLayout.items.some((item) => !BODYLESS_KINDS.has(item.kind));
+  const used = hasBody ? frameLayout.contentBounds.height : 0;
+  const centerSkips = 2 * 6;
+  const remaining = text.y + text.height - titleBottom - used - centerSkips;
+  const fraction = text.height > 0 ? Math.floor((remaining / text.height) * 20) / 20 : DECK_CHART_HEIGHT_MAX;
+  return String(Math.min(DECK_CHART_HEIGHT_MAX, Math.max(DECK_CHART_HEIGHT_MIN, fraction)));
+}
+
+const BODYLESS_KINDS = new Set<BeamerFrameLayoutItem["kind"]>(["background", "frame-title", "frame-subtitle", "navigation-symbols", "mini-frame-navigation", "headline-decoration"]);
+const DECK_CHART_HEIGHT_MAX = 0.6;
+const DECK_CHART_HEIGHT_MIN = 0.3;
+
 export function beamerPgfplotsInsertionEdits(
   source: string,
   frameLayout: BeamerFrameLayout,
@@ -33,8 +58,9 @@ export function beamerPgfplotsInsertionEdits(
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const lineStart = source.lastIndexOf("\n", at - 1) + 1;
   const indent = at > body.from ? /^[ \t]*/u.exec(source.slice(lineStart, at))?.[0] ?? "" : "";
+  // Every chart kind's environment (`axis`, `semilogyaxis`, ...) gets the slide size.
   const axis = PGFPLOTS_TEMPLATES[template].text
-    .replace("\\begin{axis}[", "\\begin{axis}[width=0.8\\linewidth, height=0.6\\textheight, ")
+    .replace(/^\\begin\{(\w+)\}\[/u, (opening) => `${opening}width=0.8\\linewidth, height=${deckChartHeight(frameLayout)}\\textheight, `)
     .replace(/\n/gu, `${newline}${indent}    `);
   const tail = at === body.from && source[body.from] !== "\n" && source[body.from] !== "\r" ? newline : "";
   const block: TikzFragment = userText(`${newline}${indent}\\begin{center}${newline}${indent}  \\begin{tikzpicture}${newline}${indent}    ${axis}${newline}${indent}  \\end{tikzpicture}${newline}${indent}\\end{center}`, "pasted-tikz");
