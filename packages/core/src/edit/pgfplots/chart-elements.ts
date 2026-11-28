@@ -72,7 +72,7 @@ function lastKv(entries: readonly OptionEntry[] | undefined, key: string): Extra
 }
 
 function authoredText(entry: Extract<OptionEntry, { kind: "kv" | "flag" }> | null): string | null {
-  if (!entry || entry.kind !== "kv") return null;
+  if (entry?.kind !== "kv") return null;
   let text = entry.valueRaw.trim();
   while (text.startsWith("{") && text.endsWith("}")) text = text.slice(1, -1).trim();
   return text;
@@ -258,7 +258,7 @@ function nextCoordinates(source: string, plot: AddPlotStatement): TikzFragment |
     const nextY = Number.isFinite(value) ? String(Number((value + 1).toPrecision(12))) : y.raw;
     return `(${x.raw},${nextY})`;
   });
-  if (points.some((point) => point === null)) return null;
+  if (points.includes(null)) return null;
   return userText(`coordinates {${points.join(" ")}}`, "inspector-value");
 }
 

@@ -6,14 +6,22 @@
  */
 import { userText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { replaceSpan } from "../patch.js";
-import { CHART_KINDS, type ChartKindId } from "./chart-kinds.js";
+import { chartKind, type ChartKindId } from "./chart-kinds.js";
 
 /** The insert templates are the chart kinds (chart-kinds.ts), one list for every insert command. */
 export type PgfplotsTemplateKind = ChartKindId;
 
-export const PGFPLOTS_TEMPLATES: Record<PgfplotsTemplateKind, { label: string; text: string }> = Object.fromEntries(
-  CHART_KINDS.map((kind) => [kind.id, { label: kind.label, text: kind.template }])
-) as Record<PgfplotsTemplateKind, { label: string; text: string }>;
+const template = (id: ChartKindId) => ({ label: chartKind(id).label, text: chartKind(id).template });
+
+export const PGFPLOTS_TEMPLATES: Record<PgfplotsTemplateKind, { label: string; text: string }> = {
+  function: template("function"),
+  data: template("data"),
+  scatter: template("scatter"),
+  bar: template("bar"),
+  "stacked-bar": template("stacked-bar"),
+  area: template("area"),
+  semilogy: template("semilogy")
+};
 
 const COMPAT_RE = /\\pgfplotsset\s*\{[^{}]*\bcompat\s*=/u;
 

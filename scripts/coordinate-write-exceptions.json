@@ -1305,6 +1305,70 @@
   },
   {
     "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "applyInsertAxisPlotAction.command",
+    "count": 1,
+    "expression": "sourceSlice(source, last.commandSpan)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "applyInsertAxisPlotAction.trailing",
+    "count": 1,
+    "expression": "sourceSlice(source, last.trailingPath.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "applySetAxisElementAction.next.value",
+    "count": 1,
+    "expression": "userText(`{${AXIS_ELEMENT_PLACEHOLDER_TEXT[element]}}`, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "applySetAxisElementAction.value",
+    "count": 1,
+    "expression": "userText(\"{}\", \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "copiedOptions",
+    "count": 1,
+    "expression": "sourceSlice(source, entry.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "nextCoordinates",
+    "count": 1,
+    "expression": "userText(`coordinates {${points.join(\" \")}}`, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "result.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/chart-elements.ts",
+    "declaration": "showLegend.replacements.fragment",
+    "count": 1,
+    "expression": "userText(placeholderLegendEntry(index + 1), \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
     "symbol": "userText",
     "file": "packages/core/src/edit/pgfplots/inspector.ts",
     "declaration": "applyPgfplotsSetProperty.fragment",

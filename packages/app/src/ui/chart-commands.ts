@@ -7,7 +7,7 @@
  * itself.
  */
 import type { Span } from "@tikz-editor/core/ast/types";
-import { applyResetPlotStyleAction, readAxisElements, type AxisElementKind, type AxisElementsState } from "@tikz-editor/core/edit/pgfplots/chart-elements";
+import { applyResetPlotStyleAction, AXIS_ELEMENT_KINDS, readAxisElements, type AxisElementKind, type AxisElementsState } from "@tikz-editor/core/edit/pgfplots/chart-elements";
 import { CHART_KINDS, type ChartKindId } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
 import { CHART_KIND_COMMAND_IDS } from "../app-menu/chart-menu";
 import { legendAssociationFor } from "@tikz-editor/core/edit/pgfplots/legend-edits";
@@ -111,11 +111,12 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
       }
     };
   }
-  const disabled = (reason?: string): CommandBindingLike => ({ enabled: false, ...(reason ? { reason } : {}), run: () => undefined });
+  const disabled = (reason?: string): CommandBindingLike => ({ enabled: false, ...(reason ? { reason } : {}), run: () => {} });
   const selection = canEdit ? resolveChartSelection(selectedElementIds) : null;
   const elements = selection ? readChartElements(source, selection.axisId, sceneElements, parseOptions) : null;
 
-  for (const [kind, commandId] of Object.entries(ELEMENT_COMMANDS) as Array<[AxisElementKind, AppMenuCommandId]>) {
+  for (const kind of AXIS_ELEMENT_KINDS) {
+    const commandId = ELEMENT_COMMANDS[kind];
     const state = elements?.[kind];
     if (!selection || !state) { bindings[commandId] = disabled(); continue; }
     const axisId = selection.axisId;
@@ -176,7 +177,7 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
     bindings[APP_MENU_COMMAND_IDS.CHART_EDIT_TEXT] = disabled();
     bindings[APP_MENU_COMMAND_IDS.CHART_REMOVE_PART] = disabled();
   }
-  return bindings as Record<ChartCommandId, CommandBindingLike>;
+  return bindings;
 }
 
 /**
