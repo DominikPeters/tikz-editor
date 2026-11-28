@@ -199,7 +199,7 @@ describe("chart kinds: one list for insert (and later type switching)", () => {
       const document = chartKindDocument(kind.id);
       const parsed = parseTikz(document, { includeContextDefinitions: true });
       const result = evaluateTikzFigure(parsed.figure, document);
-      expect([...parsed.diagnostics, ...result.diagnostics].filter((d) => d.severity !== "info"), kind.id).toEqual([]);
+      expect([...parsed.diagnostics, ...result.diagnostics], kind.id).toEqual([]);
       expect(getAxisEvaluations(result.scene), kind.id).toHaveLength(1);
       const inserted = edit("\\begin{tikzpicture}\n\\end{tikzpicture}", { kind: "insertPgfplotsTemplate", template: kind.id });
       expect(inserted, kind.id).toContain(kind.template.split("\n")[0] ?? "");
