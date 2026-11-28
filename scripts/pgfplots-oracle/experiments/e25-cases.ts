@@ -100,7 +100,8 @@ export const s: Array<[string, string]> = [
 export const t: Array<[string, string]> = [
   ["t-green-thick", sAxis("\\addplot coordinates {(0,1) (3,2)};\n\\begin{scope}[green!50!black,very thick]\n\\addplot coordinates {(0,3) (3,6)};\n\\addplot+[dotted] coordinates {(0,5) (3,5)};\n\\end{scope}\n\\addplot coordinates {(0,7) (3,8)};")],
   ["t-xshift-mm", sAxis("\\begin{scope}[yshift=5mm,xshift=-3mm]\n\\addplot[red] coordinates {(1,2) (3,4)};\n\\end{scope}\n\\addplot[blue] coordinates {(1,2) (3,4)};")],
-  ["t-xscale", sAxis("\\begin{scope}[xscale=0.5]\n\\addplot[red] coordinates {(1,2) (3,4)};\n\\end{scope}")],
+  ["t-xscale", sAxis("\\begin{scope}[xscale=0.5]\n\\addplot[red] coordinates {(1,2) (3,4)};\n\\end{scope}", "xmin=-2")],
+  ["t-rotate-origin", sAxis("\\begin{scope}[rotate=-15]\n\\addplot[mark=square*] coordinates {(1,2) (3,4)};\n\\draw (axis cs:0,0) -- (axis cs:2,2);\n\\end{scope}", "xmin=-1,ymin=-5")],
   ["t-clip-plots", sAxis("\\addplot coordinates {(0,1) (4,9)};\n\\begin{scope}\n\\clip (axis cs:1,0) rectangle (axis cs:3,10);\n\\addplot coordinates {(0,9) (4,1)};\n\\addplot[mark=square*] coordinates {(0,5) (4,5)};\n\\end{scope}")],
   ["t-legend-mixed", sAxis("\\begin{scope}[dashed]\n\\addplot coordinates {(0,1) (2,1)};\n\\addlegendentry{u}\n\\end{scope}\n\\addplot coordinates {(0,2) (2,2)};\n\\addlegendentry{v}\n\\begin{scope}\n\\addplot coordinates {(0,3) (2,3)};\n\\addlegendentry{w}\n\\end{scope}", "legend pos=north west")],
   ["t-nested-order", sAxis("\\begin{scope}[blue]\n\\draw[line width=3pt] (axis cs:0,1) -- (axis cs:4,1);\n\\begin{scope}[line width=2pt]\n\\addplot coordinates {(0,0) (4,10)};\n\\end{scope}\n\\end{scope}\n\\addplot[red] coordinates {(0,10) (4,0)};")],

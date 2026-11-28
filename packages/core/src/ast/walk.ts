@@ -13,7 +13,9 @@ const AXIS_COMMAND_KINDS: ReadonlySet<string> = new Set<AxisCommand["kind"]>([
   "AddLegendEntry",
   "AddLegendImage",
   "Legend",
-  "PgfplotsExtra"
+  "PgfplotsExtra",
+  "AxisScopeBegin",
+  "AxisScopeEnd"
 ]);
 
 /** Whether an axis body item is an axis command (`\addplot`, a legend command) rather than a statement. */

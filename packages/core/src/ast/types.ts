@@ -729,7 +729,39 @@ export type AxisCommand =
   | AddLegendEntryStatement
   | AddLegendImageStatement
   | LegendStatement
-  | PgfplotsExtraStatement;
+  | PgfplotsExtraStatement
+  | AxisScopeBegin
+  | AxisScopeEnd;
+
+/**
+ * `\begin{scope}[options]` inside an axis body (behaviour AC5). The axis body
+ * stays flat: a scope is its begin and end markers around the items it holds,
+ * so plot ids and every walk over `axis.body` keep body order. The markers
+ * nest; `endId` pairs them.
+ */
+export type AxisScopeBegin = {
+  kind: "AxisScopeBegin";
+  /** `axis:N:scope:K`, K counting the scopes of the axis in body order. */
+  id: string;
+  axisId: string;
+  /** `\begin{scope}` and its option list. */
+  span: Span;
+  /** The whole environment, to the end of `\end{scope}` (or of the body read when unterminated). */
+  scopeSpan: Span;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** `axis:N:scope:K:end`; absent when the scope is unterminated. */
+  endId?: string;
+};
+
+/** `\end{scope}` of an axis scope. */
+export type AxisScopeEnd = {
+  kind: "AxisScopeEnd";
+  id: string;
+  axisId: string;
+  span: Span;
+  beginId: string;
+};
 
 export type AxisCommandKind = AxisCommand["kind"];
 

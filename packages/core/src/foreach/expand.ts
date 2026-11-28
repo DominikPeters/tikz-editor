@@ -2,6 +2,8 @@ import {
   addLegendEntryId,
   addLegendImageId,
   addPlotId,
+  axisScopeBeginId,
+  axisScopeEndId,
   axisStatementId,
   legendStatementId,
   pgfplotsExtraId,
@@ -1441,9 +1443,28 @@ function reindexAxisCommands(
   preserveExistingId: boolean,
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
-  const counters = { AddPlot: 0, AddLegendEntry: 0, AddLegendImage: 0, Legend: 0, PgfplotsExtra: 0 };
+  const counters = { AddPlot: 0, AddLegendEntry: 0, AddLegendImage: 0, Legend: 0, PgfplotsExtra: 0, AxisScopeBegin: 0 };
   for (const item of axis.body) {
     if (!isAxisCommand(item)) continue;
+    if (item.kind === "AxisScopeBegin" || item.kind === "AxisScopeEnd") {
+      // A scope's markers: the end takes the id of its begin (scopes nest, so they are counted at the begin).
+      if (item.kind === "AxisScopeEnd") continue;
+      const index = counters.AxisScopeBegin++;
+      const previousId = item.id;
+      item.axisId = axis.id;
+      item.id = axisScopeBeginId(axis.id, index);
+      if (item.id !== previousId) templateLocalIdByExpandedId.set(item.id, previousId);
+      const end = axis.body.find((other) => other.kind === "AxisScopeEnd" && other.beginId === previousId);
+      if (end && end.kind === "AxisScopeEnd") {
+        const previousEndId = end.id;
+        end.axisId = axis.id;
+        end.id = axisScopeEndId(axis.id, index);
+        end.beginId = item.id;
+        item.endId = end.id;
+        if (end.id !== previousEndId) templateLocalIdByExpandedId.set(end.id, previousEndId);
+      }
+      continue;
+    }
     const index = counters[item.kind]++;
     const previousId = item.id;
     item.axisId = axis.id;

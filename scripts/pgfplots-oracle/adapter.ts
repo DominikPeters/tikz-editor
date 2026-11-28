@@ -445,8 +445,14 @@ function adaptTier2(elements: readonly SceneElement[], bbox: Box, texts: Map<Sce
   let clipBox: Box | undefined;
   const order = () => primitives.length;
   const syncClip = (chain: readonly SceneClipPath[]) => {
-    const same = chain.length >= activeClips.length && activeClips.every((clip, i) => chain[i]?.id === clip.id);
-    if (!same) { activeClips = []; clipBox = undefined; }
+    // Clips nest like PDF's q/Q: leaving an inner clip (the end of a scope) keeps the ones around it.
+    let common = 0;
+    while (common < activeClips.length && common < chain.length && chain[common]?.id === activeClips[common]?.id) common += 1;
+    if (common < activeClips.length) {
+      activeClips = activeClips.slice(0, common);
+      clipBox = undefined;
+      for (const clip of activeClips) { const box = boundsOf(commandsToSegments(clip.commands)); if (box) clipBox = intersect(clipBox, box); }
+    }
     for (const clip of chain.slice(activeClips.length)) {
       const segments = commandsToSegments(clip.commands);
       const box = boundsOf(segments);

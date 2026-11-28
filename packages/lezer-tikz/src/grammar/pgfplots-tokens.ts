@@ -8,6 +8,7 @@ import {
   AxisLabelCmd,
   BeginAxis,
   BeginAxisFontEnv,
+  BeginAxisScope,
   EndAxis,
   EndAxisFontEnv,
   LegendCmd,
@@ -132,6 +133,13 @@ export const pgfplotsTokens = new ExternalTokenizer(
         const term = name === "begin" ? BeginAxisFontEnv : EndAxisFontEnv;
         if (stack.canShift(term)) {
           input.acceptToken(term, environment.length);
+        }
+        return;
+      }
+      // A scope where an axis item can start holds axis commands (AxisScopeStatement).
+      if (environment?.name === "scope" && name === "begin") {
+        if (stack.canShift(BeginAxisScope)) {
+          input.acceptToken(BeginAxisScope, environment.length);
         }
         return;
       }

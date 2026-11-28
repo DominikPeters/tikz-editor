@@ -9,14 +9,15 @@
  * the host as `evaluateStatement`), installs the axis coordinate systems
  * and the data map for embedded TikZ, and registers the axis as a node.
  */
-import type { AddPlotStatement, AxisBodyItem, AxisStatement, PathStatement, Span, Statement } from "../ast/types.js";
+import type { AddPlotStatement, AxisBodyItem, AxisScopeBegin, AxisStatement, PathStatement, ScopeStatement, Span, Statement } from "../ast/types.js";
 import type { FeatureId } from "../capabilities/feature-ids.js";
 import { worldBounds, worldPoint, worldVector, type WorldPoint } from "../coords/points.js";
 import { pt } from "../coords/scalars.js";
 import { worldTransform, type WorldTransform } from "../coords/transforms.js";
 import type { Diagnostic } from "../diagnostics/types.js";
 import { parseOptionListRaw } from "../options/parse.js";
-import type { OptionListAst } from "../options/types.js";
+import type { OptionEntry, OptionListAst } from "../options/types.js";
+import { DOCUMENTED_PGFPLOTS_KEYS } from "./documented-keys.generated.js";
 import { parseTikz } from "../parser/index.js";
 import {
   currentFrame,
@@ -95,6 +96,8 @@ function plotDataCacheKey(
 export type AxisHost = {
   /** The ordinary statement evaluator (paths, scopes, …) in the current frame. */
   evaluateStatement: (statement: Statement) => SceneElement[];
+  /** Pushes the frame of a scope as the evaluator enters it (its body is not evaluated); the caller pops it. */
+  enterScope: (scope: ScopeStatement) => void;
   diagnostics: Diagnostic[];
   markFeature: (id: FeatureId, status: "supported" | "unsupported") => void;
   featureUsage: FeatureUsage;
@@ -353,7 +356,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   // order for the plots after them; embedded TikZ is evaluated at `\end{axis}`
   // and sees the final values (behaviour V0, experiment E16). A brace group
   // keeps its definitions to itself (behaviour AB4).
-  const bodyGroups = axisBodyGroupPaths(source, context.source);
+  const { paths: bodyGroups, scopes: bodyScopes } = axisBodyGroupPaths(source, context.source);
   const parent = childFrame(outer, { style: axisEntryStyle(context, outer, source.id, source.beginSpan) });
   const plotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const settingBindings = new Map<AxisBodyItem, SemanticContextFrame["macroBindings"]>();
@@ -444,6 +447,30 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     bodySettingsAll.push({ index, path: bodyGroups[index] ?? [], list: entries.length === list.entries.length ? list : { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` } });
   });
   const bodySettings = bodySettingsAll.filter((setting) => setting.path.length === 0).map((setting) => setting.list);
+  // AC5: the scopes around a body item, outermost first, and their options split
+  // into what reaches the plots inside as plot options and their transformation.
+  const scopeOptions = new Map<string, { plot: OptionListAst | null; transform: OptionListAst | null; tikz: OptionListAst | null }>();
+  const scopeOptionsOf = (scope: AxisScopeBegin) => {
+    let split = scopeOptions.get(scope.id);
+    if (split) return split;
+    const list = scope.options ? expandWith(scope.options, parent.macroBindings) : null;
+    const entries = list?.entries ?? [];
+    const isTransform = (entry: OptionEntry) => entry.kind !== "unknown" && TRANSFORM_KEY.test(entry.key.trim());
+    const isBackground = (entry: OptionEntry) => entry.kind !== "unknown" && entry.key.trim() === "on background layer";
+    const isPgfplots = (entry: OptionEntry) => entry.kind !== "unknown" && (entry.key.trim().startsWith("/pgfplots/") || DOCUMENTED_PGFPLOTS_KEYS.has(entry.key.trim()));
+    const make = (keep: readonly OptionEntry[]): OptionListAst | null => (keep.length === 0 || !list ? null : { ...list, entries: [...keep], raw: `[${keep.map((entry) => entry.raw).join(",")}]` });
+    const background = entries.find(isBackground);
+    if (background) diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-scope-background-layer", message: "In TeX, plots in a scope `on background layer` inside an axis are painted before the axis, unclipped; this editor paints them with the other plots.", span: background.span });
+    split = {
+      plot: make(entries.filter((entry) => !isTransform(entry) && !isBackground(entry))),
+      transform: make(entries.filter(isTransform)),
+      tikz: make(entries.filter((entry) => !isPgfplots(entry)))
+    };
+    scopeOptions.set(scope.id, split);
+    return split;
+  };
+  const scopesAt = (bodyIndex: number): AxisScopeBegin[] => (bodyGroups[bodyIndex] ?? []).flatMap((id) => { const scope = bodyScopes.get(id); return scope ? [scope] : []; });
+  const scopePlotLists = (bodyIndex: number): OptionListAst[] => scopesAt(bodyIndex).flatMap((scope) => { const list = scopeOptionsOf(scope).plot; return list ? [list] : []; });
   markFeature("pgfplots_axis", "supported");
 
   const compat = readPgfplotsCompat(settings);
@@ -489,7 +516,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     }
     return captured;
   };
-  const plotModelAt = (bodyIndex: number, statement: AddPlotStatement, cycleIndex: number, extraLists: readonly OptionListAst[] = []): PlotModel => {
+  const plotModelAt = (bodyIndex: number, statement: AddPlotStatement, cycleIndex: number, extraListsIn: readonly OptionListAst[] = []): PlotModel => {
+    const extraLists = [...scopePlotLists(bodyIndex), ...extraListsIn];
     const captured = plotAxisModelAt(bodyIndex);
     if (!captured) return resolvePlotModel(model, statement, cycleIndex, extraLists);
     const plot = resolvePlotModel(captured, statement, cycleIndex, extraLists);
@@ -817,6 +845,27 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     if (!plot.points || !base) return null;
     return marksFor(plot.model, base, true);
   });
+  // AC5: the transformation of the scopes around a body item, in the axis' local coordinates.
+  const scopeTransforms = new Map<number, WorldTransform | null>();
+  const scopeTransformAt = (bodyIndex: number): WorldTransform | null => {
+    if (scopeTransforms.has(bodyIndex)) return scopeTransforms.get(bodyIndex) ?? null;
+    const lists = scopesAt(bodyIndex).flatMap((scope) => { const list = scopeOptionsOf(scope).transform; return list ? [list] : []; });
+    let transform: WorldTransform | null = null;
+    if (lists.length > 0) {
+      const t = resolveStyle(context, { ...axisFrame, transform: worldTransform(1, 0, 0, 1, 0, 0) }, axisFrame.style, lists, axis.id, axis.span).transform;
+      const identity = Math.abs(t.a - 1) < 1e-12 && Math.abs(t.b) < 1e-12 && Math.abs(t.c) < 1e-12 && Math.abs(t.d - 1) < 1e-12 && Math.abs(t.e) < 1e-12 && Math.abs(t.f) < 1e-12;
+      transform = identity ? null : t;
+      const item = axis.body[bodyIndex];
+      const plot = item?.kind === "AddPlot" ? plots.find((entry) => entry.model.statement.id === item.id) : undefined;
+      if (transform && plot && (plot.model.bar || plot.model.errorBars)) {
+        diagnostics.push({ severity: "warning", code: "pgfplots-scope-transform-bars", message: "A transformation of a scope around a bar plot or a plot with error bars is drawn as for a line plot (moved twice, marks once); this case was not measured against TeX.", span: item?.span ?? axis.span });
+      }
+    }
+    scopeTransforms.set(bodyIndex, transform);
+    return transform;
+  };
+  const applyLocal = (t: WorldTransform, q: Point): Point => ({ x: t.a * q.x + t.c * q.y + t.e, y: t.b * q.x + t.d * q.y + t.f });
+  const plotBodyIndex = new Map(axis.body.flatMap((item, index) => (item.kind === "AddPlot" ? [[item.id, index] as const] : [])));
 
   /**
    * X3 - `nodes near coords`: a node per point, anchored `south` at the point
@@ -875,7 +924,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       const to = mapPoint(bar.to.x, bar.to.y);
       const path = makePath(statement.id, `error:${String(n)}`, { ...barStyle, fill: null }, axisFrame.styleChain, statement.span);
       path.commands = [{ kind: "M", to: toWorld(from) }, { kind: "L", to: toWorld(to) }];
-      path.clipChain = [...contentClip];
+      path.clipChain = [...currentFrame(context).clipChain];
       path.pictureSizeRelevant = false;
       out.push(path);
       if (!primitives) return;
@@ -895,7 +944,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
             case "Z": return { kind: "Z" };
           }
         });
-        markPath.clipChain = [...contentClip];
+        markPath.clipChain = [...currentFrame(context).clipChain];
         markPath.pictureSizeRelevant = false;
         out.push(markPath);
       });
@@ -964,7 +1013,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       plots.forEach((plot, index) => {
         const marks = markStyles[index];
         if (!marks || !plot.points) return;
-        const extent = segmentsBounds(marks.primitives.flatMap((primitive) => primitive.segments));
+        const scopeT = scopeTransformAt(plotBodyIndex.get(plot.model.statement.id) ?? -1);
+        const extent = segmentsBounds(marks.primitives.flatMap((primitive) => primitive.segments).map((segment) => (scopeT ? transformMarkSegment(segment, scopeT) : segment)));
         if (!extent) return;
         let streamIndex = 0;
         for (const point of plot.points) {
@@ -973,7 +1023,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
           if (!markSelected(plot.model, streamIndex)) continue;
           const q = map(point.x, point.y);
           if (model.clip && !insideBox(q, area)) continue;
-          box = unionBox(box, { minX: q.x + extent.minX, minY: q.y + extent.minY, maxX: q.x + extent.maxX, maxY: q.y + extent.maxY });
+          // AC5: a scope's transformation moves the mark after the inside test (s-shift-auto: a mark beyond the box counts).
+          const at = scopeT ? applyLocal(scopeT, q) : q;
+          box = unionBox(box, { minX: at.x + extent.minX, minY: at.y + extent.minY, maxX: at.x + extent.maxX, maxY: at.y + extent.maxY });
         }
       });
       return box;
@@ -1083,13 +1135,45 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   });
   const content: SceneElement[] = [];
   const markElements: SceneElement[] = [];
+  // AC5: the TikZ scope of an axis scope (its TikZ keys), for embedded TikZ and `\clip` inside it.
+  // Its transformation acts in the axis' own coordinates (origin at the box's lower left, as
+  // for the plots: t-rotate-origin), not around the data origin the content frame starts from.
+  const scopeLocal: WorldTransform[] = [];
+  const originShift = worldTransform(1, 0, 0, 1, layout.map.origin.x, layout.map.origin.y);
+  const enterAxisScope = (scope: AxisScopeBegin): void => {
+    const options = scopeOptionsOf(scope).tikz;
+    host.enterScope({ kind: "Scope", id: scope.id, span: scope.scopeSpan, ...(options ? { options } : {}), body: [] });
+    const own = scopeOptionsOf(scope).transform;
+    const parentLocal = scopeLocal[scopeLocal.length - 1] ?? worldTransform(1, 0, 0, 1, 0, 0);
+    const local = own ? multiplyMatrix(parentLocal, resolveStyle(context, { ...axisFrame, transform: worldTransform(1, 0, 0, 1, 0, 0) }, axisFrame.style, [own], axis.id, axis.span).transform) : parentLocal;
+    scopeLocal.push(local);
+    if (own) currentFrame(context).transform = multiplyMatrix(multiplyMatrix(frameTransform, local), originShift);
+  };
   const previousSystems = context.coordinateSystems;
-  context.coordinateSystems = new Map([...(previousSystems ?? []), ...axisCoordinateSystems(layout, toWorld, model)]);
+  const enteredScopes: string[] = [];
+  // AC5: inside an axis scope, `axis cs` points are subject to the scope's transformation, as all TikZ coordinates are.
+  const dataInverse = inverseMatrix(dataTransform) ?? dataTransform;
+  const csWorld = (q: Point): WorldPoint => {
+    const w = toWorld(q);
+    if (enteredScopes.length === 0) return w;
+    return applyMatrix(multiplyMatrix(currentFrame(context).transform, dataInverse), w);
+  };
+  context.coordinateSystems = new Map([...(previousSystems ?? []), ...axisCoordinateSystems(layout, csWorld, model)]);
   pushFrame(context, contentFrame);
   try {
     let plotIndex = 0;
     let stackedContentIndex: number | null = null;
-    for (const item of axis.body) {
+    for (const [bodyIndex, item] of axis.body.entries()) {
+      // AC5: a scope in the body is a TikZ scope for what is drawn inside it (options, `\clip`).
+      if (item.kind === "AxisScopeBegin") {
+        enterAxisScope(item);
+        enteredScopes.push(item.id);
+        continue;
+      }
+      if (item.kind === "AxisScopeEnd") {
+        if (enteredScopes[enteredScopes.length - 1] === item.beginId) { enteredScopes.pop(); scopeLocal.pop(); popFrame(context); }
+        continue;
+      }
       if (item.kind === "AddPlot") {
         const plot = plots[plotIndex];
         const style = plotStyles[plotIndex];
@@ -1098,6 +1182,11 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
         if (!plot?.points || !style) continue;
         const statement = plot.model.statement;
         pushPlotPointHandles(item, context);
+        // AC5: a transformation of the scopes around the plot moves its line twice and its marks once (measured).
+        const scopeT = scopeTransformAt(bodyIndex);
+        const lineWorld = scopeT ? (q: Point): WorldPoint => toWorld(applyLocal(scopeT, applyLocal(scopeT, q))) : toWorld;
+        const markWorld = scopeT ? (q: Point): WorldPoint => toWorld(applyLocal(scopeT, q)) : toWorld;
+        const plotClip = [...currentFrame(context).clipChain];
         const bar = plot.model.bar;
         let barTops: Point[] | null = null;
         if (bar && !plot.model.onlyMarks) {
@@ -1111,9 +1200,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
           }, { ...(stack ? { base: stack.base } : {}), ...(group ? { group } : {}) });
           barTops = rects.map((rect) => (rect.vertical ? { x: (rect.x0 + rect.x1) / 2, y: rect.y1 } : { x: rect.x1, y: (rect.y0 + rect.y1) / 2 }));
           const commands: ScenePathCommand[] = rects.flatMap((rect): ScenePathCommand[] => {
-            const corners = barCorners(rect).map((corner) => toWorld(corner));
+            const corners = barCorners(rect).map((corner) => lineWorld(corner));
             return [
-              { kind: "M", to: corners[0] ?? toWorld({ x: 0, y: 0 }) },
+              { kind: "M", to: corners[0] ?? lineWorld({ x: 0, y: 0 }) },
               ...corners.slice(1).map((to): ScenePathCommand => ({ kind: "L", to })),
               { kind: "Z" }
             ];
@@ -1121,7 +1210,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
           if (commands.length > 0) {
             const path = makePath(statement.id, "bars", style, axisFrame.styleChain, statement.span);
             path.commands = commands;
-            path.clipChain = [...contentClip];
+            path.clipChain = plotClip;
             path.pictureSizeRelevant = false;
             // U6: stacked plots are painted last plot first (E19 `stacked`).
             if (plot.model.stack) {
@@ -1137,16 +1226,16 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
           const commands: ScenePathCommand[] = plotHandlerCommands(canvas, plot.model.handler, {
             tension: plot.model.tension,
             combBase: (q) => (plot.model.handler === "xcomb" ? { x: mapPoint(0, 0).x, y: q.y } : { x: q.x, y: mapPoint(0, 0).y })
-          }).map((c): ScenePathCommand => (c.kind === "C" ? { kind: "C", c1: toWorld(c.c1), c2: toWorld(c.c2), to: toWorld(c.to) } : { kind: c.kind, to: toWorld(c.to) }));
+          }).map((c): ScenePathCommand => (c.kind === "C" ? { kind: "C", c1: lineWorld(c.c1), c2: lineWorld(c.c2), to: lineWorld(c.to) } : { kind: c.kind, to: lineWorld(c.to) }));
           if (statement.trailingPath) {
             // W1-W4: \closedcycle and path operations continue the plot's path.
             const previous = stacks.get(stackIndex) ? previousStackedPoints(plots, stacks, stackIndex) : null;
-            commands.push(...trailingCommands(statement.trailingPath, plot.points, previous, plot.model.stack, layout, mapPoint, toWorld, { x: model.x.mode === "log", y: model.y.mode === "log" }));
+            commands.push(...trailingCommands(statement.trailingPath, plot.points, previous, plot.model.stack, layout, mapPoint, lineWorld, { x: model.x.mode === "log", y: model.y.mode === "log" }));
           }
           if (commands.some((command) => command.kind !== "M")) {
             const path = makePath(statement.id, "line", style, axisFrame.styleChain, statement.span);
             path.commands = commands;
-            path.clipChain = [...contentClip];
+            path.clipChain = plotClip;
             path.pictureSizeRelevant = false;
             if (plot.model.stack) {
               const first: number = stackedContentIndex ?? content.length;
@@ -1168,7 +1257,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
             marks.primitives.forEach((primitive, primitiveIndex) => {
               const markStyle: ResolvedStyle = { ...marks.style, stroke: primitive.stroke, drawExplicit: primitive.stroke !== null, fill: primitive.fill, dashArray: marks.style.dashArray };
               const path = makePath(statement.id, `mark:${String(n)}:${String(primitiveIndex)}`, markStyle, axisFrame.styleChain, statement.span);
-              path.commands = primitive.segments.map((segment) => markCommand(segment, q, toWorld));
+              path.commands = primitive.segments.map((segment) => markCommand(segment, q, markWorld));
               path.clipChain = [...parent.clipChain];
               path.pictureSizeRelevant = false;
               markElements.push(path);
@@ -1194,6 +1283,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       content.push(...nested.map((element) => ({ ...element, clipChain: element.clipChain && element.clipChain.length > 0 ? element.clipChain : [...contentClip] })));
     }
   } finally {
+    for (; enteredScopes.length > 0; enteredScopes.pop()) popFrame(context);
     popFrame(context);
     context.coordinateSystems = previousSystems;
   }
@@ -1504,30 +1594,49 @@ function isBodyTextKey(key: string): boolean {
 const LIMIT_KEYS = new Set(["xmin", "xmax", "ymin", "ymax", "zmin", "zmax"]);
 
 /**
- * Brace groups of the axis body (behaviour AB4). The parser reads the body
- * flat; a group's braces are the stray `{`/`}` between items. Per body item:
- * the ids of the groups around it, outermost first.
+ * The groups of the axis body (behaviour AB4) and its scopes (AC5). The body
+ * is flat; a brace group's braces are the stray `{`/`}` between items, a
+ * scope is its begin and end markers. `paths`: per body item, the ids of the
+ * groups and scopes around it, outermost first (a marker is outside its own
+ * scope). `scopes`: the scope ids, with their begin markers.
  */
-function axisBodyGroupPaths(axis: AxisStatement, source: string): Array<readonly number[]> {
+type AxisBodyGroups = { paths: Array<readonly number[]>; scopes: ReadonlyMap<number, AxisScopeBegin> };
+function axisBodyGroupPaths(axis: AxisStatement, source: string): AxisBodyGroups {
   const paths: Array<readonly number[]> = [];
+  const scopes = new Map<number, AxisScopeBegin>();
+  const scopeIds = new Map<string, number>();
   const stack: number[] = [];
   let next = 0;
-  let current: readonly number[] = [];
   let pos = axis.bodySpan.from;
   const scan = (from: number, to: number): void => {
     for (let i = from; i < to; i += 1) {
       const ch = source[i];
       if (ch === "\\") { i += 1; continue; }
       if (ch === "%") { while (i < to && source[i] !== "\n") i += 1; continue; }
-      if (ch === "{") { stack.push(next); next += 1; current = [...stack]; } else if (ch === "}" && stack.length > 0) { stack.pop(); current = [...stack]; }
+      // A stray `}` never closes a scope: its group would have been opened inside it.
+      if (ch === "{") { stack.push(next); next += 1; } else if (ch === "}" && stack.length > 0 && !scopes.has(stack[stack.length - 1] ?? -1)) stack.pop();
     }
   };
   for (const item of axis.body) {
     if (item.span.from > pos) scan(pos, item.span.from);
-    paths.push(current);
+    if (item.kind === "AxisScopeEnd") {
+      // Groups left open inside the scope end with it.
+      const id = scopeIds.get(item.beginId);
+      if (id !== undefined && stack.includes(id)) while (stack.length > 0 && stack.pop() !== id) { /* close inner groups */ }
+    }
+    paths.push([...stack]);
+    if (item.kind === "AxisScopeBegin") {
+      scopeIds.set(item.id, next);
+      scopes.set(next, item);
+      stack.push(next);
+      next += 1;
+      // The scope's items follow its option list; its own markers are not scanned for braces.
+      pos = item.span.to;
+      continue;
+    }
     pos = Math.max(pos, item.span.to);
   }
-  return paths;
+  return { paths, scopes };
 }
 
 /** A plot's axis model (AB1/AB2): the final state, with the keys read at the `\addplot` taken from the settings in effect there. */
@@ -1657,6 +1766,16 @@ function evaluateTransformCoordinateInFrame(raw: string, context: SemanticContex
 
 function evaluateRawCoordinateWorld(raw: string, context: SemanticContext): WorldPoint | null {
   return evaluateRawCoordinate(raw, context).world;
+}
+
+/** A mark segment (relative to the mark's centre) under a linear map (its translation is the centre's). */
+function transformMarkSegment(segment: PlotMarkSegment, t: WorldTransform): PlotMarkSegment {
+  const m = (x: number, y: number) => ({ x: t.a * x + t.c * y, y: t.b * x + t.d * y });
+  switch (segment.op) {
+    case "M": case "L": { const q = m(segment.x, segment.y); return { ...segment, x: q.x, y: q.y }; }
+    case "C": { const c1 = m(segment.x1, segment.y1); const c2 = m(segment.x2, segment.y2); const q = m(segment.x, segment.y); return { ...segment, x1: c1.x, y1: c1.y, x2: c2.x, y2: c2.y, x: q.x, y: q.y }; }
+    case "Z": return segment;
+  }
 }
 
 function markCommand(segment: PlotMarkSegment, at: Point, toWorld: (q: Point) => WorldPoint): ScenePathCommand {

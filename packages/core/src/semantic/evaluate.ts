@@ -1454,6 +1454,8 @@ function evaluateStatement(
     markPgfplotsAxisFeatures(statement, featureUsage);
     return evaluateAxisStatement(statement, context, {
       evaluateStatement: (nested) => evaluateStatement(nested, context, diagnostics, featureUsage, statementMacroAttribution),
+      // Its options were read as plot options too; their diagnostics are the plots'.
+      enterScope: (scope) => { evaluateStatement(scope, context, [], featureUsage, statementMacroAttribution, true); },
       diagnostics,
       markFeature: (id, status) => { markFeature(featureUsage, id, status); },
       featureUsage
