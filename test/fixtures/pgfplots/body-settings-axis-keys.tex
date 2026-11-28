@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): axis keys and text keys set in the
+% axis body after the plots (behaviour AB3/AB5) still hold for the axis.
+\begin{tikzpicture}
+\begin{axis}[domain=0:2, samples=3]
+\addplot {x^2};
+\addlegendentry{$x^2$}
+\pgfplotsset{title={Late title}, xlabel=$x$, grid=major, legend pos=north west}
+\addplot {2*x};
+\addlegendentry{$2x$}
+\pgfplotsset{every axis/.append style={ylabel=$y$}, violet, line width=2pt}
+\end{axis}
+\end{tikzpicture}

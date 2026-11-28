@@ -1690,3 +1690,102 @@ neighbours' glyphs; painting matches), log fractional-step drift (Q3b, OPEN),
 paint nothing. Near-tolerance failures (no missing or extra item, all
 positions within 0.5pt; median 0.06pt) are the A7a origin-projection noise and
 N2 limit noise of TeX's fixed-point arithmetic (log axes, large magnitudes).
+
+---
+
+## AB. Settings inside the axis body (2026-11-28)
+
+Experiment E24: `e24-cases.ts` holds the discovery set `a` (41 cases), the
+exploration sets `c` (TikZ keys, scopes; 22 cases), `d` (`mark` and survey
+keys inside a group; 6) and `e` (text colour and font; 8), and a fresh
+validation set `b` (19 cases, new values and combinations).
+`e24-body-settings.mts` prints a digest per case (paths in data units,
+paints, glyphs; `E24_SET=a|b|c|d|e`), `e24-glyph-colours.mts` the colour of
+every glyph run; `check-cases.mts ./e24-cases.js` renders each case with the
+editor and compares it with the cached LuaLaTeX result at the design
+tolerances. Raw output `artifacts/pgfplots-experiments/e24-body-settings*/`.
+
+**Result.** After the rules below: set a 37/41, c 17/21, d 6/6, e 8/8 pass
+both tiers; fresh set b **18/19** first time, max error layout **0.0054 pt**,
+paths **0.0039 pt**, glyphs **0.0052 pt**. Failing everywhere: the cases
+with an `\addplot` inside `\begin{scope}…\end{scope}` (the parser reads such
+an `\addplot` as an unknown statement and diagnoses it; not drawn), and two
+TikZ-style cases (below). Fixtures body-settings-plot-keys,
+body-settings-axis-keys, body-settings-groups; unit tests
+`test/pgfplots-body-settings.spec.ts`.
+
+pgfplots reads the body in order, but draws the plots, the axis and embedded
+TikZ when the axis ends. So the question for each key is *when* it is read:
+
+**AB1 — Keys read at the `\addplot`.** A value set between plots (by
+`\pgfplotsset`, `\pgfkeys{/pgfplots/…}` or `\tikzset{/pgfplots/…}`) reaches
+the later plots only: `domain` (p-domain: first plot over 0:1, second over
+2:3), `samples`, `samples at`, `variable`, `each nth point`, `unbounded
+coords`, `forget plot` (p-forget: the two plots after it share the second
+cycle entry), `cycle list` and `cycle list name` (p-cycle-list: the cycle
+index keeps counting, the new list is indexed with it), `every axis plot no
+N` (set after plot N it does not reach it). Macros in an expression, in the
+data, or in one of these keys given to the plot (`domain=0:\a`) are read
+there too (V0; p-def-domain, p-def-expr). `\tikzset{domain=…}` is TikZ's
+domain and changes nothing (p-tikzset-domain). Implemented for the keys
+listed in `SURVEY_PLOT_KEYS` (model.ts), which adds the documented data and
+coordinate filter keys and `trig format plots` by analogy (not measured).
+VERIFIED (b-domain-samples, b-pgfkeys-samples, b-cycle-mid, b-nth-forget,
+b-every-no, b-def-mixed).
+
+**AB2 — Keys read when the axis ends.** Drawing keys use the state at
+`\end{axis}`, so a value set after a plot still reaches it: `every axis plot`
+and `every axis plot post` (p-every-plot, p-after-all), `no marks`, `mark
+options`, `mark size`, `only marks`, `smooth` (c-smooth: both plots curved),
+`legend …`; style definitions (`mystyle/.style`, by `\pgfplotsset` or
+`\tikzset`: the last definition wins for every plot, p-tikz-style,
+p-pgfplots-style); macros in the plot's other option values (p-def-color:
+`color=\mycol` is the final value for both plots). **`mark` is mixed**: a
+body-level `mark=` (`\pgfplotsset` or `\tikzset`) gives marks only to the
+plots read after it (c-tikzset-mark, b-tikzset-mark), and their shape is the
+one in effect at the end; a `mark` set inside a group gives no marks at all
+(d-group-tikzset-mark, d-group-pgfplotsset-mark). Implemented as: the plot
+has marks iff it has them with the settings before it, and draws the final
+state's mark. VERIFIED (b-every-plot-thin, b-smooth-marksize,
+b-tikzset-mark, b-group-tikzset, b-group-mark, fixture
+body-settings-groups).
+
+**AB3 — TikZ keys in the body.** A plain TikZ key set by `\pgfplotsset` or
+`\tikzset` at body level (`green`, `line width=2pt`, `dashed`, `draw=…`,
+`fill=…`) reaches neither the plots nor the axis lines, ticks or box (c-red,
+c-thick, c-dashed, c-tikzset-thick, e-draw-green); the editor ignores it and
+warns (`pgfplots-body-tikz-key`). Exception: a colour (`green`, `color=…`,
+`text=…`) or a `font=…` set there becomes the colour/font of **all text the
+axis typesets** — tick labels, title, axis labels, legend text, embedded
+`\node`s — wherever in the body it is set (e-green-all, e-before-plot,
+e-font, e-color-key; inside a group: nothing, e-group-green). VERIFIED
+(b-text-violet, b-font-teal, b-tikz-noeffect). Not handled: `\tikzset{every
+path/.append style=…}` in the body thickens the plots and the axis box in TeX
+(p-thick) and `\tikzset{every mark/.append style=…}` scales the marks
+(p-every-mark); the editor's pgfplots paths do not read the TikZ `every
+path`/`every mark` styles of the frame at all (wherever they are set).
+
+**AB4 — Groups.** A brace group `{…}` in the body (the parser reads the body
+flat; the group is the stray braces between items) keeps everything set in
+it: plot keys of AB1 reach only the plots inside the group (g-domain,
+g-cycle, d-group-forget, d-group-each-nth); drawing and axis keys set in it
+are gone when the axis ends, so they reach nothing, not even the plots of the
+group (g-every-plot, g-title, b-label-group); macros defined in it are local
+(g-def). `\begin{scope}…\end{scope}` behaves the same for settings
+(s-domain, b-scope-def), and its options reach the plots inside it as if
+appended to their options (c-scope-lw, c-scope-green, c-scope-mark,
+c-scope-domain); the editor does not draw an `\addplot` inside a scope
+(diagnosed, unchanged).
+
+**AB5 — Axis keys in the body.** Axis keys set anywhere in the body (top
+level) hold for the axis: `title`, `xlabel`, `grid`, `legend pos`, `legend
+style`, `legend entries`, `width`, `axis lines`, `xtick`, `enlargelimits`,
+`clip`, `hide axis`, `every tick/.append style`, `axis line style`, and even
+`every axis/.append style={…}` (a-*, c-legend-style, c-xtick,
+b-legend-entries-late). The limits are the exception: `xmin`, `xmax`,
+`ymin`, `ymax` in the body (before or after the plots, in a group or a scope)
+stop TeX with "Sorry, you can't change `xmin' in this context" (a-xmin,
+a-ymax, a-before, g-xmin, s-xmin, b-ymin, b-xmax). The editor reports an
+error diagnostic (`pgfplots-limit-in-axis-body`) and ignores the value.
+`zmin`/`zmax` are treated the same by analogy. VERIFIED (b-title-late,
+b-grid-minor, b-legend-entries-late; fixture body-settings-axis-keys).

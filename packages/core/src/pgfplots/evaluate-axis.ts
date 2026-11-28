@@ -56,7 +56,7 @@ import { flattenStyleEntries, keyUsesToOptionList, styleLists, type PgfplotsKeyU
 import { applyUnitVectorRatio, axisLineCoordinate, boxSize as computeAxisLayoutSize, boxSizeWithoutLimits, computeAxisLayout, extendAxisLayout, type AxisLayout, type Box, type LabelGeometry, type LabelRequest, type LabelRole, type Point, type Segment } from "./layout.js";
 import { computeLimits } from "./limits.js";
 import { renderPathWithArrows } from "../svg/arrows/render.js";
-import { COLOR_CYCLE_LIST, readLength, readPgfNumber, resolveAxisModel, resolvePlotModel, splitTopLevelList, stripBraces, type AxisModel, type PlotModel } from "./model.js";
+import { COLOR_CYCLE_LIST, isSurveyPlotKey, readLength, readPgfNumber, resolveAxisModel, resolvePlotModel, splitTopLevelList, stripBraces, type AxisModel, type PlotModel } from "./model.js";
 import { readPgfplotsTableFile, readPgfplotsTableMacro } from "./table-io.js";
 import { formatPgfNumber } from "../semantic/pgfmath/number-format.js";
 import { normalizeColor } from "../semantic/style/colors.js";
@@ -303,16 +303,31 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const outer = currentFrame(context);
   // Macro definitions in the body (`\pgfmathsetmacro`, `\def`) take effect in
   // order for the plots after them; embedded TikZ is evaluated at `\end{axis}`
-  // and sees the final values (behaviour V0, experiment E16).
+  // and sees the final values (behaviour V0, experiment E16). A brace group
+  // keeps its definitions to itself (behaviour AB4).
+  const bodyGroups = axisBodyGroupPaths(source, context.source);
   const parent = childFrame(outer, {});
   const plotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
+  const settingBindings = new Map<AxisBodyItem, SemanticContextFrame["macroBindings"]>();
   pushFrame(context, parent);
+  const open: number[] = [];
   try {
-    for (const item of source.body) {
+    source.body.forEach((item, index) => {
+      const path = bodyGroups[index] ?? [];
+      while (open.length > path.length || (open.length > 0 && open[open.length - 1] !== path[open.length - 1])) { popFrame(context); open.pop(); }
+      while (open.length < path.length) { pushFrame(context, childFrame(currentFrame(context), {})); open.push(path[open.length] ?? -1); }
+      const bindings = currentFrame(context).macroBindings;
       if (isAxisDefinition(item)) host.evaluateStatement(item);
-      else if (item.kind === "AddPlot") plotBindings.set(item, parent.macroBindings.fork());
-    }
+      else if (item.kind === "AddPlot") plotBindings.set(item, bindings.fork());
+      else {
+        if (bodySettingList(item)) settingBindings.set(item, bindings.fork());
+        // AB2: TikZ style definitions in the body hold at `\end{axis}`, where plots and embedded TikZ are drawn.
+        const tikz = tikzStyleDefinition(item);
+        if (tikz) host.evaluateStatement(tikz);
+      }
+    });
   } finally {
+    for (; open.length > 0; open.pop()) popFrame(context);
     popFrame(context);
   }
   // Option values may use macros (`width=\figwidth`), expanded as TikZ options are,
@@ -331,6 +346,16 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   };
   const expandWith = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => withLengths(expandOptionListMacros([list], bindings, context.macroTraceCollector ?? undefined)[0] ?? list);
   const expand = (list: OptionListAst): OptionListAst => expandWith(list, outer.macroBindings);
+  // AB2: the options of a plot are read when it is drawn (final macro values),
+  // except the keys read at the `\addplot` (AB1: `domain=0:\a`).
+  const expandPlotOptions = (list: OptionListAst, bindings: SemanticContextFrame["macroBindings"]): OptionListAst => {
+    const late = expandWith(list, parent.macroBindings);
+    if (bindings === parent.macroBindings || !list.entries.some((entry) => entry.kind !== "unknown" && isSurveyPlotKey(entry.key))) return late;
+    const early = expandWith(list, bindings);
+    if (early === late || early.entries.length !== late.entries.length) return early;
+    const entries = late.entries.map((entry, i) => (entry.kind !== "unknown" && isSurveyPlotKey(entry.key) ? early.entries[i] ?? entry : entry));
+    return { ...late, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+  };
   const expandedPlotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const axis: AxisStatement = {
     ...source,
@@ -340,8 +365,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       const bindings = plotBindings.get(item) ?? parent.macroBindings;
       const expanded: AddPlotStatement = {
         ...item,
-        ...(item.options ? { options: expandWith(item.options, bindings) } : {}),
-        ...(item.extraOptions ? { extraOptions: item.extraOptions.map((extra) => ({ ...extra, options: expandWith(extra.options, bindings) })) } : {})
+        ...(item.options ? { options: expandPlotOptions(item.options, bindings) } : {}),
+        ...(item.extraOptions ? { extraOptions: item.extraOptions.map((extra) => ({ ...extra, options: expandPlotOptions(extra.options, bindings) })) } : {})
       };
       expandedPlotBindings.set(expanded, bindings);
       return expanded;
@@ -354,7 +379,23 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const named = [...usedLengths].sort().map((name) => `\\${name} = ${String(values[name])}pt`).join(", ");
     diagnostics.push({ severity: "warning", code: "pgfplots-assumed-document-length", message: `Document lengths are assumed: ${named} (${lengthsEnv.assumption}).`, span: axis.optionsSpan ?? axis.beginSpan });
   }
-  const bodySettings = axis.body.flatMap((item) => (item.kind === "PgfplotsSet" ? [expand(item.optionList)] : []));
+  // Behaviour AB: settings in the body, with the groups they sit in. The axis
+  // and the drawing of the plots use the state at `\end{axis}` (top-level
+  // settings only); keys read at an `\addplot` use the settings before it.
+  const bodySettingsAll: Array<{ index: number; path: readonly number[]; list: OptionListAst }> = [];
+  source.body.forEach((item, index) => {
+    const raw = bodySettingList(item);
+    if (!raw) return;
+    const list = expandWith(raw, settingBindings.get(item) ?? parent.macroBindings);
+    const limits = list.entries.filter((entry) => entry.kind !== "unknown" && LIMIT_KEYS.has(entry.key.replace(/^\/pgfplots\//u, "").trim()));
+    for (const entry of limits) {
+      // AB5: TeX stops with "Sorry, you can't change `xmin' in this context".
+      diagnostics.push({ severity: "error", code: "pgfplots-limit-in-axis-body", message: `pgfplots cannot change \`${(entry.kind === "unknown" ? entry.raw : entry.key).replace(/^\/pgfplots\//u, "").trim()}\` inside the axis body (TeX stops with an error); give it to the axis options instead. It is ignored here.`, span: entry.span });
+    }
+    const entries = list.entries.filter((entry) => !limits.includes(entry));
+    bodySettingsAll.push({ index, path: bodyGroups[index] ?? [], list: entries.length === list.entries.length ? list : { ...list, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` } });
+  });
+  const bodySettings = bodySettingsAll.filter((setting) => setting.path.length === 0).map((setting) => setting.list);
   markFeature("pgfplots_axis", "supported");
 
   const compat = readPgfplotsCompat(settings);
@@ -384,6 +425,35 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   for (const bad of model.invalid) {
     diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
   }
+  dedupeWarnings(diagnostics, (model.ignoredBodyKeys ?? []).filter((use) => !isBodyTextKey(use.key)), warned, "pgfplots-body-tikz-key", (key) => `TikZ key \`${key}\` set with \`\\pgfplotsset\` inside the axis body changes neither the plots nor the axis lines in TeX; it is ignored. Give it to the \`\\addplot\` or the axis options.`);
+  // AB1/AB2: the axis model a plot is resolved with: drawing keys from the final
+  // state, keys read at the `\addplot` from the settings in effect there.
+  const capturedModels = new Map<string, PlotAxisModel>();
+  const plotAxisModelAt = (bodyIndex: number): PlotAxisModel | null => {
+    if (bodySettingsAll.length === 0) return null;
+    const path = bodyGroups[bodyIndex] ?? [];
+    const inEffect = bodySettingsAll.filter((setting) => setting.index < bodyIndex && setting.path.every((id, i) => path[i] === id));
+    const key = inEffect.map((setting) => setting.index).join(",");
+    let captured = capturedModels.get(key);
+    if (!captured) {
+      captured = plotAxisModel(model, resolveAxisModel({ axis, settings, bodySettings: inEffect.map((setting) => setting.list) }));
+      capturedModels.set(key, captured);
+    }
+    return captured;
+  };
+  const plotModelAt = (bodyIndex: number, statement: AddPlotStatement, cycleIndex: number, extraLists: readonly OptionListAst[] = []): PlotModel => {
+    const captured = plotAxisModelAt(bodyIndex);
+    if (!captured) return resolvePlotModel(model, statement, cycleIndex, extraLists);
+    const plot = resolvePlotModel(captured, statement, cycleIndex, extraLists);
+    // AB2: a body-level `mark` is drawn from the final state, but only for plots that had a mark when they were read.
+    const marks = (uses: readonly PgfplotsKeyUse[]) => uses.filter((use) => use.key === "mark").map((use) => use.value ?? "").join("\u0000");
+    const capturedMarks = captured.capturedPlotDefaults;
+    if (plot.mark !== null && marks(capturedMarks) !== marks(captured.plotDefaults)) {
+      const early = resolvePlotModel({ ...captured, plotDefaults: [...captured.plotDefaults.filter((use) => use.key !== "mark"), ...capturedMarks.filter((use) => use.key === "mark")] }, statement, cycleIndex, extraLists);
+      if (early.mark === null) plot.mark = null;
+    }
+    return plot;
+  };
 
   // The axis scope: TikZ keys given to the axis (`thick`, `font=\small`, `xshift`).
   const axisTikz = model.tikzOptions.filter((use) => !use.key.startsWith("/pgf/"));
@@ -415,19 +485,19 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   applyNumberFormat(model.tikzOptions);
 
   // Stage 2.
-  const plotStatements = axis.body.filter((item) => item.kind === "AddPlot");
+  const plotStatements = axis.body.flatMap((item, index) => (item.kind === "AddPlot" ? [{ statement: item, index }] : []));
   const plots: Array<{ model: PlotModel; points: PlotPoint[] | null }> = [];
   // `forget plot` uses the current cycle list entry without advancing it (manual markers-meta.tex, `every legend image post` example).
   let cycleCounter = 0;
-  plotStatements.forEach((statement) => {
-    const plot = resolvePlotModel(model, statement, cycleCounter);
+  plotStatements.forEach(({ statement, index: bodyIndex }) => {
+    const plot = plotModelAt(bodyIndex, statement, cycleCounter);
     if (!plot.forget) cycleCounter += 1;
     dedupeWarnings(diagnostics, plot.unsupported, warned, "unsupported-pgfplots-key", (key) => `pgfplots key \`${key}\` is not supported yet; it is ignored.`);
     for (const bad of plot.invalid) diagnostics.push({ severity: "warning", code: `invalid-pgfplots-value:${bad.key}`, message: `Cannot read \`${bad.key}=${bad.value}\`; it is ignored.`, span: bad.span });
     const bindings = bindingsOf(statement);
     const mathEnvironment = { ...plotMathEnvironment(axisFrame, plot), ...(model.x.mode === "log" ? { logSamples: true } : {}) };
     const io = {
-      tableKeys: [...model.tableKeys, ...plot.tableKeys],
+      tableKeys: [...(plotAxisModelAt(bodyIndex) ?? model).tableKeys, ...plot.tableKeys],
       readFile: (name: string) => readPgfplotsTableFile(context, name),
       tableMacro: (name: string) => readPgfplotsTableMacro(context, name),
       symbolic: { ...(model.x.symbolic ? { x: model.x.symbolic } : {}), ...(model.y.symbolic ? { y: model.y.symbolic } : {}) }
@@ -561,7 +631,10 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   if (axis.body.some((item) => item.kind !== "AddPlot" && item.kind !== "AddLegendEntry" && item.kind !== "AddLegendImage" && item.kind !== "Legend" && item.kind !== "PgfplotsExtra" && item.kind !== "PgfplotsSet")) markFeature("pgfplots_axis_coordinates", "supported");
 
   // Label measurement through the node pipeline.
-  const labelFrame = childFrame(axisFrame, { pictureSizeRelevant: false });
+  // AB3: a colour or font set by a TikZ key at the top level of the body reaches all text the axis typesets.
+  const bodyColour = bodyTextKeys(source, bodyGroups);
+  const textStyle = bodyColour ? resolveStyle(context, axisFrame, axisFrame.style, [parseOptionListRaw(`[${bodyColour}]`)], axis.id, axis.span).style : axisFrame.style;
+  const labelFrame = childFrame(axisFrame, { pictureSizeRelevant: false, style: textStyle });
   const labelStatements = new Map<LabelRequest, PathStatement | null>();
   const evaluateLabel = (request: LabelRequest, at: Point, emit: boolean, frame: SemanticContextFrame = labelFrame): { elements: SceneElement[]; probe: NodeGeometryProbe | null } => {
     let statement = labelStatements.get(request);
@@ -936,7 +1009,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       ...(logAxis ? { log: { ...(model.x.mode === "log" ? { x: internalBase(model.x) } : {}), ...(model.y.mode === "log" ? { y: internalBase(model.y) } : {}) } } : {})
     },
     clipChain: contentClip,
-    pictureSizeRelevant: model.clip ? false : parent.pictureSizeRelevant
+    pictureSizeRelevant: model.clip ? false : parent.pictureSizeRelevant,
+    ...(bodyColour ? { style: textStyle } : {})
   });
   const content: SceneElement[] = [];
   const markElements: SceneElement[] = [];
@@ -1038,7 +1112,13 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
         if (plot.model.nodesNearCoords !== null) markElements.push(...nodesNearCoords(plot.model, plot.points, barTops));
         continue;
       }
-      if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend" || item.kind === "PgfplotsExtra" || item.kind === "PgfplotsSet") continue;
+      if (item.kind === "AddLegendEntry" || item.kind === "AddLegendImage" || item.kind === "Legend" || item.kind === "PgfplotsExtra" || item.kind === "PgfplotsSet" || item.kind === "TikzStyle") continue;
+      if (item.kind === "TikzSet") {
+        // Its style definitions and `/pgfplots/` keys were applied above (AB); the rest acts in order on embedded TikZ.
+        const entries = item.optionList.entries.filter((entry) => entry.kind === "unknown" || (!entry.key.trim().startsWith("/pgfplots/") && !/\/\.[a-z ]+$/u.test(entry.key.trim())));
+        if (entries.length > 0) host.evaluateStatement({ ...item, optionList: { ...item.optionList, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` } });
+        continue;
+      }
       // Applied in order before the plots were read (above); `\label` only names the plot for `\ref`.
       if (isAxisDefinition(item) || isLabelCommand(item)) continue;
       const nested = host.evaluateStatement(item);
@@ -1068,19 +1148,19 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   {
     let plotIndex = 0;
     let cycle = 0;
-    for (const item of axis.body) {
+    axis.body.forEach((item, bodyIndex) => {
       if (item.kind === "AddPlot") {
         const plot = plots[plotIndex];
         plotIndex += 1;
-        if (!plot || plot.model.forget) continue;
+        if (!plot || plot.model.forget) return;
         cycle = plot.model.cycleIndex + 1;
-        legendImages.push({ plot: resolvePlotModel(model, item, plot.model.cycleIndex, legendImagePost), sourceId: item.id, span: item.span });
+        legendImages.push({ plot: plotModelAt(bodyIndex, item, plot.model.cycleIndex, legendImagePost), sourceId: item.id, span: item.span });
       } else if (item.kind === "AddLegendImage") {
         // `\addlegendimage{opts}` acts as `\addplot[opts]` for the legend only; the plot index does not advance (manual).
         const synthetic: AddPlotStatement = { kind: "AddPlot", id: item.id, axisId: item.axisId, plotIndex: -1, span: item.span, commandSpan: item.span, dimension: 2, increment: false, options: item.options, input: { kind: "other", span: item.span, name: "legend image", nameSpan: item.span, raw: "" }, terminated: true };
-        legendImages.push({ plot: resolvePlotModel(model, synthetic, cycle, legendImagePost), sourceId: item.id, span: item.span });
+        legendImages.push({ plot: plotModelAt(bodyIndex, synthetic, cycle, legendImagePost), sourceId: item.id, span: item.span });
       }
-    }
+    });
   }
   const legendResult = emitLegend({
     axis, model, images: legendImages, diagnostics,
@@ -1293,6 +1373,104 @@ function trailingCommands(
 }
 
 /** Body statements that only define macros: applied in body order, before the plots read their data. */
+/** Settings statements of the axis body as option lists (behaviour AB): `\pgfplotsset`, and the `/pgfplots/` keys (and `mark`) of `\tikzset`/`\pgfkeys`. */
+function bodySettingList(item: AxisBodyItem): OptionListAst | null {
+  if (item.kind === "PgfplotsSet") return item.optionList;
+  if (item.kind !== "TikzSet" && item.kind !== "Pgfkeys") return null;
+  const tikzset = item.kind === "TikzSet";
+  const entries = item.optionList.entries.filter((entry) => entry.kind !== "unknown" && (entry.key.trim().startsWith("/pgfplots/") || (tikzset && /^(?:\/tikz\/)?mark$/u.test(entry.key.trim()))));
+  if (entries.length === 0) return null;
+  return { ...item.optionList, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+}
+
+/**
+ * The style definitions (`name/.style`, `.append style`, …) of a `\tikzset` in
+ * the body, or a `\tikzstyle`; null when there are none. Other TikZ keys set
+ * there reach nothing (AB3), `/pgfplots/` keys are settings (AB).
+ */
+function tikzStyleDefinition(item: AxisBodyItem): Statement | null {
+  if (item.kind === "TikzStyle") return item;
+  if (item.kind !== "TikzSet") return null;
+  const entries = item.optionList.entries.filter((entry) => entry.kind !== "unknown" && !entry.key.trim().startsWith("/pgfplots/") && /\/\.[a-z ]+$/u.test(entry.key.trim()));
+  if (entries.length === 0) return null;
+  return entries.length === item.optionList.entries.length ? item : { ...item, optionList: { ...item.optionList, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` } };
+}
+
+/**
+ * AB3: text keys set by `\pgfplotsset`/`\tikzset` at the top level of the
+ * body: the last colour (`green`, `color=…`, `text=…`, as `text=…`) and the
+ * last `font=…`. They reach all text the axis typesets; null when none.
+ */
+function bodyTextKeys(axis: AxisStatement, groups: ReadonlyArray<readonly number[]>): string | null {
+  const colours: string[] = [];
+  const fonts: string[] = [];
+  for (const [index, item] of axis.body.entries()) {
+    if ((item.kind !== "PgfplotsSet" && item.kind !== "TikzSet") || (groups[index]?.length ?? 0) > 0) continue;
+    for (const entry of item.optionList.entries) {
+      if (entry.kind === "kv" && /^(?:\/tikz\/)?(?:color|text)$/u.test(entry.key.trim())) colours.push(entry.valueRaw.trim());
+      else if (entry.kind === "kv" && /^(?:\/tikz\/)?font$/u.test(entry.key.trim())) fonts.push(entry.valueRaw.trim());
+      else if (entry.kind === "flag" && isColorName(entry.key.trim())) colours.push(entry.key.trim());
+    }
+  }
+  const colour = colours.at(-1);
+  const font = fonts.at(-1);
+  const keys = [...(colour ? [`text=${colour}`] : []), ...(font !== undefined ? [`font={${font}}`] : [])];
+  return keys.length > 0 ? keys.join(",") : null;
+}
+
+/** Whether a TikZ key set in the body is one of the text keys of AB3. */
+function isBodyTextKey(key: string): boolean {
+  return /^(?:\/tikz\/)?(?:color|text|font)$/u.test(key.trim()) || isColorName(key.trim());
+}
+
+/** Limit keys pgfplots refuses inside the axis body (behaviour AB5). */
+const LIMIT_KEYS = new Set(["xmin", "xmax", "ymin", "ymax", "zmin", "zmax"]);
+
+/**
+ * Brace groups of the axis body (behaviour AB4). The parser reads the body
+ * flat; a group's braces are the stray `{`/`}` between items. Per body item:
+ * the ids of the groups around it, outermost first.
+ */
+function axisBodyGroupPaths(axis: AxisStatement, source: string): Array<readonly number[]> {
+  const paths: Array<readonly number[]> = [];
+  const stack: number[] = [];
+  let next = 0;
+  let current: readonly number[] = [];
+  let pos = axis.bodySpan.from;
+  const scan = (from: number, to: number): void => {
+    for (let i = from; i < to; i += 1) {
+      const ch = source[i];
+      if (ch === "\\") { i += 1; continue; }
+      if (ch === "%") { while (i < to && source[i] !== "\n") i += 1; continue; }
+      if (ch === "{") { stack.push(next); next += 1; current = [...stack]; } else if (ch === "}" && stack.length > 0) { stack.pop(); current = [...stack]; }
+    }
+  };
+  for (const item of axis.body) {
+    if (item.span.from > pos) scan(pos, item.span.from);
+    paths.push(current);
+    pos = Math.max(pos, item.span.to);
+  }
+  return paths;
+}
+
+/** A plot's axis model (AB1/AB2): the final state, with the keys read at the `\addplot` taken from the settings in effect there. */
+type PlotAxisModel = AxisModel & { capturedPlotDefaults: readonly PgfplotsKeyUse[] };
+function plotAxisModel(final: AxisModel, captured: AxisModel): PlotAxisModel {
+  const styles = new Map(final.styles);
+  // `every axis plot no N` is installed when the plot is read (E24 c-every-axis-plot-no).
+  for (const name of styles.keys()) if (name.startsWith("every axis plot no ")) styles.delete(name);
+  for (const [name, lists] of captured.styles) if (name.startsWith("every axis plot no ")) styles.set(name, lists);
+  return {
+    ...final,
+    styles,
+    plotDefaults: [...captured.plotDefaults.filter((use) => isSurveyPlotKey(use.key)), ...final.plotDefaults.filter((use) => !isSurveyPlotKey(use.key))],
+    cycleList: captured.cycleList,
+    cycleListShift: captured.cycleListShift,
+    tableKeys: captured.tableKeys,
+    capturedPlotDefaults: captured.plotDefaults
+  };
+}
+
 function isAxisDefinition(item: AxisBodyItem): item is Statement {
   return item.kind === "MacroDefinition" || item.kind === "MacroAlias" || item.kind === "MacroCommandDefinition" || item.kind === "PgfMath";
 }

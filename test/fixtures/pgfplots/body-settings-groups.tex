@@ -1,0 +1,14 @@
+% pgfplots oracle fixture (hand-written): settings and macros inside TeX brace
+% groups of the axis body stay in the group (behaviour AB4).
+\begin{tikzpicture}
+\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=8, domain=0:1, samples=2]
+\def\k{1}
+{\pgfplotsset{domain=2:4, samples=3}\def\k{4}
+  \addplot {x+\k};
+  \pgfplotsset{title=Lost, every axis plot/.append style={dashed}}}
+\addplot {x+\k};
+{\tikzset{mark=x}\addplot[red] {2*x};}
+\tikzset{mark=o}
+\addplot[blue] {x+6};
+\end{axis}
+\end{tikzpicture}

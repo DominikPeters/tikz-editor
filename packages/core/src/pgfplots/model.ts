@@ -168,7 +168,31 @@ export type AxisModel = {
   barShiftAuto?: number;
   /** Legend keys (behaviour L); the legend's TikZ style is `every axis legend` in `styles`. */
   legend: LegendModel;
+  /** TikZ keys set by `\pgfplotsset` in the axis body: TeX ignores them (behaviour AB3). */
+  ignoredBodyKeys?: Array<{ key: string; span: Span }>;
 };
+
+/**
+ * Plot keys pgfplots reads when an `\addplot` is met (its survey phase):
+ * a value set in the axis body between plots reaches the later plots only,
+ * and one set inside a TeX group only the plots in that group (behaviour
+ * AB1). Every other plot key is read when the plots are drawn at
+ * `\end{axis}`, from the state there (AB2). Data keys (`table/…`, `x expr`,
+ * …) are read with the data, so they count here too.
+ */
+export const SURVEY_PLOT_KEYS = new Set([
+  "domain", "samples", "samples at", "variable", "trig format plots", "forget plot",
+  "each nth point", "skip coords between index", "filter discard warning", "unbounded coords",
+  "restrict x to domain", "restrict y to domain", "restrict x to domain*", "restrict y to domain*",
+  "restrict expr to domain", "restrict expr to domain*", "plot coordinates/math parser",
+  "x index", "y index", "x expr", "y expr", "point meta"
+]);
+
+/** Whether a plot key is read at the `\addplot` (AB1); `table/…` and `error bars/…` data keys are. */
+export function isSurveyPlotKey(key: string): boolean {
+  const k = key.replace(/^\/pgfplots\//u, "").trim();
+  return SURVEY_PLOT_KEYS.has(k) || k.startsWith("table/") || /^error bars\/[xy] (?:explicit|fixed)/u.test(k);
+}
 
 /** One legend text: `\addlegendentry[opts]{text}`, a `\legend` item or a `legend entries` item (`[opts]text`). */
 /** `keep`: an `\addlegendentry{}` keeps its pair even when empty (behaviour Z8); empty `\legend` items do not. */
@@ -854,7 +878,7 @@ export type AxisModelInput = {
   axis: AxisStatement;
   /** `\pgfplotsset` payloads in effect (preamble, picture, enclosing scopes), in order. */
   settings: readonly OptionListAst[];
-  /** `\pgfplotsset` statements inside the axis body, in order. */
+  /** Settings made in the axis body that are in effect at the point of interest, in order (behaviour AB). */
   bodySettings: readonly OptionListAst[];
 };
 
@@ -884,6 +908,7 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
     legend: { columns: 1, plotPos: "left", reverse: false, transpose: false }
   };
   const ctx: Ctx = { model, expandStyle: () => { /* replaced below, once the sink exists */ } };
+  let inBody = false;
   const sink = (use: PgfplotsKeyUse): void => {
     const handler = AXIS_KEYS[use.key];
     if (handler) {
@@ -915,6 +940,8 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
       model.unsupported.push({ key: use.key, span: use.origin.span });
       return;
     }
+    // AB3: a TikZ key (`red`, `line width=2pt`) set by `\pgfplotsset` in the body reaches neither the plots nor the axis.
+    if (inBody) { (model.ignoredBodyKeys ??= []).push({ key: use.key, span: use.origin.span }); return; }
     model.tikzOptions.push(use);
   };
   const problems = (problem: { key: string; span: Span }) => model.unsupported.push({ key: problem.key, span: problem.span });
@@ -937,7 +964,13 @@ export function resolveAxisModel(input: AxisModelInput): AxisModel {
   const startStyles = [...(styles.get("every axis") ?? []), ...(styles.get(environmentStyle) ?? [])];
   expandPgfplotsOptions(startStyles, cloneStyleRegistry(styles), sink, { onProblem: problems });
   expandPgfplotsOptions(input.axis.options ? [input.axis.options] : [], styles, sink, { onProblem: problems });
+  const startCounts = [styles.get("every axis")?.length ?? 0, styles.get(environmentStyle)?.length ?? 0] as const;
+  inBody = true;
   expandPgfplotsOptions(input.bodySettings, styles, sink, { onProblem: problems });
+  inBody = false;
+  // E24 a-axis-style: `every axis/.append style={…}` in the body still reaches the axis.
+  const appended = [...(styles.get("every axis") ?? []).slice(startCounts[0]), ...(styles.get(environmentStyle) ?? []).slice(startCounts[1])];
+  if (appended.length > 0) expandPgfplotsOptions(appended, cloneStyleRegistry(styles), sink, { onProblem: problems });
   expandPgfplotsOptions(styles.get("every axis post") ?? [], cloneStyleRegistry(styles), sink, { onProblem: problems });
   return model;
 }
