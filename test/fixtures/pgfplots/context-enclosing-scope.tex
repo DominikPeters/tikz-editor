@@ -1,0 +1,12 @@
+% pgfplots oracle fixture (hand-written): a scope around the axis (behaviour
+% AC1): its line width and `draw=` do not reach the axis; its colour and
+% dash pattern do.
+\begin{tikzpicture}
+\begin{scope}[semithick, blue, densely dashed, draw=green]
+\begin{axis}[xmin=-1, xmax=2, ymin=0, ymax=3, xlabel=X, axis lines=left]
+\addplot+[mark=square*] coordinates {(-1,0.5) (0,1) (1,2.5) (2,2)};
+\addplot[black] coordinates {(-1,2) (2,0.5)};
+\draw (axis cs:0,0.2) -- (axis cs:1.5,0.2);
+\end{axis}
+\end{scope}
+\end{tikzpicture}

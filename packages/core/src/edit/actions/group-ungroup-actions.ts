@@ -152,6 +152,9 @@ export function applyUngroupElementsAction(
   }
 
   const scopeStatement = ref.statement;
+  if (scopeStatement.environment) {
+    return { kind: "unsupported", reason: pgfEnvironmentUngroupReason(scopeStatement.environment.name) };
+  }
   const optionCheck = validateUngroupableScopeOptions(scopeStatement.options);
   if (!optionCheck.allowed) {
     return { kind: "unsupported", reason: optionCheck.reason };
@@ -617,5 +620,12 @@ function normalizeStatementIds(elementIds: readonly string[]): string[] {
 }
 
 export function isUngroupableScopeStatement(statement: Statement): boolean {
-  return statement.kind === "Scope" && validateUngroupableScopeOptions(statement.options).allowed;
+  return statement.kind === "Scope" && !statement.environment && validateUngroupableScopeOptions(statement.options).allowed;
+}
+
+/** Why a PGF environment is not ungrouped: removing it would change what its statements are drawn on or how. */
+export function pgfEnvironmentUngroupReason(name: string): string {
+  return name === "pgfonlayer"
+    ? "Ungroup does not remove a `{pgfonlayer}` environment: its statements would move to the main layer."
+    : `Ungroup does not remove a \`{${name}}\` environment.`;
 }

@@ -1,0 +1,13 @@
+% pgfplots oracle fixture (hand-written): TikZ's `every mark` reaches the plot
+% and legend marks before the mark options (scale and stroke colour; the
+% cycle list's mark fill wins), `every node` all text of the axis, and an
+% `every path` set in the body reaches the plots and the box (behaviour AC2-AC4).
+\begin{tikzpicture}[every mark/.append style={scale=1.6, draw=red}, every node/.append style={font=\footnotesize, teal}]
+\begin{axis}[xmin=0, xmax=3, ymin=0, ymax=4, title={Marks}, legend pos=south east]
+\addplot coordinates {(0,1) (1,3) (2,2) (3,3.5)};
+\addlegendentry{a}
+\tikzset{every path/.append style={densely dotted}}
+\addplot+[mark options={fill=yellow}] coordinates {(0,0.5) (3,2)};
+\addlegendentry{b}
+\end{axis}
+\end{tikzpicture}

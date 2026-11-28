@@ -6,7 +6,7 @@
  * of the axis; the rest of the list keeps its text, comments and order.
  */
 import type { AddPlotStatement, AxisStatement, Statement } from "../../ast/types.js";
-import { nestedStatements } from "../../ast/walk.js";
+import { axisScopePaths, nestedStatements } from "../../ast/walk.js";
 import type { WorldPoint } from "../../coords/points.js";
 import { parseOptionListRaw } from "../../options/parse.js";
 import type { OptionEntry } from "../../options/types.js";
@@ -348,6 +348,11 @@ export function applyReorderPlotsAction(
     }
   }
   if (next.join("\n") === order.join("\n")) return { kind: "unsupported", reason: "The plots are already in that order." };
+  // A plot moved into or out of a scope would take that scope's options (behaviour AC5): refused.
+  const scopes = axisScopePaths(axis);
+  if (order.some((id, slot) => next[slot] !== id && scopes.get(next[slot] ?? "") !== scopes.get(id))) {
+    return { kind: "unsupported", reason: "This would move a plot into or out of a `scope`, whose options would then change it; move it in the source instead." };
+  }
   // Legend entries move with their plots, by the renderer's association (legend-edits.ts).
   const association = readLegendAssociation(source, axis.id, parseOptions);
   if (!association) return { kind: "unsupported", reason: "The axis could not be evaluated to find its legend entries." };

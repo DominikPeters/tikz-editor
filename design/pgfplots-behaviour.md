@@ -1813,3 +1813,150 @@ a-ymax, a-before, g-xmin, s-xmin, b-ymin, b-xmax). The editor reports an
 error diagnostic (`pgfplots-limit-in-axis-body`) and ignores the value.
 `zmin`/`zmax` are treated the same by analogy. VERIFIED (b-title-late,
 b-grid-minor, b-legend-entries-late; fixture body-settings-axis-keys).
+
+---
+
+## AC. The TikZ context of an axis, and scopes in the axis body (2026-11-28)
+
+Experiment E25: `e25-cases.ts` holds the discovery sets `a` (30 cases:
+picture options, an enclosing scope, `every picture`, `every path`, `every
+mark`, `every node`, `every label`, error bars, bars, axis lines), `c` (20:
+reset and order details), `s` (24: `\addplot` in a scope of the body) and
+`v` (5: legend image colour), and the fresh validation sets `b` (9), `t`
+(9) and `u` (9: new values and combinations of every rule, written after
+the fixes found on `t`). `e25-tikz-context.mts` prints a digest per case
+(paths in data units, paint, width, dash; glyph runs with font, size and
+colour; `E25_SET=a|b|c|s|t|u|v`), `e25-bbox.mts` the bounding box and page
+size; `check-cases.mts ./e25-cases.js` compares the editor at the design
+tolerances. Harness note: a `\tikzset{…}` line before `\begin{tikzpicture}`
+in a case body must end with `%`, or its end of line is a space in the page
+box and every Tier 2 coordinate is off by 3.33 pt (the first run of `a`).
+
+**Result.** Discovery a 28/30, c 19/20, s 23/24, v 5/5; fresh b **9/9**
+first time (max layout 0.0037 pt, paths 0.0031 pt, glyphs 0.0039 pt); fresh
+t 8/9 first time (the failure: embedded TikZ in a rotated scope turned
+around the data origin instead of the axis origin, fixed below), then 9/9;
+second fresh set u **9/9** first time (max layout 0.0074 pt, paths 0.0056
+pt, glyphs 0.0072 pt). Still failing, diagnosed: a-pre-every-node-draw,
+c-every-mark-axis-scale, s-background (below); a-pic-red-axislines fails
+only the harness's legend text attribution (an `X` glyph on the edge of the
+legend quad; glyph positions match). Fixtures context-picture-options,
+context-enclosing-scope, context-every-path, context-every-mark-node,
+scope-plot-styles, scope-transforms, scope-clip-order, scope-loops-groups,
+scope-auto-limits; unit tests `test/pgfplots-axis-scopes.spec.ts`.
+
+**AC1 — Picture options and an enclosing scope.** pgfplots starts the axis
+with the line width at 0.4 pt and the stroke colour back at the current
+colour, then applies `every picture` once more (its transformations:
+Z1). So `\begin{tikzpicture}[thick]`, `[line width=1.5pt]`, `[draw=red]`
+or `\begin{scope}[thick]` around the axis reach nothing in it — not the
+box, plots, legend, or embedded `\draw` (a-pic-thick, a-pic-lw,
+a-pic-draw-red, a-scope-thick-blue), while `\tikzset{every
+picture/.style={thick}}` thickens the box, plots, embedded TikZ, mark
+strokes and the legend (not grid or ticks: their styles set widths)
+(a-every-picture-thick, c-every-picture-lw2, c-every-picture-draw: a
+`draw=red` there colours the box and uncoloured plots). What carries over:
+the colour (`red`, `color=`: the box, axis lines and their tips, embedded
+TikZ, `\addplot[…]` without a colour and its marks, all text; not grid,
+ticks, the legend box or coloured plots: a-pic-red, c-pic-semithick-draw,
+a-pic-red-axislines), `text=` (all text), `font=` (all text, so the layout
+too: a-pic-font, a-scope-font), dash patterns (every stroke including
+grid, ticks, mark outlines, legend: a-pic-dashed), `opacity` and `draw
+opacity` (everything / every stroke: a-pic-opacity, c-pic-draw-opacity),
+arrow tips (`->`: on every open path, grid and ticks included:
+c-pic-arrow). `line cap`/`line join`/`fill=` showed no difference in the
+digest (c-pic-cap-join, c-pic-fill). A legend image is drawn inside the
+legend: its stroke colour is the legend's (`legend style={draw=blue}` or a
+colour), black by default — not the picture's colour — unless the plot
+has its own (context-picture-options, v-*); a colour given to `legend
+style` reaches the legend text too (v-legend-green-text). VERIFIED
+(b-pic-very-thick, b-pic-blue-font, b-pic-dotted-lw, b-scope-red-semithick,
+b-pic-violet-axislines, u-pic-ultra-teal, u-every-picture-axislines).
+
+**AC2 — `every path`** (wherever set: preamble, picture or scope options,
+axis body per AB3) reaches every path pgfplots draws, applied as TikZ does
+(tikz.code.tex: at the start of `\path`, before the path's own options).
+pgfplots sets a plot's style (cycle list, `\addplot` options, `every axis
+plot`) as a scope, so `every path` wins over it: `every path/.style={red}`
+recolours `\addplot[blue]`, `line width=2pt` overrides `\addplot+[thick]`
+(c-every-path-red, c-every-path-lw, c-every-path-axisplot). Grid, tick,
+box, axis line and legend box styles are path options and win over it
+(grid and ticks keep their width and colour, take its dash; the legend
+box keeps `draw=black`, takes its width). It reaches legend images and
+their marks, error bars and bars, but not plot marks (not paths): their
+width and colour stay the plot's; an error mark takes its bar's colour,
+not its width (context-every-path, a-pre-every-path-errorbars). A colour
+in it also colours node text (the node's path). The `draw` of `every path`
+strokes the empty node paths too (invisible; not emitted). VERIFIED
+(b-pre-every-path-orange, b-pic-thick-every-path-dashed,
+u-scope-every-path, fixtures context-every-path, context-every-mark-node).
+
+**AC3 — `every mark`** (preamble, picture, scope, body) reaches plot marks
+and legend marks before the mark options: `scale` scales the geometry,
+`draw=`/a colour the outline, `line width` the outline width; a `fill`
+loses to the cycle list's `every mark/.append style={fill=…}`
+(a-pre-every-mark-*, c-every-mark-*). `mark options={…}` is TikZ's
+`every mark/.style={…}` (tikz.code.tex `mark options/.style`): it replaces
+`every mark`, the frame's included (context-every-mark-node). Given to the
+axis options, `every mark/.append style={scale=2}` neither scales the marks
+nor keeps the cycle's mark fill in TeX (c-every-mark-axis-scale); the
+editor applies it as TikZ would and warns
+(`unsupported-pgfplots-axis-every-mark`). VERIFIED
+(b-pre-every-mark-scale-fill, u-pic-every-mark).
+
+**AC4 — `every node`** reaches all text pgfplots typesets (tick labels,
+axis labels, title, legend entries, embedded nodes): font and colour
+(a-pre-every-node-font, a-pre-every-node-red, b-pre-every-node-teal); given
+to the axis options it does nothing (c-every-node-axis). With `draw` every
+text gets a frame and the labels move by the frames' outer sep (up to 0.9
+pt in a-pre-every-node-draw); the editor draws the frames without the
+shift and warns (`unsupported-pgfplots-every-node-draw`). `every label`
+does nothing (a-pre-every-label).
+
+**AC5 — `\addplot` inside `\begin{scope}…\end{scope}` in the axis body**
+(any depth, also inside `\foreach` bodies and brace groups). Such a plot
+is a plot of the axis: the cycle index keeps counting across scopes
+(s-cycle), it counts for the automatic limits (s-limits), its legend
+entry pairs as usual (s-legend, s-legend-cmd), and settings made in the
+scope stay there as in a group (AB4). The scope's options are appended to
+the options of each plot inside it, nested scopes outermost first: they
+win over the plot's own (`\addplot+[blue]` in `scope[red]` is red), reach
+its marks (outline colour, dash, width, opacity; the cycle's mark fill
+stays), `mark options`, `every mark`, pgfplots keys (`/pgfplots/domain`)
+and its legend image (s-red-dashed, s-lw-opacity, s-nested,
+s-scope-mark-options, s-scope-every-mark, s-scope-fill, t-legend-mixed).
+A transformation in the scope options (`xshift`, `yscale`, `rotate`, …)
+moves the plot **line twice and its marks once** (mark shapes transformed
+too), in the axis' own coordinates (origin at the box's lower left, not
+the data origin: t-xscale, t-rotate-origin with `xmin=-1,ymin=-5`); the
+limits ignore it, a mark moved beyond the box is still drawn and counts
+for the bounding box (s-xshift, s-yscale, s-scope-rotate, s-shift-auto).
+Embedded TikZ in the scope is transformed once, around the same origin
+(`axis cs` points included). A `\clip` in the scope clips the plot lines
+and TikZ after it in the scope, not the marks and nothing after the scope
+(s-clip, s-clip-draw). Paint order is unchanged: plots and embedded TikZ
+in source order across scopes (C7, s-order), marks after all of them,
+unclipped (C8, s-marks). A scope `on background layer` paints its plot
+before the axis, unclipped (s-background); the editor paints it with the
+other plots and warns (`unsupported-pgfplots-scope-background-layer`). A
+transformed scope around bars or error bars was not measured; the editor
+treats them as a plot line and warns (`pgfplots-scope-transform-bars`).
+VERIFIED (t-green-thick, t-xshift-mm, t-xscale, t-clip-plots,
+t-nested-order, t-foreach-scope-red, t-pic-thick-scope; u-scope-rotate-draw,
+u-scope-yshift-node, u-scope-nested-transforms, u-scope-clip-legend,
+u-group-scope).
+
+Implementation notes. Grammar: `AxisScopeStatement` (tikz.grammar) is a
+scope whose body holds axis items; pgfplots-tokens.ts reads `\begin{scope}`
+as `BeginAxisScope` only where an axis item can start, so a scope in a
+plain picture stays a `ScopeStatement` and `\addplot` there is still
+diagnosed. AST: the axis body stays flat, a scope being its
+`AxisScopeBegin`/`AxisScopeEnd` markers (`axis:N:scope:K[:end]`), so plot
+ids stay in body order and every walk over `axis.body` sees the plots;
+`axisScopePaths` (ast/walk.ts) gives the scopes around each item. The
+evaluator treats a scope as a group for settings and pushes a TikZ frame
+for what is drawn inside it. Editing: reordering refuses to move a plot
+into or out of a scope (its options would change it); deleting a plot in a
+scope removes its legend entry as anywhere else. Harness: the adapter now
+pops clips like PDF's `Q` (leaving a scope keeps the axis clip) instead of
+dropping all clips when the chain changes.

@@ -170,6 +170,16 @@ export function pgfplotsExtraId(axisId: string, index: number): string {
   return `${axisId}:extra:${index}`;
 }
 
+/** The `\begin{scope}` of the K-th scope in an axis body (behaviour AC5). */
+export function axisScopeBeginId(axisId: string, index: number): string {
+  return `${axisId}:scope:${index}`;
+}
+
+/** The `\end{scope}` of the K-th scope in an axis body. */
+export function axisScopeEndId(axisId: string, index: number): string {
+  return `${axisId}:scope:${index}:end`;
+}
+
 export function pgfplotsSetStatementId(statementIndex: number): string {
   return `pgfplots-set:${statementIndex}`;
 }
@@ -180,4 +190,8 @@ export function pgfplotsTableReadStatementId(statementIndex: number): string {
 
 export function pgfplotsLibraryStatementId(statementIndex: number): string {
   return `pgfplots-library:${statementIndex}`;
+}
+
+export function pgfLayerStatementId(statementIndex: number): string {
+  return `pgf-layer:${statementIndex}`;
 }

@@ -15,7 +15,9 @@ const tikzHighlighting = styleTags({
   Comment: t.lineComment,
 
   // Environment delimiters
-  "BeginTikz EndTikz BeginScope EndScope BeginAxis EndAxis": t.keyword,
+  "BeginTikz EndTikz BeginScope EndScope BeginAxis EndAxis BeginPgfEnvironment EndPgfEnvironment": t.keyword,
+  // PGF's layer declarations.
+  "PgfDeclareLayerCmd PgfSetLayersCmd": t.keyword,
 
   // pgfplots commands and \addplot's input keywords.
   "AddPlotCmd AddPlot3Cmd AddLegendEntryCmd AddLegendImageCmd LegendCmd PgfplotsSetCmd PgfplotsExtraCmd UsePgfplotsLibraryCmd":
@@ -170,6 +172,7 @@ const mixedTikzParser: typeof baseTikzParser = baseTikzParser.configure({
       TikzEnvironment: foldInside,
       ScopeStatement: foldInside,
       AxisStatement: foldInside,
+      PgfEnvironmentStatement: foldInside,
       Group: foldInside,
       // One token, so it folds between its own braces.
       TableData: (node) => (node.to - node.from > 2 ? { from: node.from + 1, to: node.to - 1 } : null),

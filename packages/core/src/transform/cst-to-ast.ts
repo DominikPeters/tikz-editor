@@ -437,6 +437,11 @@ function collectRelevantStatementsFromNode(
     if (!isRelevantDefinitionNode(unwrapped)) {
       return;
     }
+    // An earlier picture's `\pgfsetlayers` ends with that picture (a layer
+    // declaration allocates a box globally and stays).
+    if (unwrapped.type.name === "PgfLayerStatement" && findFirstChildByName(unwrapped, "PgfSetLayersCmd")) {
+      return;
+    }
     const mapped = mapStatementNode(unwrapped, source, state);
     if (mapped) {
       statements.push(mapped);
@@ -462,7 +467,8 @@ function isRelevantDefinitionNode(node: SyntaxNode): boolean {
     typeName === "FontSizeStatement" ||
     typeName === "PgfplotsSetStatement" ||
     typeName === "UsePgfplotsLibraryStatement" ||
-    typeName === "PgfplotsTableReadStatement"
+    typeName === "PgfplotsTableReadStatement" ||
+    typeName === "PgfLayerStatement"
   ) {
     return true;
   }

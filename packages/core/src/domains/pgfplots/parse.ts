@@ -4,6 +4,8 @@ import {
   addLegendEntryId,
   addLegendImageId,
   addPlotId,
+  axisScopeBeginId,
+  axisScopeEndId,
   axisStatementId,
   foreachStatementId,
   legendStatementId,
@@ -17,6 +19,7 @@ import type {
   AddLegendImageStatement,
   AddPlotStatement,
   AxisBodyItem,
+  AxisScopeBegin,
   AxisEnvironmentName,
   AxisStatement,
   ForeachStatement,
@@ -63,7 +66,7 @@ export function mapAxisStatement(
   const environment = readAxisEnvironmentName(beginNode ? source.slice(beginNode.from, beginNode.to) : "") ?? "axis";
   const endEnvironment = endNode ? readAxisEnvironmentName(source.slice(endNode.from, endNode.to)) : null;
   const bodyFrom = optionsNode?.to ?? beginSpan.to;
-  const counters = { plot: 0, legendEntry: 0, legendImage: 0, legend: 0, extra: 0 };
+  const counters = { plot: 0, legendEntry: 0, legendImage: 0, legend: 0, extra: 0, scope: 0 };
 
   const body: AxisBodyItem[] = [];
   const visit = (child: SyntaxNode): void => {
@@ -79,6 +82,29 @@ export function mapAxisStatement(
       case "AxisFontEnvironment":
         forEachChild(child, visit);
         return;
+      // A scope's items belong to the axis; the body stays flat between its markers (AC5).
+      case "AxisScopeStatement": {
+        const index = counters.scope++;
+        const begin = findFirstChildByName(child, "BeginAxisScope");
+        const end = findFirstChildByName(child, "EndScope");
+        const options = findFirstChildByName(child, "OptionList");
+        const marker: AxisScopeBegin = {
+          kind: "AxisScopeBegin",
+          id: axisScopeBeginId(id, index),
+          axisId: id,
+          span: { from: child.from, to: options?.to ?? begin?.to ?? child.from },
+          scopeSpan: toSpan(child),
+          ...(options ? { optionsSpan: toSpan(options), options: parseOptionListRaw(source.slice(options.from, options.to), options.from) } : {}),
+          ...(end ? { endId: axisScopeEndId(id, index) } : {})
+        };
+        body.push(marker);
+        forEachChild(child, (inner) => {
+          if (inner.type.name === "BeginAxisScope" || inner.type.name === "EndScope" || (options !== null && inner.from === options.from && inner.type.name === "OptionList")) return;
+          visit(inner);
+        });
+        if (end) body.push({ kind: "AxisScopeEnd", id: axisScopeEndId(id, index), axisId: id, span: toSpan(end), beginId: marker.id });
+        return;
+      }
       case "AxisLabelStatement":
         body.push(mapUnknownStatement(child, source, allocate(state)));
         return;

@@ -276,11 +276,26 @@ describe("generic environment fallback: source-preserving edits", () => {
   });
 });
 
-describe("PGF environments left out of the fallback", () => {
-  it("reads a pgfonlayer environment statement by statement, as before the fallback", () => {
-    const source = "\\begin{tikzpicture}\n  \\begin{pgfonlayer}{background}\n    \\draw (0,0) -- (1,0);\n    \\draw (0,1) -- (1,1);\n  \\end{pgfonlayer}\n\\end{tikzpicture}\n";
+describe("PGF environments have rules of their own", () => {
+  it("reads a pgfonlayer environment as a container whose statements all draw, not as the fallback", () => {
+    const source = "\\begin{tikzpicture}\n  \\begin{pgfonlayer}{background}\n    \\draw (0,0) -- (1,0);\n    \\draw (0,1) -- (1,1);\n  \\end{pgfonlayer}\n  \\draw (0,2) -- (1,2);\n\\end{tikzpicture}\n";
     const parsed = parseTikz(source);
-    expect(parsed.figure.body.some((statement) => statement.kind === "UnknownStatement" && statement.environment)).toBe(false);
-    expect(parsed.figure.body.some((statement) => statement.kind === "Path")).toBe(true);
+    expect(parsed.figure.body.some((statement) => statement.kind === "UnknownStatement")).toBe(false);
+    expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["Scope", "Path"]);
+    const layer = parsed.figure.body[0];
+    expect(layer?.kind === "Scope" ? layer.body.map((statement) => statement.kind) : []).toEqual(["Path", "Path"]);
+    expect(evaluateTikzFigure(parsed.figure, source).scene.elements).toHaveLength(3);
+  });
+
+  it("names every PGF environment among the environments with rules", () => {
+    expect([...ENVIRONMENTS_WITH_RULES]).toEqual(expect.arrayContaining([
+      "pgfonlayer", "pgfscope", "pgfviewboxscope", "pgfinterruptboundingbox", "pgflowlevelscope", "pgftransparencygroup"
+    ]));
+    for (const name of ["pgfscope", "pgfinterruptboundingbox", "pgftransparencygroup"]) {
+      const source = picture(`  \\begin{${name}}\n    \\draw (0,0) -- (1,0);\n  \\end{${name}}\n  \\draw (0,1) -- (1,1);`);
+      const parsed = parseTikz(source);
+      expect(parsed.figure.body.map((statement) => statement.kind)).toEqual(["Scope", "Path"]);
+      expect(evaluateTikzFigure(parsed.figure, source).scene.elements).toHaveLength(2);
+    }
   });
 });

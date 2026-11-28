@@ -13,12 +13,32 @@ const AXIS_COMMAND_KINDS: ReadonlySet<string> = new Set<AxisCommand["kind"]>([
   "AddLegendEntry",
   "AddLegendImage",
   "Legend",
-  "PgfplotsExtra"
+  "PgfplotsExtra",
+  "AxisScopeBegin",
+  "AxisScopeEnd"
 ]);
 
 /** Whether an axis body item is an axis command (`\addplot`, a legend command) rather than a statement. */
 export function isAxisCommand(item: AxisBodyItem): item is AxisCommand {
   return AXIS_COMMAND_KINDS.has(item.kind);
+}
+
+/**
+ * The scopes around each item of an axis body (behaviour AC5), as the ids of
+ * their begin markers joined outermost first ("" outside any scope).
+ */
+export function axisScopePaths(axis: AxisStatement): Map<string, string> {
+  const paths = new Map<string, string>();
+  const stack: string[] = [];
+  for (const item of axis.body) {
+    if (item.kind === "AxisScopeEnd") {
+      const at = stack.lastIndexOf(item.beginId);
+      if (at >= 0) stack.length = at;
+    }
+    paths.set(item.id, stack.join("/"));
+    if (item.kind === "AxisScopeBegin") stack.push(item.id);
+  }
+  return paths;
 }
 
 /** The TikZ statements of an axis body, in order, without its axis commands. */
@@ -35,6 +55,36 @@ export function nestedStatements(statement: Statement): readonly Statement[] | n
   if (statement.kind === "Scope") return statement.body;
   if (statement.kind === "Axis") return axisBodyStatements(statement);
   return null;
+}
+
+/**
+ * The ids with each selected PGF environment (`{pgfonlayer}{name}`, ...)
+ * replaced by the statements in it, recursively: such an environment takes
+ * no TikZ options, so an edit that would write them on a scope (a move)
+ * edits its statements instead.
+ */
+export function expandPgfEnvironmentIds(statements: readonly Statement[], ids: readonly string[]): string[] {
+  const environments = new Map<string, readonly Statement[]>();
+  const visit = (body: readonly Statement[]): void => {
+    for (const statement of body) {
+      if (statement.kind === "Scope" && statement.environment) environments.set(statement.id, statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) visit(nested);
+    }
+  };
+  visit(statements);
+  if (environments.size === 0) return [...ids];
+  const expanded: string[] = [];
+  const push = (id: string): void => {
+    const body = environments.get(id);
+    if (!body) {
+      if (!expanded.includes(id)) expanded.push(id);
+      return;
+    }
+    for (const statement of body) push(statement.id);
+  };
+  for (const id of ids) push(id);
+  return expanded;
 }
 
 export type AstWalkVisitor = {

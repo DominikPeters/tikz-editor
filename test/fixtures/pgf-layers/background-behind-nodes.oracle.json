@@ -1,0 +1,378 @@
+{
+ "sourceSha256": "cc5fb8e1cb17682cb0e8d25a434a85ddc0b86ad881e3cae3ca8330c819717324",
+ "engine": "pdflatex",
+ "boundingBox": {
+  "minX": -7.283,
+  "minY": -6.9496,
+  "maxX": 63.9801,
+  "maxY": 35.4024
+ },
+ "texErrors": [],
+ "tier2": {
+  "page": {
+   "width": 71.2632,
+   "height": 42.3522
+  },
+  "primitives": [
+   {
+    "type": "path",
+    "order": 0,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": -7.2828,
+      "y": -6.9496
+     },
+     {
+      "op": "L",
+      "x": -7.2828,
+      "y": 35.4029
+     },
+     {
+      "op": "L",
+      "x": 63.9812,
+      "y": 35.4029
+     },
+     {
+      "op": "L",
+      "x": 63.9812,
+      "y": -6.9496
+     },
+     {
+      "op": "Z"
+     },
+     {
+      "op": "M",
+      "x": 63.9812,
+      "y": 35.4029
+     }
+    ],
+    "clipDepth": 0,
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceCMYK",
+     "components": [
+      0,
+      0,
+      1,
+      0
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 1,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": -7.0828,
+      "y": -6.7496
+     },
+     {
+      "op": "L",
+      "x": 7.0833,
+      "y": -6.7496
+     },
+     {
+      "op": "L",
+      "x": 7.0833,
+      "y": 6.7498
+     },
+     {
+      "op": "L",
+      "x": -7.0828,
+      "y": 6.7498
+     },
+     {
+      "op": "Z"
+     }
+    ],
+    "clipDepth": 0,
+    "rect": {
+     "minX": -7.0828,
+     "minY": -6.7496,
+     "maxX": 7.0833,
+     "maxY": 6.7498
+    },
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      1
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 2,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": -7.0828,
+      "y": -6.7496
+     },
+     {
+      "op": "L",
+      "x": 7.0833,
+      "y": -6.7496
+     },
+     {
+      "op": "L",
+      "x": 7.0833,
+      "y": 6.7498
+     },
+     {
+      "op": "L",
+      "x": -7.0828,
+      "y": 6.7498
+     },
+     {
+      "op": "Z"
+     }
+    ],
+    "clipDepth": 0,
+    "rect": {
+     "minX": -7.0828,
+     "minY": -6.7496,
+     "maxX": 7.0833,
+     "maxY": 6.7498
+    },
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "glyphs",
+    "direction": {
+     "x": 1,
+     "y": 0
+    },
+    "order": 3,
+    "font": "CMR10",
+    "size": 10,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "glyphs": [
+     {
+      "unicode": "A",
+      "x": -3.7498,
+      "y": -3.4167,
+      "advance": 7.5
+     }
+    ],
+    "text": "A",
+    "clipDepth": 0
+   },
+   {
+    "type": "path",
+    "order": 4,
+    "operation": "fill",
+    "segments": [
+     {
+      "op": "M",
+      "x": 50.0317,
+      "y": 21.7035
+     },
+     {
+      "op": "L",
+      "x": 63.7812,
+      "y": 21.7035
+     },
+     {
+      "op": "L",
+      "x": 63.7812,
+      "y": 35.2029
+     },
+     {
+      "op": "L",
+      "x": 50.0317,
+      "y": 35.2029
+     },
+     {
+      "op": "Z"
+     }
+    ],
+    "clipDepth": 0,
+    "rect": {
+     "minX": 50.0317,
+     "minY": 21.7035,
+     "maxX": 63.7812,
+     "maxY": 35.2029
+    },
+    "fillRule": "nonzero",
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      1
+     ],
+     "alpha": 1
+    }
+   },
+   {
+    "type": "path",
+    "order": 5,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 50.0317,
+      "y": 21.7035
+     },
+     {
+      "op": "L",
+      "x": 63.7812,
+      "y": 21.7035
+     },
+     {
+      "op": "L",
+      "x": 63.7812,
+      "y": 35.2029
+     },
+     {
+      "op": "L",
+      "x": 50.0317,
+      "y": 35.2029
+     },
+     {
+      "op": "Z"
+     }
+    ],
+    "clipDepth": 0,
+    "rect": {
+     "minX": 50.0317,
+     "minY": 21.7035,
+     "maxX": 63.7812,
+     "maxY": 35.2029
+    },
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "glyphs",
+    "direction": {
+     "x": 1,
+     "y": 0
+    },
+    "order": 6,
+    "font": "CMR10",
+    "size": 10,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "glyphs": [
+     {
+      "unicode": "B",
+      "x": 53.3636,
+      "y": 25.0356,
+      "advance": 7.08
+     }
+    ],
+    "text": "B",
+    "clipDepth": 0
+   },
+   {
+    "type": "path",
+    "order": 7,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 7.2833,
+      "y": 3.6414
+     },
+     {
+      "op": "L",
+      "x": 49.4203,
+      "y": 24.7122
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.4,
+    "lineCap": 0,
+    "lineJoin": 0,
+    "miterLimit": 10
+   },
+   {
+    "type": "path",
+    "order": 8,
+    "operation": "stroke",
+    "segments": [
+     {
+      "op": "M",
+      "x": 47.6316,
+      "y": 25.6065
+     },
+     {
+      "op": "C",
+      "x1": 47.9893,
+      "y1": 25.1146,
+      "x2": 49.3756,
+      "y2": 24.8016,
+      "x": 49.6886,
+      "y": 24.8464
+     },
+     {
+      "op": "C",
+      "x1": 49.465,
+      "y1": 24.6228,
+      "x2": 48.8837,
+      "y2": 23.3259,
+      "x": 49.0626,
+      "y": 22.7446
+     }
+    ],
+    "clipDepth": 0,
+    "paint": {
+     "space": "DeviceGray",
+     "components": [
+      0
+     ],
+     "alpha": 1
+    },
+    "lineWidth": 0.32,
+    "lineCap": 1,
+    "lineJoin": 1,
+    "miterLimit": 10
+   }
+  ],
+  "textBoxes": []
+ }
+}

@@ -128,6 +128,14 @@ export type SemanticContextFrame = {
   transform: WorldTransform;
   axisBasis: AxisBasis;
   layer: string;
+  /**
+   * A `\pgfsetlayers` list given at this level of the picture, local to it
+   * like any TeX assignment. Absent: the enclosing frame's, or the document's
+   * (`SemanticLayerState.list`).
+   */
+  layerList?: readonly string[];
+  /** A `{pgfonlayer}`'s frame: leaving it, the enclosing scope's line width is 0.4pt (semantic/layers.ts). */
+  pgfLayerLineWidthReset?: true;
   /** Immutable by convention so child frames can share it until a clip operation replaces it. */
   clipChain: readonly SceneClipPath[];
   pictureSizeRelevant: boolean;
@@ -185,6 +193,7 @@ export type SemanticContext = {
   source: string;
   sourceFingerprint: string;
   layers: Map<string, SceneLayer>;
+  layerState: SemanticLayerState;
   backgroundState: SemanticBackgroundState;
   pictureBounds: WorldBounds | null;
   namedCoordinates: PersistentMap<string, WorldPoint>;
@@ -244,6 +253,25 @@ export type SemanticBackgroundHook = {
   sequence: number;
 };
 
+/**
+ * PGF's layers (pgfcorelayers.code.tex): what `\pgfdeclarelayer` declared
+ * (globally, like the box registers it allocates), the document's
+ * `\pgfsetlayers` list, and the clip paths a layer's content left in force
+ * (a layer's boxes have no graphic-state group of their own, so a clip on a
+ * layer outside a scope holds for that layer's later content).
+ */
+export type SemanticLayerState = {
+  declared: string[];
+  list: string[];
+  /** Where `list` came from: PGF's default `{main}`, the `backgrounds` library (loaded or implied by its keys), or `\pgfsetlayers`. */
+  listSource: "default" | "backgrounds" | "explicit";
+  clipChains: Record<string, SceneClipPath[]>;
+};
+
+export function createDefaultSemanticLayerState(): SemanticLayerState {
+  return { declared: [MAIN_SCENE_LAYER], list: [MAIN_SCENE_LAYER], listSource: "default", clipChains: {} };
+}
+
 export type SemanticBackgroundState = {
   used: boolean;
   innerFrameXSep: number;
@@ -294,6 +322,7 @@ export type SemanticStatementEffectSummary = {
 export type SemanticContextSnapshot = {
   stack: SemanticContextFrame[];
   layers: SceneLayer[];
+  layerState: SemanticLayerState;
   backgroundState: SemanticBackgroundState;
   pictureBounds: WorldBounds | null;
   namedCoordinatesState: PersistentMapSnapshot<string, WorldPoint>;
@@ -418,6 +447,7 @@ export function createSemanticContext(
     source,
     sourceFingerprint,
     layers: createDefaultSceneLayerMap(),
+    layerState: createDefaultSemanticLayerState(),
     backgroundState: defaultBackgroundState,
     pictureBounds: null,
     namedCoordinates: new PersistentMap<string, WorldPoint>(),
@@ -457,10 +487,28 @@ function createDefaultSceneLayerMap(): Map<string, SceneLayer> {
   return new Map([[MAIN_SCENE_LAYER, { name: MAIN_SCENE_LAYER, order: 0 }]]);
 }
 
+/**
+ * The `backgrounds` library is in use (its keys imply it; the exporter loads
+ * it): it declares the `background` layer and, unless the document set its
+ * own list, sets the layers to `background,main`.
+ */
 export function markBackgroundLayerUsed(context: SemanticContext): void {
   context.backgroundState.used = true;
-  context.layers.set(BACKGROUND_SCENE_LAYER, { name: BACKGROUND_SCENE_LAYER, order: 0 });
-  context.layers.set(MAIN_SCENE_LAYER, { name: MAIN_SCENE_LAYER, order: 1 });
+  loadBackgroundsLibraryLayers(context, false);
+}
+
+/**
+ * `\usetikzlibrary{backgrounds}` runs `\pgfdeclarelayer{background}` and
+ * `\pgfsetlayers{background,main}` (tikzlibrarybackgrounds.code.tex); a key
+ * of the library used without it loaded visibly only fills in a default list.
+ */
+export function loadBackgroundsLibraryLayers(context: SemanticContext, loaded: boolean): void {
+  const state = context.layerState;
+  if (!state.declared.includes(BACKGROUND_SCENE_LAYER)) state.declared.push(BACKGROUND_SCENE_LAYER);
+  if (loaded || (state.listSource === "default" && !context.stack.some((frame) => frame.layerList))) {
+    state.list = [BACKGROUND_SCENE_LAYER, MAIN_SCENE_LAYER];
+    if (state.listSource !== "explicit" || loaded) state.listSource = "backgrounds";
+  }
 }
 
 export function listContextSceneLayers(context: SemanticContext): SceneLayer[] {
@@ -520,6 +568,7 @@ export function snapshotSemanticContext(
   return {
     stack: context.stack.map(forkSemanticContextFrame),
     layers: listContextSceneLayers(context),
+    layerState: structuredClone(context.layerState),
     backgroundState: structuredClone(context.backgroundState),
     pictureBounds: context.pictureBounds ? { ...context.pictureBounds } : null,
     namedCoordinatesState: context.namedCoordinates.snapshot(),
@@ -547,6 +596,7 @@ export function restoreSemanticContext(
 ): void {
   context.stack = snapshot.stack.map(forkSemanticContextFrame);
   context.layers = new Map(snapshot.layers.map((layer) => [layer.name, { ...layer }]));
+  context.layerState = structuredClone(snapshot.layerState);
   context.backgroundState = structuredClone(snapshot.backgroundState);
   context.pictureBounds = snapshot.pictureBounds ? { ...snapshot.pictureBounds } : null;
   context.namedCoordinates.restore(snapshot.namedCoordinatesState);

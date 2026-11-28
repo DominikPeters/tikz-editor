@@ -30,7 +30,7 @@ const DOCUMENT_SETS: FuzzDocument[][] = [
   [longDeck(fixture("beamer/overlay-pictures-fidelity/drawing-layer-tikzlayer.tex"), 12)],
   [longFigure(fixture("differential/node-graph.tex"), 12)],
   // pgfplots axes: one fragment each, named, with embedded TikZ (design/pgfplots.md 4.3).
-  [fixture("differential/pgfplots-axis.tex"), fixture("differential/pgfplots-axis-cache.tex")]
+  [fixture("differential/pgfplots-axis.tex"), fixture("differential/pgfplots-axis-cache.tex"), fixture("differential/pgfplots-axis-scopes.tex")]
 ];
 
 // Shortcuts the default budget must reach; without them a clean run means little.

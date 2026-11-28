@@ -153,6 +153,24 @@ export const capabilityMatrix: CapabilityMatrix = {
     notes:
       "V1 supports background scopes and documented end-picture background rectangle/grid/side hooks via semantic scene layers."
   },
+  pgf_layers: {
+    parser: "stable",
+    semantic: "stable",
+    svg: "stable",
+    edit: "partial",
+    fixtures: ["pgf_layers"],
+    notes:
+      "Layers declared before or in the picture, painted in the order of the list at the picture's end; layer content resets the PDF graphic state and escapes enclosing clips as in pdfTeX; unlisted, discard and lost-to-main content is dropped with diagnostics. `on background layer` shares the mechanism. Statements inside are edited like a scope's; the environment cannot take options."
+  },
+  pgf_environments: {
+    parser: "stable",
+    semantic: "partial",
+    svg: "partial",
+    edit: "partial",
+    fixtures: ["pgf_environments"],
+    notes:
+      "{pgfscope} groups like a scope; {pgfinterruptboundingbox} keeps its content out of the bounding box; {pgflowlevelscope} and {pgfviewboxscope} apply their canvas transformation to coordinates only (line widths and text unscaled) and leave the bounding box alone; {pgftransparencygroup} draws its content ungrouped. Each warns where it differs from TeX."
+  },
   arrow_tips: {
     parser: "stable",
     semantic: "stable",
@@ -896,7 +914,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["pgfplots_axis_coordinates"],
-    notes: "Embedded TikZ in an axis: `axis cs`, `rel axis cs`, `axis description cs` through a coordinate-system registry, bare coordinates as axis cs (the data map is the frame transform, so coordinate edit handles work), clipped at the right paint slot; unknown `<name> cs:` is diagnosed instead of being read as canvas."
+    notes: "Embedded TikZ in an axis: `axis cs`, `rel axis cs`, `axis description cs` through a coordinate-system registry, bare coordinates as axis cs (the data map is the frame transform, so coordinate edit handles work), clipped at the right paint slot; unknown `<name> cs:` is diagnosed instead of being read as canvas. `\\begin{scope}[...]` in the body (any depth, in loops and groups) holds plots too: its options are appended to theirs, its transformation moves plot lines twice and marks once, its `\\clip` clips the lines (behaviour AC5); a scope `on background layer` is diagnosed."
   },
   pgfplots_log_axes: {
     parser: "partial",
@@ -968,7 +986,7 @@ export const capabilityMatrix: CapabilityMatrix = {
     svg: "partial",
     edit: "partial",
     fixtures: ["pgfplots_plot_styles"],
-    notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). `cycle multi list` is not supported. Editing: the plot inspector writes colour, line width and style, mark, mark size, only marks, no markers, smooth (`\\addplot+[...]` keeps the cycle list)."
+    notes: "Plot handlers `sharp plot`, `smooth` (`tension`, initially 0.5), `const plot` (mark left/right/mid), `jump mark left/right/mid`, `ycomb`, `xcomb`; predefined cycle lists (color, black white, exotic, mark list, color list, linestyles, linestyles*), `cycle list={...}` forms, `cycle list shift`, `every axis plot no N`, axis-level `no markers`, `mark repeat`, `mark phase`, `mark indices`, `mark options={scale=...}` (behaviour P). The TikZ context (behaviour AC): picture and enclosing-scope options (line width and `draw=` reset at the axis, colour, font, dash, opacity kept, `every picture` re-applied), `every path` (after plot styles, before element styles), `every mark`, `every node`; `every node` with `draw` and `every mark` in axis options are diagnosed. `cycle multi list` is not supported. Editing: the plot inspector writes colour, line width and style, mark, mark size, only marks, no markers, smooth (`\\addplot+[...]` keeps the cycle list)."
   },
   pgfplots_bars: {
     parser: "partial",

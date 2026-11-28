@@ -89,6 +89,7 @@ export type Statement = (
   | PgfplotsSetStatement
   | PgfplotsLibraryStatement
   | PgfplotsTableReadStatement
+  | PgfLayerStatement
   | UnknownStatement
 ) & OverlayGroupMember;
 
@@ -165,6 +166,57 @@ export type ScopeStatement = {
   span: Span;
   options?: OptionListAst;
   body: Statement[];
+  /**
+   * A PGF environment read as a scope (`{pgfonlayer}{name}`, `{pgfscope}`, ...):
+   * a group around picture statements, without TikZ options. Absent for
+   * `\begin{scope}`.
+   */
+  environment?: PgfScopeEnvironment;
+};
+
+/** PGF's environments that group picture statements (grammar `PgfEnvironmentStatement`). */
+export type PgfEnvironmentName =
+  | "pgfonlayer"
+  | "pgfscope"
+  | "pgfinterruptboundingbox"
+  | "pgftransparencygroup"
+  | "pgflowlevelscope"
+  | "pgfviewboxscope";
+
+export type PgfScopeEnvironment = {
+  name: PgfEnvironmentName;
+  /** `\begin{pgfonlayer}...\end{pgfonlayer}`, plain TeX `\pgfonlayer...\endpgfonlayer`, ConTeXt `\startpgfonlayer...\stoppgfonlayer`. */
+  form: "latex" | "plain" | "context";
+  /** The begin delimiter with its arguments. */
+  beginSpan: Span;
+  /** Each argument read, in order: its text without the delimiters, and its span with them. */
+  arguments: PgfEnvironmentArgument[];
+  /** The end delimiter; absent when the environment is unterminated. */
+  endSpan?: Span;
+  /** The environment the end delimiter names, when it differs from the one begun. */
+  endName?: PgfEnvironmentName;
+  terminated: boolean;
+  /** `pgfonlayer`: the layer name, trimmed. */
+  layer?: string;
+};
+
+export type PgfEnvironmentArgument = {
+  delimiter: "{" | "[";
+  raw: string;
+  span: Span;
+};
+
+/** `\pgfdeclarelayer{name}` or `\pgfsetlayers{list}` (pgfcorelayers). */
+export type PgfLayerStatement = {
+  kind: "PgfLayer";
+  id: string;
+  span: Span;
+  command: "declare" | "set";
+  /** The argument's text without braces. */
+  argumentRaw: string;
+  argumentSpan?: Span;
+  /** The layer names: one for a declaration, the list in order for `\pgfsetlayers`. */
+  names: string[];
 };
 
 export type ForeachStatement = {
@@ -729,7 +781,39 @@ export type AxisCommand =
   | AddLegendEntryStatement
   | AddLegendImageStatement
   | LegendStatement
-  | PgfplotsExtraStatement;
+  | PgfplotsExtraStatement
+  | AxisScopeBegin
+  | AxisScopeEnd;
+
+/**
+ * `\begin{scope}[options]` inside an axis body (behaviour AC5). The axis body
+ * stays flat: a scope is its begin and end markers around the items it holds,
+ * so plot ids and every walk over `axis.body` keep body order. The markers
+ * nest; `endId` pairs them.
+ */
+export type AxisScopeBegin = {
+  kind: "AxisScopeBegin";
+  /** `axis:N:scope:K`, K counting the scopes of the axis in body order. */
+  id: string;
+  axisId: string;
+  /** `\begin{scope}` and its option list. */
+  span: Span;
+  /** The whole environment, to the end of `\end{scope}` (or of the body read when unterminated). */
+  scopeSpan: Span;
+  optionsSpan?: Span;
+  options?: OptionListAst;
+  /** `axis:N:scope:K:end`; absent when the scope is unterminated. */
+  endId?: string;
+};
+
+/** `\end{scope}` of an axis scope. */
+export type AxisScopeEnd = {
+  kind: "AxisScopeEnd";
+  id: string;
+  axisId: string;
+  span: Span;
+  beginId: string;
+};
 
 export type AxisCommandKind = AxisCommand["kind"];
 

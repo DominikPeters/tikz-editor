@@ -11,7 +11,7 @@ import {
   resolveStatementRefs,
   type StatementSnapshot
 } from "./statement-ops.js";
-import { isUngroupableScopeStatement } from "./actions/group-ungroup-actions.js";
+import { isUngroupableScopeStatement, pgfEnvironmentUngroupReason } from "./actions/group-ungroup-actions.js";
 import {
   resolveEligibleExplicitPath,
   resolveActivePathPointHandle,
@@ -576,6 +576,9 @@ function makeUngroupRule(): AvailabilityRule {
     const ref = snapshot.byId.get(parsedTarget.id);
     if (ref?.statement.kind !== "Scope") {
       return "Ungroup currently supports scope selections only.";
+    }
+    if (ref.statement.environment) {
+      return pgfEnvironmentUngroupReason(ref.statement.environment.name);
     }
     if (!isUngroupableScopeStatement(ref.statement)) {
       return "Ungroup currently supports only scopes without options, or with `name=...` only.";

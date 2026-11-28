@@ -3,6 +3,9 @@ import { requireDefined } from "../utils/invariants.js";
 import { requireArrayValue } from "../utils/collections.js";
 import { axisBodyStatements, nestedStatements } from "../ast/walk.js";
 import { finishWork, runCooperatively, type CooperativeWorkOptions } from "./cooperative-work.js";
+import { PGF_LAYER_LINE_WIDTH, declareLayer, effectiveLayerList, enterLayer, finalizeLayers, layerEntryStyle, leaveLayer, setLayerList } from "./layers.js";
+import { parsePgfPoint, parsePgfTransformationCode, viewBoxTransform } from "./pgf-canvas.js";
+import { applyMatrix as applyWorldMatrix, multiplyMatrix as multiplyWorldMatrix } from "./transform.js";
 import type {
   AxisStatement,
   ColorletStatement,
@@ -11,6 +14,7 @@ import type {
   MacroCommandDefinitionStatement,
   MacroDefinitionStatement,
   PgfMathStatement,
+  PgfScopeEnvironment,
   PgfkeysStatement,
   PathItem,
   PicOperationItem,
@@ -57,10 +61,10 @@ import {
   createSemanticContext,
   currentFrame,
   endStatementEffectTracking,
-  listContextSceneLayers,
   listContextRequiredLibraries,
   listContextSymbolDependencyEdges,
   listContextUnresolvedSymbols,
+  loadBackgroundsLibraryLayers,
   markBackgroundLayerUsed,
   markDependencyOpaque,
   popFrame,
@@ -196,6 +200,8 @@ export type SemanticEvaluationRun = {
   statementMacroAttribution: WeakMap<Statement, MacroOriginFrame[]>;
   templateLocalIdByExpandedId: Map<string, string>;
   rootFramePushed: boolean;
+  /** The `\pgfsetlayers` list at the picture's top level when it ends: the layers painted, in order. */
+  finalLayerList?: readonly string[];
   /** The transform the picture's own options set, when not the identity. */
   rootTransform?: WorldTransform;
   baseDiagnosticsCount: number;
@@ -490,7 +496,7 @@ export function evaluateSemanticStatementByIndex(
       run.diagnostics,
       sourceSpan,
       () => {
-        if (scopeStep === "leave") { popFrame(run.context); return []; }
+        if (scopeStep === "leave") { popScopeFrame(run.context); return []; }
         if (overlayVisibility === "removed") return [];
         return evaluateStatement(statement, run.context, run.diagnostics, featureUsage, run.statementMacroAttribution, scopeStep === "enter");
       }
@@ -593,6 +599,8 @@ export function finalizeSemanticEvaluationRun(
     statementEntries: [...run.statementEntryContexts],
     figureEnd: captureSiteContext(currentFrame(run.context))
   };
+  // TeX paints the layers in the list in force at the picture's top level at its end.
+  run.finalLayerList = effectiveLayerList(run.context);
   if (run.rootFramePushed) {
     popFrame(run.context);
   }
@@ -613,8 +621,9 @@ export function finalizeSemanticEvaluationRun(
   }
 
   markOpaqueDependencySources(elements, run.context);
-  const layers = listContextSceneLayers(run.context);
-  const orderedElements = orderSceneElementsByLayer(elements, layers);
+  const finalized = finalizeLayers(run.context, run.finalLayerList ?? effectiveLayerList(run.context), elements, run.diagnostics);
+  const layers = finalized.layers;
+  const orderedElements = orderSceneElementsByLayer(finalized.elements, layers);
   const inferredRequiredLibraries = inferRequiredTikzLibraries({
     featureUsage: run.featureUsage,
     elements: orderedElements
@@ -641,6 +650,7 @@ export function finalizeSemanticEvaluationRun(
         run.featureUsage.path_clipping === "used-supported" ||
         run.featureUsage.use_as_bounding_box === "used-supported" ||
         run.featureUsage.backgrounds_library === "used-supported" ||
+        run.featureUsage.pgf_layers === "used-supported" ||
         run.context.backgroundState.used,
       ...(run.rootTransform ? { rootTransform: run.rootTransform } : {})
     },
@@ -1074,6 +1084,142 @@ function statementOverlayVisibility(context: SemanticContext, statement: Stateme
   return context.overlayVisibilityOf?.(statement) ?? "visible";
 }
 
+/**
+ * Ends a scope's frame. A frame on another layer than its parent's is a
+ * layer's content ending: the clips it set stay with the layer.
+ */
+function popScopeFrame(context: SemanticContext): void {
+  const frame = currentFrame(context);
+  const parent = context.stack[context.stack.length - 2];
+  if (parent && frame.layer !== parent.layer) {
+    leaveLayer(context, frame.layer, frame.clipChain);
+  }
+  if (parent && frame.pgfLayerLineWidthReset) {
+    parent.style = { ...parent.style, lineWidth: PGF_LAYER_LINE_WIDTH };
+  }
+  popFrame(context);
+}
+
+type PgfEnvironmentEffect = {
+  resolved: ReturnType<typeof resolveContextDelta>;
+  layer: string;
+  clipChain: readonly SceneClipPath[];
+  pictureSizeRelevant: boolean;
+  resetsParentLineWidth: boolean;
+};
+
+/**
+ * What a PGF environment does to the frame its body is evaluated in. All of
+ * them group the body like a scope (`\pgfscope`, or a TeX group). Beyond
+ * that: `{pgfonlayer}` moves the content to a layer (semantic/layers.ts);
+ * `{pgfinterruptboundingbox}` keeps it out of the picture's bounding box;
+ * `{pgflowlevelscope}` and `{pgfviewboxscope}` install a canvas
+ * transformation and keep the content out of the bounding box
+ * (`\pgf@relevantforpicturesizefalse`); `{pgftransparencygroup}` paints it as
+ * one group.
+ */
+function enterPgfEnvironment(
+  environment: PgfScopeEnvironment,
+  context: SemanticContext,
+  diagnostics: Diagnostic[],
+  featureUsage: FeatureUsage,
+  resolved: ReturnType<typeof resolveContextDelta>
+): PgfEnvironmentEffect {
+  const parent = currentFrame(context);
+  const effect: PgfEnvironmentEffect = {
+    resolved, layer: parent.layer, clipChain: parent.clipChain, pictureSizeRelevant: true, resetsParentLineWidth: false
+  };
+  const span = environment.beginSpan;
+  if (!environment.terminated || environment.endName) {
+    diagnostics.push({
+      severity: "error",
+      code: "pgf-environment-unterminated",
+      message: environment.endName
+        ? `\`${environment.name}\` is ended by \`${environment.endName}\`; LaTeX stops with a mismatched environment error.`
+        : `\`${environment.name}\` has no end; LaTeX stops with an error. The editor reads the rest of the picture as its body.`,
+      span
+    });
+  }
+  const unsupported = (message: string): void => {
+    markFeature(featureUsage, "pgf_environments", "unsupported");
+    diagnostics.push({ severity: "warning", code: "unsupported-environment", message, span });
+  };
+  switch (environment.name) {
+    case "pgfonlayer": {
+      markFeature(featureUsage, "pgf_layers", "supported");
+      if (environment.layer === undefined || environment.layer.length === 0) {
+        diagnostics.push({
+          severity: "error",
+          code: "pgf-layer-missing-name",
+          message: "`{pgfonlayer}` needs the layer's name: `\\begin{pgfonlayer}{background}`. The editor draws the content on the current layer.",
+          span
+        });
+        return effect;
+      }
+      const entry = enterLayer(context, environment.layer, span, diagnostics);
+      effect.layer = entry.layer;
+      effect.clipChain = entry.clipChain;
+      effect.resolved = { ...resolved, style: layerEntryStyle(resolved.style, entry) };
+      effect.resetsParentLineWidth = entry.declared;
+      return effect;
+    }
+    case "pgfscope":
+      markFeature(featureUsage, "pgf_environments", "supported");
+      return effect;
+    case "pgfinterruptboundingbox":
+      markFeature(featureUsage, "pgf_environments", "supported");
+      effect.pictureSizeRelevant = false;
+      return effect;
+    case "pgftransparencygroup":
+      markFeature(featureUsage, "pgf_environments", "supported");
+      diagnostics.push({
+        severity: "warning",
+        code: "pgf-transparency-group-approximate",
+        message: "`{pgftransparencygroup}`: the editor draws the content as ordinary statements, not as one transparency group. This differs from TeX where translucent parts of the content overlap or a fill opacity set outside the group applies to it.",
+        span
+      });
+      return effect;
+    case "pgflowlevelscope":
+    case "pgfviewboxscope": {
+      effect.pictureSizeRelevant = false;
+      const canvas = environment.name === "pgflowlevelscope"
+        ? readLowLevelTransform(environment)
+        : readViewBoxTransform(environment, resolved.transform);
+      if (!canvas) {
+        unsupported(`\`{${environment.name}}\` with these arguments is not supported; the editor draws its content without the transformation.`);
+        return effect;
+      }
+      markFeature(featureUsage, "pgf_environments", "supported");
+      effect.resolved = { ...resolved, transform: multiplyWorldMatrix(canvas, resolved.transform) };
+      diagnostics.push({
+        severity: "warning",
+        code: "pgf-canvas-transform-approximate",
+        message: `\`{${environment.name}}\` installs a canvas transformation; the editor applies it to the content's coordinates only, so line widths and text are not scaled with it as in TeX.`,
+        span
+      });
+      return effect;
+    }
+  }
+  return effect;
+}
+
+function readLowLevelTransform(environment: PgfScopeEnvironment): WorldTransform | null {
+  const code = environment.arguments[0];
+  return code?.delimiter === "{" ? parsePgfTransformationCode(code.raw) : null;
+}
+
+function readViewBoxTransform(environment: PgfScopeEnvironment, transform: WorldTransform): WorldTransform | null {
+  const braces = environment.arguments.filter((argument) => argument.delimiter === "{");
+  if (braces.length !== 5) return null;
+  const points = braces.slice(0, 4).map((argument) => parsePgfPoint(argument.raw));
+  const mode = braces[4]?.raw.trim();
+  if (points.includes(null) || (mode !== "meet" && mode !== "slice")) return null;
+  // `\pgf@pos@transform@glob`: the corners in canvas coordinates.
+  const [a, b, c, d] = points.map((point) => applyWorldMatrix(transform, requireDefined(point, "Expected a view box corner")));
+  if (!a || !b || !c || !d) return null;
+  return viewBoxTransform([a, b], [c, d], mode);
+}
+
 export function enterScopeStatement(statement: Extract<Statement, { kind: "Scope" }>, context: SemanticContext): void {
   evaluateStatement(statement, context, [], {}, new WeakMap(), true);
 }
@@ -1305,15 +1451,32 @@ function evaluateStatement(
     let scopeResolved = resolved;
     let frameMeta = resolveFrameMeta(parent, resolved.expandedOptionLists, scopeSourceRef);
     let scopeLayer = parent.layer;
+    let scopeClipChain = parent.clipChain;
+    let scopePictureSizeRelevant = parent.pictureSizeRelevant;
+    let resetsParentLineWidth = false;
+    const environment = statement.environment;
+    if (environment) {
+      const effect = enterPgfEnvironment(environment, context, diagnostics, featureUsage, scopeResolved);
+      scopeResolved = effect.resolved;
+      scopeLayer = effect.layer;
+      scopeClipChain = effect.clipChain;
+      scopePictureSizeRelevant &&= effect.pictureSizeRelevant;
+      resetsParentLineWidth = effect.resetsParentLineWidth;
+    }
     const backgroundLayerOptionLayers = extractOnBackgroundLayerOptionLayers(resolved.expandedOptionLists, scopeSourceRef);
     const backgroundDiagnostics: StyleDiagnostic[] = [];
     if (backgroundLayerOptionLayers.length > 0) {
       markFeature(featureUsage, "backgrounds_library", "supported");
       markBackgroundLayerUsed(context);
-      scopeLayer = BACKGROUND_SCENE_LAYER;
+      // `on background layer` is `{pgfonlayer}{background}` entered at the
+      // start of the scope, with `every on background layer` and the key's
+      // options applied again on the layer (tikzlibrarybackgrounds.code.tex).
+      const entry = enterLayer(context, BACKGROUND_SCENE_LAYER, statement.span, diagnostics);
+      scopeLayer = entry.layer;
+      scopeClipChain = entry.clipChain;
       const everyLayer = makeEveryOnBackgroundLayerOptionLayer(scopeSourceRef);
       scopeResolved = resolveContextDelta(
-        resolved.style,
+        layerEntryStyle(resolved.style, entry),
         resolved.transform,
         [everyLayer, ...backgroundLayerOptionLayers].map((layer) => ({
           kind: "scope" as const,
@@ -1335,8 +1498,9 @@ function evaluateStatement(
       transform: scopeResolved.transform,
       axisBasis: scopeResolved.axisBasis,
       layer: scopeLayer,
-      clipChain: parent.clipChain,
-      pictureSizeRelevant: parent.pictureSizeRelevant,
+      ...(resetsParentLineWidth ? { pgfLayerLineWidthReset: true as const } : {}),
+      clipChain: scopeClipChain,
+      pictureSizeRelevant: scopePictureSizeRelevant,
       customStyles: scopedCustomStyles,
       picDefinitions: scopedPicDefinitions,
       colorAliases: parent.colorAliases.fork(),
@@ -1386,7 +1550,7 @@ function evaluateStatement(
       if (overlayVisibility === "hidden") for (const element of elements) element.overlayCovered = true;
       return elements;
     });
-    popFrame(context);
+    popScopeFrame(context);
     return nested;
   }
 
@@ -1463,6 +1627,8 @@ function evaluateStatement(
     markPgfplotsAxisFeatures(statement, featureUsage);
     return evaluateAxisStatement(statement, context, {
       evaluateStatement: (nested) => evaluateStatement(nested, context, diagnostics, featureUsage, statementMacroAttribution),
+      // Its options were read as plot options too; their diagnostics are the plots'.
+      enterScope: (scope) => { evaluateStatement(scope, context, [], featureUsage, statementMacroAttribution, true); },
       diagnostics,
       markFeature: (id, status) => { markFeature(featureUsage, id, status); },
       featureUsage
@@ -1486,6 +1652,16 @@ function evaluateStatement(
 
   if (statement.kind === "PgfplotsLibrary") {
     markFeature(featureUsage, "pgfplots_pgfplotsset", "supported");
+    return [];
+  }
+
+  if (statement.kind === "PgfLayer") {
+    markFeature(featureUsage, "pgf_layers", "supported");
+    if (statement.command === "declare") {
+      for (const name of statement.names) declareLayer(context, name);
+    } else {
+      setLayerList(context, statement.names);
+    }
     return [];
   }
 
@@ -2216,6 +2392,9 @@ function applyTikzLibraryStatement(
       const normalized = library.trim();
       if (normalized.length === 0) {
         continue;
+      }
+      if (normalized === "backgrounds") {
+        loadBackgroundsLibraryLayers(context, true);
       }
       if (normalized === "arrows.meta") {
         const frame = currentFrame(context);

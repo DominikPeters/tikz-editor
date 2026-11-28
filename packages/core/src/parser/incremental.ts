@@ -325,6 +325,11 @@ function createSession(initial: CachedIncrementalParseState | null): Incremental
         }
 
         const rebasedStatement = shiftSpansDeep(replacement, nextSpan.from - SNIPPET_PREFIX.length);
+        // A statement without its `;` (an unknown command before `\end{scope}`) reads on into
+        // the snippet's suffix: alone it is not what the document has there.
+        if (rebasedStatement.span.from !== nextSpan.from || rebasedStatement.span.to !== nextSpan.to) {
+          return fallbackToFull("statement-structure-changed");
+        }
         alignStatementIds(previousStatement, rebasedStatement);
         setStatementAtPath(nextFigure, previousRef.parentPath, previousRef.index, rebasedStatement);
 
@@ -419,7 +424,13 @@ function identityStructure(statement: Statement): string {
     }
     return `${item.kind}[${clauses}]`;
   }).join("|");
-  if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
+  if (statement.kind === "Scope") {
+    // A PGF environment that loses its end, or changes its name, reaches past
+    // its old span or ends differently: reparse the document.
+    const environment = statement.environment;
+    const head = environment ? `${environment.name},${environment.endName ?? ""},${environment.terminated};` : "";
+    return `Scope(${head}${statement.body.map(identityStructure).join("|")})`;
+  }
   if (statement.kind === "Path") return `Path(${items(statement.items)})`;
   // Axis commands are numbered per axis, and their trailing paths take
   // statement ids: an added or removed one renumbers what follows.
@@ -466,6 +477,12 @@ function alignAxisBody(previous: readonly AxisBodyItem[], next: AxisBodyItem[], 
     if (isAxisCommand(previousItem) && isAxisCommand(nextItem)) {
       nextItem.id = previousItem.id;
       nextItem.axisId = axisId;
+      // A scope's markers name each other: keep the pairing in the ids just taken.
+      if (previousItem.kind === "AxisScopeEnd" && nextItem.kind === "AxisScopeEnd") nextItem.beginId = previousItem.beginId;
+      if (previousItem.kind === "AxisScopeBegin" && nextItem.kind === "AxisScopeBegin") {
+        if (previousItem.endId !== undefined) nextItem.endId = previousItem.endId;
+        else delete nextItem.endId;
+      }
       if (previousItem.kind === "AddPlot" && nextItem.kind === "AddPlot" && previousItem.trailingPath && nextItem.trailingPath) {
         alignStatementIds(previousItem.trailingPath, nextItem.trailingPath);
       }

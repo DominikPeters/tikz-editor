@@ -1,0 +1,20 @@
+% pgfplots oracle fixture (hand-written): `\addplot` inside scopes in the axis
+% body (behaviour AC5): the scope options are appended to each plot's options
+% (they win over `\addplot+[blue]`, reach marks and legend images), nested
+% scopes compose, the cycle list keeps counting across scopes.
+\begin{tikzpicture}
+\begin{axis}[xmin=0, xmax=4, ymin=0, ymax=10, legend pos=north west]
+\addplot coordinates {(0,1) (4,2)};
+\addlegendentry{plain}
+\begin{scope}[red, dashed]
+  \addplot+[blue] coordinates {(0,3) (4,4)};
+  \addlegendentry{scoped}
+  \begin{scope}[line width=1.5pt, mark options={fill=green}]
+    \addplot coordinates {(0,5) (2,6) (4,5.5)};
+    \addlegendentry{nested}
+  \end{scope}
+\end{scope}
+\addplot coordinates {(0,8) (4,7)};
+\addlegendentry{after}
+\end{axis}
+\end{tikzpicture}

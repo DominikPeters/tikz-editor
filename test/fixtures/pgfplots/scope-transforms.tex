@@ -1,0 +1,18 @@
+% pgfplots oracle fixture (hand-written): transformations of a scope in the
+% axis body (behaviour AC5): the plot line is moved twice, its marks once,
+% embedded TikZ once; all in the axis' own coordinates (origin at the box's
+% lower left, here not the data origin); limits are unaffected.
+\begin{tikzpicture}
+\begin{axis}[xmin=-1, xmax=4, ymin=-2, ymax=8]
+\begin{scope}[xshift=4mm]
+  \addplot[blue, mark=*] coordinates {(0,1) (1,2) (2,1.5)};
+\end{scope}
+\begin{scope}[rotate=12]
+  \addplot[red, mark=square*] coordinates {(1,4) (3,5)};
+  \draw[green!50!black] (axis cs:0,0) -- (axis cs:2,1);
+\end{scope}
+\begin{scope}[yscale=0.5]
+  \addplot[black] coordinates {(0,6) (3,7)};
+\end{scope}
+\end{axis}
+\end{tikzpicture}

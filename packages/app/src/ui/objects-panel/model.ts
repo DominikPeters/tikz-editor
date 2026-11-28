@@ -1,4 +1,4 @@
-import type { AddPlotStatement, AxisStatement, NodeItem, PathStatement, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
+import type { AddPlotStatement, AxisStatement, NodeItem, PathStatement, PgfEnvironmentName, ScopeStatement, Statement } from "@tikz-editor/core/ast/types";
 import { nestedStatements } from "@tikz-editor/core/ast/walk";
 import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
@@ -58,6 +58,16 @@ export function buildObjectsPanelModel(args: {
 
   return { nodes, byId };
 }
+
+/** PGF environments read as scopes: `{pgfonlayer}{background}` is "Layer: background". */
+const PGF_ENVIRONMENT_LABELS: Record<PgfEnvironmentName, (layer: string) => string> = {
+  pgfonlayer: (layer) => layer.length > 0 ? `Layer: ${layer}` : "Layer",
+  pgfscope: () => "PGF Scope",
+  pgfinterruptboundingbox: () => "Outside Bounding Box",
+  pgftransparencygroup: () => "Transparency Group",
+  pgflowlevelscope: () => "Low-level Transform",
+  pgfviewboxscope: () => "View Box"
+};
 
 const AXIS_LABELS: Record<AxisStatement["environment"], string> = {
   axis: "Axis",
@@ -164,6 +174,9 @@ function deriveStatementLabel(statement: PathStatement | ScopeStatement | AxisSt
     return AXIS_LABELS[statement.environment];
   }
   if (statement.kind === "Scope") {
+    if (statement.environment) {
+      return PGF_ENVIRONMENT_LABELS[statement.environment.name](statement.environment.layer ?? "");
+    }
     if (hasOptionFlag(statement.options, "on background layer")) {
       return "Background Layer";
     }

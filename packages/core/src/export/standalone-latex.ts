@@ -149,8 +149,9 @@ function statementDefinition(statement: Statement, source: string): ContextDefin
     case "Pgfkeys":
     case "TikzLibrary":
       return { span: statement.span, names: [], reads: [source.slice(statement.span.from, statement.span.to)] };
-    // The pgfplots settings are carried on their own; the rest are not definitions.
+    // The pgfplots settings and the layer declarations are carried on their own; the rest are not definitions.
     case "PgfplotsSet":
+    case "PgfLayer":
     case "PgfplotsLibrary":
     case "Path":
     case "Scope":
@@ -375,6 +376,26 @@ function collectExternalDataFiles(
   return files;
 }
 
+/**
+ * `\pgfdeclarelayer` and `\pgfsetlayers` from the document before the
+ * picture, in source order, when the picture puts anything on a layer: its
+ * `{pgfonlayer}` environments name layers only those commands set up.
+ */
+function collectLayerDeclarationSpans(
+  contextStatements: readonly Statement[],
+  pictureStatements: readonly Statement[],
+  elements: readonly { layer: string }[]
+): Span[] {
+  let usesLayers = elements.some((element) => element.layer !== "main");
+  const visit = (statement: Statement): void => {
+    if (statement.kind === "Scope" && statement.environment?.name === "pgfonlayer") usesLayers = true;
+    for (const nested of nestedStatements(statement) ?? []) visit(nested);
+  };
+  for (const statement of pictureStatements) visit(statement);
+  if (!usesLayers) return [];
+  return contextStatements.filter((statement) => statement.kind === "PgfLayer").map((statement) => statement.span);
+}
+
 function analyzeMinimalFigureDependencies(
   options: CreateMinimalTikzSourceArtifactOptions
 ): {
@@ -446,7 +467,10 @@ function analyzeMinimalFigureDependencies(
     ...scanTextDefinitions(options.source, pictureSpan.from, otherFigureSpans)
   ];
   const settingsText = pgfplots?.settings.map((setting) => setting.raw) ?? [];
-  const definitionSpans = collectContextDefinitionSpans(definitions, usedDefinitions, [figureSource, ...settingsText]);
+  const definitionSpans = [
+    ...collectContextDefinitionSpans(definitions, usedDefinitions, [figureSource, ...settingsText]),
+    ...collectLayerDeclarationSpans(contextStatements, parseResult.figure.body.filter((statement) => inside(statement.span, pictureSpan)), semanticResult.scene.elements)
+  ];
   // The document's `\pgfplotsset`/`\pgfplotstableset` settings go among the definitions in source order
   // (a `\pgfplotstableset{col sep=…}` must precede the `\pgfplotstableread` it formats).
   const definitionChunks = [...definitionSpans, ...(pgfplots?.settings.map((setting) => setting.span) ?? [])]

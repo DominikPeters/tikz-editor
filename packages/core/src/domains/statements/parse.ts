@@ -9,6 +9,7 @@ import {
   macroDefinitionStatementId,
   overlayDeclarationStatementId,
   overlayGroupStatementId,
+  pgfLayerStatementId,
   pgfMathStatementId,
   pgfkeysStatementId,
   scopeStatementId,
@@ -27,7 +28,11 @@ import type {
   OverlayDeclarationStatement,
   OverlayGroupCommand,
   OverlayGroupStatement,
+  PgfEnvironmentArgument,
+  PgfEnvironmentName,
+  PgfLayerStatement,
   PgfMathStatement,
+  PgfScopeEnvironment,
   PgfkeysStatement,
   ScopeStatement,
   Span,
@@ -194,6 +199,14 @@ export function mapStatementNode(node: SyntaxNode, source: string, state: Statem
     return mapScopeStatement(node, source, state);
   }
 
+  if (node.type.name === "PgfEnvironmentStatement") {
+    return mapPgfEnvironmentStatement(node, source, state);
+  }
+
+  if (node.type.name === "PgfLayerStatement") {
+    return mapPgfLayerStatement(node, source, state);
+  }
+
   if (node.type.name === "OverlayDeclarationStatement") {
     return mapOverlayDeclarationStatement(node, source, state);
   }
@@ -245,6 +258,122 @@ function mapScopeStatement(node: SyntaxNode, source: string, state: StatementMap
     span: { from: node.from, to: node.to },
     ...(optionsNode ? { options: parseOptionListRaw(source.slice(optionsNode.from, optionsNode.to), optionsNode.from) } : {}),
     body: mapBodyStatements(node, source, state)
+  };
+}
+
+const PGF_ENVIRONMENT_NAMES: readonly PgfEnvironmentName[] = [
+  "pgfonlayer",
+  "pgfscope",
+  "pgfinterruptboundingbox",
+  "pgftransparencygroup",
+  "pgflowlevelscope",
+  "pgfviewboxscope"
+];
+
+/**
+ * A PGF environment (`{pgfonlayer}{name}`, `{pgfscope}`, ...) as a scope
+ * without options whose `environment` describes it. The begin token holds
+ * the arguments (lezer-tikz pgf-environment-tokens.ts).
+ */
+function mapPgfEnvironmentStatement(node: SyntaxNode, source: string, state: StatementMappingState): ScopeStatement {
+  const statementIndex = allocateStatementIndex(state);
+  const beginNode = findFirstChildByName(node, "BeginPgfEnvironment");
+  const endNode = findFirstChildByName(node, "EndPgfEnvironment");
+  const beginSpan = beginNode ? { from: beginNode.from, to: beginNode.to } : { from: node.from, to: node.from };
+  const begin = readPgfEnvironmentWord(source.slice(beginSpan.from, beginSpan.to));
+  const end = endNode ? readPgfEnvironmentWord(source.slice(endNode.from, endNode.to)) : null;
+  const name = begin?.name ?? "pgfscope";
+  const argumentsRead = readPgfEnvironmentArguments(source, beginSpan.from + (begin?.length ?? 0), beginSpan.to);
+  const layer = name === "pgfonlayer" && argumentsRead[0]?.delimiter === "{" ? argumentsRead[0].raw.trim() : undefined;
+  const environment: PgfScopeEnvironment = {
+    name,
+    form: begin?.form ?? "latex",
+    beginSpan,
+    arguments: argumentsRead,
+    ...(endNode ? { endSpan: { from: endNode.from, to: endNode.to } } : {}),
+    ...(end && end.name !== name ? { endName: end.name } : {}),
+    terminated: endNode !== null,
+    ...(layer !== undefined ? { layer } : {})
+  };
+  return {
+    kind: "Scope",
+    id: scopeStatementId(statementIndex),
+    span: { from: node.from, to: node.to },
+    body: mapBodyStatements(node, source, state),
+    environment
+  };
+}
+
+/** The environment a begin or end delimiter names, its form and the delimiter's length before any argument. */
+function readPgfEnvironmentWord(text: string): { name: PgfEnvironmentName; form: PgfScopeEnvironment["form"]; length: number } | null {
+  const latex = /^\\(?:begin|end)[ \t\r\n]*\{([^{}]*)\}/u.exec(text);
+  if (latex) {
+    const name = PGF_ENVIRONMENT_NAMES.find((candidate) => candidate === latex[1]);
+    return name ? { name, form: "latex", length: latex[0].length } : null;
+  }
+  const word = /^\\([A-Za-z@]+)/u.exec(text);
+  if (!word) return null;
+  for (const [prefix, form] of [["end", "plain"], ["stop", "context"], ["start", "context"], ["", "plain"]] as const) {
+    const name = PGF_ENVIRONMENT_NAMES.find((candidate) => `${prefix}${candidate}` === word[1]);
+    if (name) return { name, form, length: word[0].length };
+  }
+  return null;
+}
+
+/** The brace and bracket groups between `from` and `to`, skipping spaces and comments between them. */
+function readPgfEnvironmentArguments(source: string, from: number, to: number): PgfEnvironmentArgument[] {
+  const argumentsRead: PgfEnvironmentArgument[] = [];
+  let cursor = from;
+  while (cursor < to) {
+    const char = source.charAt(cursor);
+    if (char === "%") {
+      while (cursor < to && source.charAt(cursor) !== "\n" && source.charAt(cursor) !== "\r") cursor += 1;
+      continue;
+    }
+    if (char !== "{" && char !== "[") {
+      cursor += 1;
+      continue;
+    }
+    const close = char === "{" ? "}" : "]";
+    let depth = 0;
+    let end = cursor;
+    while (end < to) {
+      const current = source.charAt(end);
+      if (current === "\\") {
+        end += 2;
+        continue;
+      }
+      if (current === "%") {
+        while (end < to && source.charAt(end) !== "\n" && source.charAt(end) !== "\r") end += 1;
+        continue;
+      }
+      if (current === char || (char === "[" && current === "{")) depth += 1;
+      else if (current === close || (char === "[" && current === "}")) depth -= 1;
+      end += 1;
+      if (depth === 0) break;
+    }
+    argumentsRead.push({ delimiter: char, raw: source.slice(cursor + 1, Math.max(cursor + 1, end - 1)), span: { from: cursor, to: end } });
+    cursor = end;
+  }
+  return argumentsRead;
+}
+
+function mapPgfLayerStatement(node: SyntaxNode, source: string, state: StatementMappingState): PgfLayerStatement {
+  const statementIndex = allocateStatementIndex(state);
+  const groupNode = findFirstChildByName(node, "Group");
+  const command = findFirstChildByName(node, "PgfSetLayersCmd") ? "set" : "declare";
+  const argumentRaw = groupNode ? extractGroupInnerRaw(groupNode, source) : "";
+  const names = command === "set"
+    ? argumentRaw.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+    : [argumentRaw.trim()].filter((entry) => entry.length > 0);
+  return {
+    kind: "PgfLayer",
+    id: pgfLayerStatementId(statementIndex),
+    span: { from: node.from, to: node.to },
+    command,
+    argumentRaw,
+    ...(groupNode ? { argumentSpan: toGroupInnerSpan(groupNode, source) } : {}),
+    names
   };
 }
 

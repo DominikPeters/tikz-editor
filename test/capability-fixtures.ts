@@ -107,6 +107,30 @@ export const capabilityFixtures: Record<string, string> = {
   \end{scope}
   \draw (0,0) -- (1,0);
 \end{tikzpicture}`,
+  pgf_layers: String.raw`\begin{tikzpicture}
+  \pgfdeclarelayer{back}
+  \pgfdeclarelayer{front}
+  \pgfsetlayers{back,main,front}
+  \node[fill=white, draw] (a) at (0,0) {A};
+  \begin{pgfonlayer}{back}
+    \fill[yellow] (-0.5,-0.5) rectangle (0.5,0.5);
+  \end{pgfonlayer}
+  \begin{pgfonlayer}{front}
+    \draw[red] (a.south west) -- (a.north east);
+  \end{pgfonlayer}
+\end{tikzpicture}`,
+  pgf_environments: String.raw`\begin{tikzpicture}
+  \draw (0,0) rectangle (2,1);
+  \begin{pgfscope}
+    \draw (0,0) -- (2,1);
+  \end{pgfscope}
+  \begin{pgfinterruptboundingbox}
+    \draw[red] (0,0) -- (5,0);
+  \end{pgfinterruptboundingbox}
+  \begin{pgflowlevelscope}{\pgftransformxshift{1cm}}
+    \draw (0,0) -- (1,1);
+  \end{pgflowlevelscope}
+\end{tikzpicture}`,
   arrow_tips: String.raw`\begin{tikzpicture}[>=Stealth]
   \draw[arrows={-Latex[open,length=10pt]}] (0,0) -- (1,0);
 \end{tikzpicture}`,
