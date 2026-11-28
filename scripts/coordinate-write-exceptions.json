@@ -1513,6 +1513,14 @@
   },
   {
     "rule": "F2",
+    "symbol": "unchangedSource",
+    "file": "packages/core/src/edit/pgfplots/inspector.ts",
+    "declaration": "applyPgfplotsSetProperty.newSource",
+    "count": 1,
+    "expression": "unchangedSource(source)"
+  },
+  {
+    "rule": "F2",
     "symbol": "editedSlice",
     "file": "packages/core/src/edit/property-write-planner.ts",
     "declaration": "deriveSingleSourcePatch.replacement",

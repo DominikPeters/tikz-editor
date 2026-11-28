@@ -464,8 +464,8 @@ function tableEdits(source: string, located: Extract<Located, { kind: "table" }>
           const raw = source.slice(entry.valueSpan.from, entry.valueSpan.to);
           for (const match of raw.matchAll(/\\thisrow\{([^{}]*)\}/gu)) {
             if (match[1]?.trim() !== old) continue;
-            const from = entry.valueSpan.from + (match.index ?? 0) + "\\thisrow{".length;
-            edits.push({ span: { from, to: from + (match[1]?.length ?? 0) }, text: name });
+            const from = entry.valueSpan.from + match.index + "\\thisrow{".length;
+            edits.push({ span: { from, to: from + match[1].length }, text: name });
           }
         }
       }

@@ -354,7 +354,7 @@ function buildGridStyleSection(axis: AxisStatement, id: string): InspectorSectio
     id: "pgfplots-grid", title: "Grid lines", sourceLevel: "command",
     properties: [
       color("grid style", "Color", "grid-color"),
-      { kind: "dashStyle", id: "pgfplots-grid-dash", label: "Dash style", value: DASH_FLAGS.has(dash) ? dash as never : "solid" as never, options: DASH_STYLE_OPTIONS, previewLineWidth: 0.4, write: write(id, pgfplotsSubstyleKey("grid style", "dash")) },
+      { kind: "dashStyle", id: "pgfplots-grid-dash", label: "Dash style", value: DASH_STYLE_OPTIONS.find((option) => option.value === dash)?.value ?? "solid", options: DASH_STYLE_OPTIONS, previewLineWidth: 0.4, write: write(id, pgfplotsSubstyleKey("grid style", "dash")) },
       color("minor grid style", "Minor color", "minor-grid-color")
     ]
   };
@@ -447,12 +447,13 @@ export function applyPgfplotsSetProperty(
   if (action.key === PGFPLOTS_CHART_TYPE_KEY) return applyChangeChartTypeAction(source, elementId, action.value.trim(), parseOptions);
   if (action.key.startsWith(SUBSTYLE_PREFIX)) {
     const [style = "", setting = ""] = action.key.slice(SUBSTYLE_PREFIX.length).split("|");
-    if (!["font", "color", "rotate", "dash"].includes(setting)) return { kind: "unsupported", reason: `Unknown style setting ${setting}.` };
+    const known: SubstyleSetting | undefined = (["font", "color", "rotate", "dash"] as const).find((candidate) => candidate === setting);
+    if (!known) return { kind: "unsupported", reason: `Unknown style setting ${setting}.` };
     const existing = lastEntry(resolved.target.options?.entries, style);
     const raw = existing?.kind === "kv" ? existing.valueRaw : null;
     let value = action.value.trim();
-    if (setting === "dash" && value === "solid" && raw === null) value = "";
-    const next = writeSubstyle(raw, setting as SubstyleSetting, value);
+    if (known === "dash" && value === "solid" && raw === null) value = "";
+    const next = writeSubstyle(raw, known, value);
     const writeKey = existing && existing.kind !== "unknown" ? existing.key : style;
     const result = applySetPropertyActionRaw(source, { elementId, key: writeKey, value: next ?? "" }, parseOptions);
     if (result.kind === "success" || result.kind === "partial") return { ...result, changedSourceIds: [axisId] };

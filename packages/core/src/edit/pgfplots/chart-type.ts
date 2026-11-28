@@ -156,6 +156,10 @@ function isOnFlag(entry: KeyedEntry): boolean {
   return entry.kind === "flag" || valueOf(entry) === "true";
 }
 
+const TYPE_FLAG_ENTRIES: ReadonlyArray<[Exclude<PlotTypeId, "line" | "area">, string]> = [
+  ["scatter", TYPE_FLAG.scatter], ["smooth", TYPE_FLAG.smooth], ["step", TYPE_FLAG.step], ["comb", TYPE_FLAG.comb], ["bar", TYPE_FLAG.bar]
+];
+
 const code = (text: string) => `\`${text}\``;
 
 // ---------------------------------------------------------------------------
@@ -177,7 +181,7 @@ function readPlotType(source: string, plot: AddPlotStatement): PlotReading {
     const kv = keyed(entry);
     if (!kv) return { kind: "refused", reason: `The plot option ${code(entry.raw.trim())} is not one the type switch knows.` };
     const key = plain(kv.key);
-    const typeOf = (Object.entries(TYPE_FLAG) as Array<[PlotTypeId, string]>).find(([, flag]) => flag === key)?.[0];
+    const typeOf = TYPE_FLAG_ENTRIES.find(([, flag]) => flag === key)?.[0];
     if (typeOf) {
       if (!isOnFlag(kv)) return { kind: "refused", reason: `The plot option ${code(kv.raw.trim())} is not one the type switch knows.` };
       found.add(typeOf);
@@ -200,7 +204,7 @@ function readPlotType(source: string, plot: AddPlotStatement): PlotReading {
     if (!(trailing === "\\closedcycle" && fillFlag) || found.size > 0) return { kind: "refused", reason: "The plot is filled or closed in a way the type switch does not recognise (an area is `fill` with `\\closedcycle`)." };
     return { kind: "type", type: "area", entries };
   }
-  if (found.size > 1) return { kind: "refused", reason: `The plot combines ${[...found].map((type) => code(TYPE_FLAG[type as keyof typeof TYPE_FLAG])).join(" and ")}; edit its type in the source.` };
+  if (found.size > 1) return { kind: "refused", reason: `The plot combines ${TYPE_FLAG_ENTRIES.filter(([type]) => found.has(type)).map(([, flag]) => code(flag)).join(" and ")}; edit its type in the source.` };
   const [type = "line"] = [...found];
   return { kind: "type", type, entries };
 }
@@ -382,8 +386,8 @@ function listEdits(source: string, list: OptionListAst | undefined, remove: read
     const first = entries[index];
     if (!first || !removed.has(first)) { index += 1; continue; }
     let last = index;
-    while (last + 1 < entries.length && removed.has(entries[last + 1] as OptionEntry)) last += 1;
-    const lastEntry = entries[last] as OptionEntry;
+    while (last + 1 < entries.length && entries[last + 1] !== undefined && removed.has(entries[last + 1] ?? first)) last += 1;
+    const lastEntry = entries[last] ?? first;
     const following = entries[last + 1];
     const previous = entries[index - 1];
     if (following) {
@@ -421,7 +425,7 @@ function mergeAdjacentRemovals(edits: ChartTypeEdit[]): ChartTypeEdit[] {
   const out: ChartTypeEdit[] = [];
   for (const edit of sorted) {
     const last = out.at(-1);
-    if (last && last.text === "" && edit.text === "" && edit.span.from < last.span.to) {
+    if (last?.text === "" && edit.text === "" && edit.span.from < last.span.to) {
       last.span = { from: last.span.from, to: Math.max(last.span.to, edit.span.to) };
       continue;
     }
@@ -509,7 +513,7 @@ function planPlot(context: AxisContext, plot: AddPlotStatement, target: PlotType
   if (reading.kind === "refused") return { reason: reading.reason };
   const input = plot.input.kind;
   if (input === "other") return { reason: "The plot's input is not coordinates, a table or an expression." };
-  if (input === "table" && plot.input.kind === "table" && (plot.input.options?.entries ?? []).some((entry) => { const kv = keyed(entry); return !kv || !TABLE_KEYS.has(plain(kv.key)); })) {
+  if (plot.input.kind === "table" && (plot.input.options?.entries ?? []).some((entry) => { const kv = keyed(entry); return !kv || !TABLE_KEYS.has(plain(kv.key)); })) {
     return { reason: "The table has options the type switch does not know." };
   }
   if (reading.type === target) return { edits: [] };
@@ -643,7 +647,7 @@ export function chartTypeConversions(source: string, axis: AxisStatement, evalua
     if (id === "stacked-bar") {
       // U6: stacking adds coordinate by coordinate; plots with different x values do not stack as bars.
       const xs = plots.map((plot) => readPlotData(context, plot).xs?.join("\u0000") ?? null);
-      if (xs.some((value) => value === null) || new Set(xs).size > 1) return refuse("Stacked bars need every plot to have the same x values.");
+      if (xs.includes(null) || new Set(xs).size > 1) return refuse("Stacked bars need every plot to have the same x values.");
     }
     edits.push(...axisBarEdits(context, id === "bar" ? "ybar" : id === "stacked-bar" ? "ybar stacked" : null));
     return { kind: id, label, current: false, available: true, edits };

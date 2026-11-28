@@ -407,7 +407,7 @@ describe("pgfplots editing: inspector", () => {
     expect(tick?.kind === "text" && [tick.label, tick.placeholder]).toEqual(["X tick step", "Auto"]);
     for (const property of descriptor?.sections.flatMap((s) => s.properties) ?? []) expect(property.label).not.toMatch(/auto|\(/iu);
     expect(props.get("pgfplots-xlabel")?.kind === "text" && (props.get("pgfplots-xlabel") as { value: string }).value).toBe("Time");
-    expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-elements", "pgfplots-labels", "pgfplots-size", "pgfplots-limits", "pgfplots-axes", "pgfplots-legend"]);
+    expect(descriptor?.sections.map((s) => s.id)).toEqual(["pgfplots-elements", "pgfplots-labels", "pgfplots-size", "pgfplots-limits", "pgfplots-axes", "pgfplots-ticks", "pgfplots-grid", "pgfplots-legend"]);
   });
 
   it("plot sections: cycle-list defaults, legend entry, expression", () => {

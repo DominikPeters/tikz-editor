@@ -56,6 +56,8 @@ export function PlotDataPanel(props: { plotId: string; onClose: () => void }): J
     const axis = parsed?.figure.body.find((statement) => statement.kind === "Axis" && statement.id === axisId);
     if (axis?.kind !== "Axis") return [{ value: plotId, label: "Plot" }];
     return axis.body.flatMap((item) => (item.kind === "AddPlot" ? [{ value: item.id, label: `Plot ${String(item.plotIndex + 1)} (${item.input.kind === "table" ? "table" : item.input.kind})` }] : []));
+    // The parse result follows `source`; re-read when the source changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plotId, source]);
 
   const rows = grid.kind === "coordinates" || grid.kind === "table" || grid.kind === "readonly" ? grid.rows : [];

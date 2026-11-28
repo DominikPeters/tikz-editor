@@ -23,7 +23,7 @@ const options = (text: string) => /\\begin\{axis\}\[(.*)\]/u.exec(text)?.[1];
 
 function evaluate(text: string) {
   const result = evaluateTikzFigure(parseTikz(text).figure, text);
-  expect(result.diagnostics.filter((diagnostic) => diagnostic.severity !== "info" && diagnostic.code !== "pgfplots-compat")).toEqual([]);
+  expect(result.diagnostics.filter((diagnostic) => diagnostic.code !== "pgfplots-compat")).toEqual([]);
   return result;
 }
 
