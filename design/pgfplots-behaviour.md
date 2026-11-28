@@ -1343,7 +1343,12 @@ sets all three to w (0.5\textwidth → 153.64493pt; `onlytextwidth` and
 then 263.48989 …); `description` by 2cm + .5em (279.91487pt in Madrid). A
 picture set in a paragraph (inside a block, a column, a list) uses these
 (`beamer/picture-lengths.ts`); before 2026-11-28 the editor passed an infinite
-width there and the axis fell back to its default size. VERIFIED on
+width there and the axis fell back to its default size. `\textheight` is the
+frame's: paper height less the theme's head- and footline (default 4:3
+269.14662pt, 16:9 12pt 252.0748pt, Madrid 16:9 243.4168pt); the picture was
+evaluated without the deck's class and took article's 550pt. A picture draws in
+the theme's normal text colour (`\setbeamercolor{normal text}{fg=…}` colours
+the axis box, ticks and labels; the plot keeps its cycle colour). VERIFIED on
 `test/fixtures/beamer/pgfplots/` (glyphs within 0.002pt).
 
 **Y5 — Overlays in an axis body.** pgfplots postpones drawing to `\end{axis}`
