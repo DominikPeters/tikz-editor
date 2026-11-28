@@ -4037,7 +4037,6 @@ async function prepareEmbeddedTikz(params: {
   const coveredModel = { ...rendered.svg.model, parts: rendered.svg.model.parts.filter(part => !visibleParts.has(part)) };
   const empty = rendered.semantic.scene.elements.length === 0 && !rendered.semantic.scene.bounds;
   const viewBox = empty ? { x: 0, y: 0, width: 1, height: 1 } : rendered.svg.viewBox;
-  const scale = Math.min(1, params.width / Math.max(viewBox.width, 1));
   for (const diagnostic of [
     ...rendered.parse.diagnostics,
     ...rendered.semantic.diagnostics,
@@ -4057,8 +4056,10 @@ async function prepareEmbeddedTikz(params: {
     id: params.node.id,
     sourceSpan: params.node.span,
     horizontalAlignment: params.node.horizontalAlignment,
-    width: empty ? 0 : viewBox.width * scale,
-    height: empty ? 0 : viewBox.height * scale,
+    // TeX sets the picture's box at its natural size: a picture wider than the
+    // line overflows it (an overfull box), it is not scaled down.
+    width: empty ? 0 : viewBox.width,
+    height: empty ? 0 : viewBox.height,
     model,
     coveredModel,
     ruledShapes: beamerTikzRuledShapes(rendered, pictureStep.ruled),

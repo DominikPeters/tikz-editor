@@ -17,7 +17,7 @@ const fixture = (name: string) => ({
   },
 });
 
-const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix"];
+const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull"];
 
 describe("pgfplots in Beamer frames", () => {
   for (const name of CASES) {
