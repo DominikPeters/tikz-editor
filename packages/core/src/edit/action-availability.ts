@@ -6,6 +6,7 @@ import { planAlignDeltas, planDistributeDeltas, type AlignMode, type DistributeA
 import { parseEditableTargetId } from "./editable-targets.js";
 import { isAdornmentTargetId } from "./editable-targets.js";
 import type { EditParseOptions } from "./parse-options.js";
+import { TREE_CHILD_MOVE_BLOCK_REASON, isTreeChildSourceId } from "./tree-child-placement.js";
 import {
   parseStatementSnapshot,
   resolveStatementRefs,
@@ -608,6 +609,10 @@ function checkArrangePreconditions(
 
   if (!facts.scene) {
     return "No scene geometry is available for arranging.";
+  }
+
+  if (facts.selectedSourceIds.some(isTreeChildSourceId)) {
+    return TREE_CHILD_MOVE_BLOCK_REASON;
   }
 
   if (facts.selectedMissingBounds.length > 0) {

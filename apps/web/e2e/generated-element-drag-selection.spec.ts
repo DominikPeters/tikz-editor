@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectSourceCanvasConsistency, gotoApp, readSelectedSourceIds, readSource, resetStorageBeforeNavigation, setCanvasTransform, setSource, waitForHitRegions } from "./helpers";
+import { canvasViewport, expectSourceCanvasConsistency, gotoApp, readSelectedSourceIds, readSource, resetStorageBeforeNavigation, setCanvasTransform, setSource, waitForHitRegions } from "./helpers";
 
 // Elements that TikZ generates from one statement item (a pic, graph nodes,
 // matrix cells, tree children, a decorated path): after a drag they stay
@@ -63,3 +63,29 @@ for (const { name, body, target, moves } of CASES) {
     await expect.poll(() => readSelectedSourceIds(page)).toEqual(selected);
   });
 }
+
+// The arrow keys move the selection without the drag's draggable filter. A
+// tree child has no coordinate of its own: the nudge must leave the child
+// (and the selection) as they are and say why.
+test("an arrow-key nudge leaves a selected tree child in place", async ({ page }) => {
+  const source = wrap(String.raw`\node {root} child {node {c1}} child {node {c2} child {node {c21}}};`);
+  await setSource(page, source);
+  await waitForHitRegions(page);
+  await setCanvasTransform(page, { translateX: 300, translateY: 300, scale: 1.5 });
+  await waitForHitRegions(page);
+  const ids = await page.evaluate(() => [...new Set(Array.from(document.querySelectorAll("[data-hit-region-target-id]")).map((element) => element.getAttribute("data-hit-region-target-id") ?? ""))]);
+  const id = ids.find((candidate) => /tree-child:2:[^:]+:[^:]+:[^:]+$/u.test(candidate));
+  expect(id, `hit regions: ${ids.join(", ")}`).toBeDefined();
+  if (!id) return;
+  const start = await pointOn(page, id);
+  await page.mouse.click(start.x, start.y);
+  const selected = await readSelectedSourceIds(page);
+  expect(selected).toEqual([id]);
+  // A click on a node opens its text for editing; Escape closes that and keeps the selection.
+  if (await page.getByTestId("canvas-text-edit-textarea").isVisible()) await page.keyboard.press("Escape");
+  await canvasViewport(page).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByTestId("canvas-warning-message")).toContainText("Tree children are placed by the tree layout");
+  expect(await readSource(page)).toBe(source);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual(selected);
+});
