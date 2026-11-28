@@ -600,10 +600,6 @@ export function chartTypeConversions(source: string, axis: AxisStatement, evalua
   return CHART_KINDS.map(({ id, label }): ChartTypeConversion<ChartKindId> => {
     const refuse = (reason: string): ChartTypeConversion<ChartKindId> => ({ kind: id, label, current: false, available: false, reason });
     if (current === id) return { kind: id, label, current: true, available: false, reason: "This is the chart's type." };
-    const kind = CHART_KINDS.find((candidate) => candidate.id === id);
-    if (current !== null && kind?.convertibleFrom && !kind.convertibleFrom(current) && id !== "semilogy") {
-      return refuse(`A ${CHART_KINDS.find((candidate) => candidate.id === current)?.label ?? current} does not switch to ${label}.`);
-    }
     if (id === "semilogy") return refuse("Log scales are set with X scale and Y scale in the Axes section.");
     if (plots.length === 0) return refuse("The axis has no plots.");
     if (context.blocked) return refuse(context.blocked);
@@ -611,6 +607,11 @@ export function chartTypeConversions(source: string, axis: AxisStatement, evalua
     if (id === "function" && expressions < plots.length) return refuse("Function Plot is the line chart of expression plots; this chart plots data, so its line chart is Data Plot.");
     if (id === "data" && expressions === plots.length) return refuse("Data Plot is the line chart of data; this chart plots expressions, so its line chart is Function Plot.");
     if ((id === "function" || id === "data") && context.logY) return refuse("This is a line chart on a log axis; the scale is the Y scale field in the Axes section.");
+    // The static part of the rule (CHART_KINDS `convertibleFrom`).
+    const kind = CHART_KINDS.find((candidate) => candidate.id === id);
+    if (current !== null && kind?.convertibleFrom && !kind.convertibleFrom(current)) {
+      return refuse(`A ${CHART_KINDS.find((candidate) => candidate.id === current)?.label ?? current} does not switch to ${label}.`);
+    }
     const plotTarget: PlotTypeId = id === "scatter" ? "scatter" : id === "area" ? "area" : "line";
     const edits: ChartTypeEdit[] = [];
     for (const plot of plots) {
@@ -648,9 +649,13 @@ export function readChartTypeConversions(
 ): { scope: "axis"; options: Array<ChartTypeConversion<ChartKindId>> } | { scope: "plot"; options: Array<ChartTypeConversion<PlotTypeId>> } | null {
   const axisId = owningAxisId(elementId);
   if (!axisId) return null;
-  const axis = findAxisStatement(parseTikzForEdit(source, parseOptions).figure.body, axisId);
+  const parsed = parseTikzForEdit(source, parseOptions);
+  const axis = findAxisStatement(parsed.figure.body, axisId);
   if (!axis) return null;
-  const evaluation = getAxisEvaluations(elements).find((candidate) => candidate.axisId === axisId) ?? null;
+  // A scene from an incremental update may not carry the axis evaluation; evaluate then.
+  const evaluation = getAxisEvaluations(elements).find((candidate) => candidate.axisId === axisId)
+    ?? getAxisEvaluations(evaluateTikzFigure(parsed.figure, source).scene.elements).find((candidate) => candidate.axisId === axisId)
+    ?? null;
   if (parseAxisPlotId(elementId)) {
     const plot = plotsOf(axis).find((candidate) => candidate.id === elementId);
     return plot ? { scope: "plot", options: plotTypeConversions(source, axis, plot, evaluation) } : null;

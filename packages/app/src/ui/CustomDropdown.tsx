@@ -5,6 +5,9 @@ import css from "./CustomDropdown.module.css";
 export type CustomDropdownOption<TValue extends string> = {
   value: TValue;
   label: string;
+  /** Listed greyed out and not choosable; `reason` is shown under the label. */
+  disabled?: boolean;
+  reason?: string;
 };
 
 export type CustomDropdownSeparator = {
@@ -47,7 +50,9 @@ type CustomDropdownProps<TValue extends string> = {
 const MENU_GAP_PX = 2;
 const MENU_VIEWPORT_PADDING_PX = 8;
 const MENU_MAX_HEIGHT_PX = 220;
+const MENU_REASON_MAX_HEIGHT_PX = 360;
 const MENU_MIN_HEIGHT_PX = 80;
+const MENU_REASON_MIN_WIDTH_PX = 280;
 
 export function CustomDropdown<TValue extends string>({
   ariaLabel,
@@ -176,6 +181,8 @@ export function CustomDropdown<TValue extends string>({
       }
 
       const rootRect = rootElement.getBoundingClientRect();
+      // A list with reasons under greyed-out choices gets room to read them, kept inside the window.
+      const hasReasons = options.some((item) => isCustomDropdownOption(item) && item.disabled === true && item.reason !== undefined);
       const spaceBelow = window.innerHeight - rootRect.bottom - MENU_VIEWPORT_PADDING_PX - MENU_GAP_PX;
       const spaceAbove = rootRect.top - MENU_VIEWPORT_PADDING_PX - MENU_GAP_PX;
       const naturalHeight = menuListElement.scrollHeight;
@@ -183,15 +190,15 @@ export function CustomDropdown<TValue extends string>({
       const openUp = naturalHeight > spaceBelow && spaceAbove > spaceBelow;
       const availableSpace = openUp ? spaceAbove : spaceBelow;
       const boundedMaxHeight = Math.min(
-        MENU_MAX_HEIGHT_PX,
+        hasReasons ? MENU_REASON_MAX_HEIGHT_PX : MENU_MAX_HEIGHT_PX,
         Math.max(MENU_MIN_HEIGHT_PX, Math.floor(availableSpace))
       );
 
       const top = openUp
         ? rootRect.top - MENU_GAP_PX
         : rootRect.bottom + MENU_GAP_PX;
-      const left = rootRect.left;
-      const width = rootRect.width;
+      const width = hasReasons ? Math.max(rootRect.width, MENU_REASON_MIN_WIDTH_PX) : rootRect.width;
+      const left = Math.max(MENU_VIEWPORT_PADDING_PX, Math.min(rootRect.left, window.innerWidth - width - MENU_VIEWPORT_PADDING_PX));
 
       setMenuFixedStyle((current) =>
         current.top === top && current.left === left && current.width === width && current.openUp === openUp
@@ -208,7 +215,7 @@ export function CustomDropdown<TValue extends string>({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [open]);
+  }, [open, options]);
 
   function commitEditableValue(): void {
     if (!editable || !isEditing || suppressCommitRef.current) {
@@ -323,6 +330,16 @@ export function CustomDropdown<TValue extends string>({
               }
 
               const selected = item.value === value;
+              if (item.disabled) {
+                return (
+                  <div key={item.value} role="option" aria-selected={false} aria-disabled="true" data-select="chrome" className={[css.option, css.optionDisabled, optionClassName].filter(Boolean).join(" ")} title={item.reason}>
+                    <span className={css.optionText}>
+                      <span>{item.label}</span>
+                      {item.reason ? <span className={css.optionReason}>{item.reason}</span> : null}
+                    </span>
+                  </div>
+                );
+              }
               return (
                 <button
                   key={item.value}

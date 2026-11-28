@@ -37,13 +37,13 @@ function targets(source: string): Array<[string, string]> {
 }
 
 function conversions(source: string, elementId: string): Array<ChartTypeConversion<string>> {
-  const list = readChartTypeConversions(source, elementId, evaluate(source).result.scene.elements, PARSE);
+  const list = readChartTypeConversions(source, elementId, evaluate(source).result.scene.elements);
   if (!list) throw new Error(`no conversions for ${elementId}`);
   return list.options as Array<ChartTypeConversion<string>>;
 }
 
 function change(source: string, elementId: string, chartType: string): string {
-  const result = applyEditAction(source, evaluate(source).result.editHandles, { kind: "changeChartType", elementId, chartType }, PARSE);
+  const result = applyEditAction(source, evaluate(source).result.editHandles, { kind: "changeChartType", elementId, chartType });
   if (result.kind !== "success") throw new Error(`changeChartType ${chartType} failed: ${result.kind === "error" ? result.message : result.kind === "unsupported" ? result.reason : ""}`);
   return result.newSource;
 }
@@ -87,7 +87,7 @@ describe("reversibility", () => {
   const real = CHART_TYPE_FIXTURES.filter((fixture) => fixture.id.startsWith("real-"));
   it.each(real.map((fixture) => [fixture.id, fixture] as const))("%s: every offered switch can be undone by switching back (same drawing)", (_id, fixture) => {
     const source = `${CHART_TYPE_PREAMBLE}${fixture.picture}`;
-    const drawing = (text: string) => JSON.stringify(evaluate(text).result.scene.elements.map((element) => [element.kind, element.kind === "Path" ? element.style : null, element.kind === "Path" ? element.pathData ?? null : null]));
+    const drawing = (text: string) => JSON.stringify(evaluate(text).result.scene.elements.map((element) => [element.kind, element.kind === "Path" ? element.style : null, element.kind === "Path" ? element.commands : null]));
     for (const [, elementId] of targets(source)) {
       const options = conversions(source, elementId);
       const current = options.find((option) => option.current)?.kind;
@@ -138,7 +138,7 @@ describe("exact edits", () => {
   });
 
   it("refuses with the reason in the action too", () => {
-    const result = applyEditAction(DATA, [], { kind: "changeChartType", elementId: axisId, chartType: "semilogy" }, PARSE);
+    const result = applyEditAction(DATA, [], { kind: "changeChartType", elementId: axisId, chartType: "semilogy" });
     expect(result.kind).toBe("unsupported");
     expect(result.kind === "unsupported" ? result.reason : "").toMatch(/Y scale/u);
   });

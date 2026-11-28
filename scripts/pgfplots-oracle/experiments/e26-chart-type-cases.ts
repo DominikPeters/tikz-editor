@@ -20,10 +20,10 @@ function conversions(source: string): Array<{ id: string; source: string }> {
   const out: Array<{ id: string; source: string }> = [];
   const targets = [{ elementId: axis.id, label: "axis" }, ...axis.body.flatMap((item, index) => (item.kind === "AddPlot" ? [{ elementId: item.id, label: `plot${String(axis.body.filter((other, j) => j < index && other.kind === "AddPlot").length)}` }] : []))];
   for (const target of targets) {
-    const list = readChartTypeConversions(source, target.elementId, elements, { includeContextDefinitions: true });
+    const list = readChartTypeConversions(source, target.elementId, elements);
     for (const option of list?.options ?? []) {
       if (!option.available) continue;
-      const result = applyChangeChartTypeAction(source, target.elementId, option.kind, { includeContextDefinitions: true });
+      const result = applyChangeChartTypeAction(source, target.elementId, option.kind);
       if (result.kind === "success") out.push({ id: `${target.label}-${option.kind}`, source: result.newSource });
     }
   }

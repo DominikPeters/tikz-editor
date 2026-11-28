@@ -1,5 +1,6 @@
 import { APP_MENU_COMMAND_IDS, type AppMenuCommandId, type AppMenuItem } from "../app-menu/types.js";
 import type { CanvasContextMenuDefinition } from "./types.js";
+import { CHART_TYPE_MENU_ITEMS, PLOT_TYPE_MENU_ITEMS } from "../app-menu/chart-menu.js";
 
 const REORDER_ITEMS: readonly AppMenuItem[] = [
   {
@@ -506,6 +507,7 @@ function buildAxisItems(elements: ChartMenuElements, selectionItems: readonly Ap
     toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_YLABEL, "Y Label", elements.ylabel),
     toggle(APP_MENU_COMMAND_IDS.CHART_TOGGLE_LEGEND, "Legend", elements.legend),
     { kind: "submenu", label: "Grid", items: GRID_ITEMS },
+    { kind: "submenu", label: "Change Chart Type", items: CHART_TYPE_MENU_ITEMS },
     { kind: "separator" },
     { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_INSERT_PLOT, label: "Insert Plot" },
     { kind: "separator" },
@@ -516,6 +518,7 @@ function buildAxisItems(elements: ChartMenuElements, selectionItems: readonly Ap
 /** A plot: its legend entry, draw order within the axis, style reset, delete. */
 const PLOT_ITEMS: readonly AppMenuItem[] = [
   { kind: "command", commandId: APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY, label: "Edit Legend Entry" },
+  { kind: "submenu", label: "Change Plot Type", items: PLOT_TYPE_MENU_ITEMS },
   { kind: "separator" },
   { kind: "command", commandId: APP_MENU_COMMAND_IDS.BRING_FORWARD, label: "Bring Forward" },
   { kind: "command", commandId: APP_MENU_COMMAND_IDS.SEND_BACKWARD, label: "Send Backward" },

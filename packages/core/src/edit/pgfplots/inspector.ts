@@ -27,10 +27,36 @@ import { findAxisStatement, readAxisEditInfo } from "./axis-actions.js";
 import { applyReplacements, legendAssociationFor, readLegendAssociation, setPlotLegendEntry } from "./legend-edits.js";
 import { legendEntryOf } from "../../pgfplots/legend.js";
 import { applySetAxisElementAction, AXIS_ELEMENT_KINDS, AXIS_ELEMENT_LABELS, readAxisElements, type AxisElementKind } from "./chart-elements.js";
+import { applyChangeChartTypeAction, readChartTypeConversions, type ChartTypeConversion } from "./chart-type.js";
+
+/**
+ * The Chart type / Plot type field: every type, the current one selected, the
+ * ones the switch does not offer for this chart greyed out with the reason.
+ * Null when the chart is none of the types (mixed, or a type the switch does not know).
+ */
+function chartTypeProperty(source: string, elementId: string, elements: readonly SceneElement[], parseOptions: EditParseOptions, label: string): InspectorProperty | null {
+  const list = readChartTypeConversions(source, elementId, elements, parseOptions);
+  if (!list) return null;
+  const options = list.options as Array<ChartTypeConversion<string>>;
+  const current = options.find((option) => option.current);
+  const anyAvailable = options.some((option) => option.available);
+  const reason = options.flatMap((option) => (!option.available && !option.current ? [option.reason] : []))[0];
+  return {
+    kind: "enum", id: `pgfplots-${list.scope === "axis" ? "chart" : "plot"}-type`, label,
+    value: current?.kind ?? "",
+    options: [
+      ...(current ? [] : [{ value: "", label: "Mixed", disabled: true, reason: "The chart is not one of these types (its plots differ, or it uses a type the switch does not change)." }]),
+      ...options.map((option) => (option.available || option.current ? { value: option.kind, label: option.label } : { value: option.kind, label: option.label, disabled: true, reason: option.reason }))
+    ],
+    write: write(elementId, PGFPLOTS_CHART_TYPE_KEY, anyAvailable, anyAvailable ? undefined : reason)
+  };
+}
 
 /** Keys the pgfplots inspector writes that are not option keys. */
 export const PGFPLOTS_LEGEND_ENTRY_KEY = "__pgfplots_legend_entry__";
 export const PGFPLOTS_EXPRESSION_KEY = "__pgfplots_expression__";
+/** Change Chart Type (chart-type.ts): the value is a chart kind on an axis, a plot type on a plot. */
+export const PGFPLOTS_CHART_TYPE_KEY = "__pgfplots_chart_type__";
 
 const TEXT_KEYS = new Set(["xlabel", "ylabel", "title"]);
 const AUTO_KEYS = new Set(["xmin", "xmax", "ymin", "ymax", "width", "height", "xtick distance", "ytick distance", "domain", "samples", "mark size"]);
@@ -108,7 +134,7 @@ const ELEMENT_NOTES: Partial<Record<AxisElementKind, string>> = {
 };
 
 /** One-click add/remove of the title, the axis labels and the legend, with the grid choice. */
-function buildElementsSection(source: string, axis: AxisStatement, elements: readonly SceneElement[], parseOptions: EditParseOptions, grid: InspectorProperty): InspectorSection {
+function buildElementsSection(source: string, axis: AxisStatement, elements: readonly SceneElement[], parseOptions: EditParseOptions, grid: InspectorProperty, chartType: InspectorProperty | null): InspectorSection {
   const state = readAxisElements(source, axis.id, elements, parseOptions);
   const toggles = AXIS_ELEMENT_KINDS.map((kind): InspectorProperty => {
     const entry = state?.[kind];
@@ -119,7 +145,7 @@ function buildElementsSection(source: string, axis: AxisStatement, elements: rea
       write: write(axis.id, pgfplotsElementKey(kind), entry?.enabled ?? false, entry?.enabled === false ? entry.reason : undefined)
     };
   });
-  return { id: "pgfplots-elements", title: "Elements", sourceLevel: "command", properties: [...toggles, grid] };
+  return { id: "pgfplots-elements", title: "Elements", sourceLevel: "command", properties: [...(chartType ? [chartType] : []), ...toggles, grid] };
 }
 
 /** Enum choices: the TeX value, shown in sentence case like the other inspector choices. */
@@ -167,7 +193,7 @@ function buildAxisDescriptor(axis: AxisStatement, elementId: string, elements: r
   const limits = info?.limits;
   const size = effectiveSizePlaceholders(info);
   const sections: InspectorSection[] = [
-    buildElementsSection(source, axis, elements, parseOptions, enumOf("grid", "Grid", GRID_CHOICES, "none")),
+    buildElementsSection(source, axis, elements, parseOptions, enumOf("grid", "Grid", GRID_CHOICES, "none"), elementId === axis.id ? chartTypeProperty(source, axis.id, elements, parseOptions, "Chart type") : null),
     {
       id: "pgfplots-labels", title: "Labels", sourceLevel: "command",
       properties: [text("title", "Title"), text("xlabel", "X label"), text("ylabel", "Y label")]
@@ -243,9 +269,11 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
   // The entry the renderer pairs with this plot, wherever it is written (L4).
   const association = legendAssociationFor(source, axis.id, parseOptions, elements);
   const legendEntry = association ? legendEntryOf(association, plot.id) : null;
+  const plotType = chartTypeProperty(source, plot.id, elements, parseOptions, "Type");
   const style: InspectorSection = {
     id: "pgfplots-plot-style", title: "Plot", sourceLevel: "command",
     properties: [
+      ...(plotType ? [plotType] : []),
       { kind: "color", id: "pgfplots-plot-color", label: "Color", value: stroke, syntaxValue: authored(entries, "color") ?? authored(entries, "draw"), options: colorOptionsForValue(stroke), write: write(id, "color") },
       { kind: "lineWidth", id: "pgfplots-plot-line-width", label: "Line width", value: lineWidth, min: 0.1, max: 6, step: 0.1, presetLabel: lineWidthPresetLabel(lineWidth), write: write(id, "line width") },
       { kind: "dashStyle", id: "pgfplots-plot-dash", label: "Dash style", value: dashStylePresetFromStyle(line?.style.dashArray ?? null, lineWidth), options: DASH_STYLE_OPTIONS, previewLineWidth: lineWidth, write: write(id, "solid") },
@@ -295,6 +323,7 @@ export function applyPgfplotsSetProperty(
   const axisId = resolved.target.ownerSourceId ?? owningAxisId(elementId) ?? elementId;
   const element = elementOfKey(action.key);
   if (element) return applySetAxisElementAction(source, axisId, element, action.value.trim().length > 0 && action.value.trim() !== "false", parseOptions);
+  if (action.key === PGFPLOTS_CHART_TYPE_KEY) return applyChangeChartTypeAction(source, elementId, action.value.trim(), parseOptions);
   if (action.key === PGFPLOTS_LEGEND_ENTRY_KEY || action.key === PGFPLOTS_EXPRESSION_KEY) {
     const parsed = parseTikzForEdit(source, parseOptions);
     const axis = findAxisStatement(parsed.figure.body, axisId);

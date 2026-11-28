@@ -349,6 +349,45 @@ test("label context menu: edit text, remove", async ({ page }) => {
   await expect.poll(() => readSource(page)).not.toContain("addlegendentry");
 });
 
+test("change chart type in the inspector: unavailable kinds show their reason; one undo step", async ({ page }) => {
+  await select(page, AXIS);
+  const panel = inspector(page);
+  await panel.getByRole("button", { name: "Chart type", exact: true }).click();
+  // Scatter is not offered: the first plot is `\addplot[…]` without marks.
+  const scatter = page.getByRole("option", { name: /^Scatter Plot/u });
+  await expect(scatter).toHaveAttribute("aria-disabled", "true");
+  await expect(scatter).toContainText("Choose a Mark first");
+  await shot(page, "chart-type-unavailable");
+  await page.getByRole("option", { name: "Bar Chart", exact: true }).click();
+  const bar = SOURCE.replace("\\begin{axis}[xlabel", "\\begin{axis}[ybar, xlabel");
+  await expect.poll(() => readSource(page)).toBe(bar);
+  await settled(page);
+  await shot(page, "chart-type-bar");
+  await focusCanvas(page);
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readSource(page)).toBe(SOURCE);
+  await settled(page);
+});
+
+test("change plot type from the context menu; a refused type is disabled with its reason", async ({ page }) => {
+  await select(page, `${AXIS}:plot:1`);
+  await openContextMenu(page, `${AXIS}:plot:1`);
+  await page.getByTestId("canvas-context-menu").getByRole("menuitem", { name: "Change Plot Type" }).hover();
+  const bar = page.getByTestId("canvas-context-cmd-chart.plot-type-bar");
+  await expect(bar).toBeDisabled();
+  await expect(bar).toHaveAttribute("title", /legend/u);
+  await shot(page, "context-menu-plot-type");
+  await runContextCommand(page, "chart.plot-type-smooth");
+  await expect.poll(() => readSource(page)).toBe(SOURCE.replace("\\addplot coordinates {(0,2)", "\\addplot+[smooth] coordinates {(0,2)"));
+  await settled(page);
+  await select(page, `${AXIS}:plot:1`);
+  await openContextMenu(page, `${AXIS}:plot:1`);
+  await page.getByTestId("canvas-context-menu").getByRole("menuitem", { name: "Change Plot Type" }).hover();
+  await runContextCommand(page, "chart.plot-type-line");
+  await expect.poll(() => readSource(page)).toBe(SOURCE);
+  await settled(page);
+});
+
 test("edit a legend entry in place (\\addlegendentry form)", async ({ page }) => {
   // Click the axis, click the entry (drills into the legend), double-click the entry: as for the x label.
   const entry = page.locator(`[data-hit-region-target-id='${AXIS}:legend'][data-hit-region-interaction-mode='text']`).first();

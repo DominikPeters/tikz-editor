@@ -89,6 +89,30 @@
   background: color-mix(in srgb, var(--control-accent) 22%, transparent);
 }
 
+/* A choice that is listed but not offered, with the reason under its label. */
+.optionDisabled {
+  flex-shrink: 0;
+  cursor: default;
+  color: color-mix(in srgb, var(--text) 48%, transparent);
+}
+
+.optionDisabled:hover {
+  background: transparent;
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px 0;
+}
+
+.optionReason {
+  font-size: calc(var(--app-ui-scale, 1) * 10px);
+  line-height: 1.25;
+  white-space: normal;
+}
+
 .separator {
   height: 0;
   margin: 4px 6px 3px;

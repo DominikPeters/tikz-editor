@@ -86,7 +86,8 @@ type InspectorPropertyValue =
       id: string;
       label: string;
       value: string;
-      options: Array<{ value: string; label: string }>;
+      /** `disabled` choices are listed greyed out with their `reason` (Change Chart Type). */
+      options: Array<{ value: string; label: string; disabled?: boolean; reason?: string }>;
       write: SetPropertyWriteTarget;
       readOnlyReason?: string;
     }

@@ -109,7 +109,7 @@ describe("chart elements: title and axis labels", () => {
     const descriptor = buildPgfplotsInspectorDescriptor(source, axisIdOf(source), evaluate(source).scene.elements);
     const elements = descriptor?.sections.find((section) => section.id === "pgfplots-elements");
     expect(elements?.properties.map((p) => [p.label, p.kind === "boolean" ? p.value : (p as { value: string }).value])).toEqual([
-      ["Title", false], ["X label", false], ["Y label", false], ["Legend", false], ["Grid", "none"]
+      ["Chart type", "data"], ["Title", false], ["X label", false], ["Y label", false], ["Legend", false], ["Grid", "none"]
     ]);
   });
 

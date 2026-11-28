@@ -9,7 +9,8 @@
 import type { Span } from "@tikz-editor/core/ast/types";
 import { applyResetPlotStyleAction, AXIS_ELEMENT_KINDS, readAxisElements, type AxisElementKind, type AxisElementsState } from "@tikz-editor/core/edit/pgfplots/chart-elements";
 import { CHART_KINDS, type ChartKindId } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
-import { CHART_KIND_COMMAND_IDS } from "../app-menu/chart-menu";
+import { CHART_KIND_COMMAND_IDS, CHART_TYPE_COMMAND_IDS, PLOT_TYPE_COMMAND_IDS } from "../app-menu/chart-menu";
+import { PLOT_TYPES, readChartTypeConversions, type ChartTypeConversion } from "@tikz-editor/core/edit/pgfplots/chart-type";
 import { legendAssociationFor } from "@tikz-editor/core/edit/pgfplots/legend-edits";
 import { applyReorderPlotsAction } from "@tikz-editor/core/edit/pgfplots/axis-actions";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
@@ -30,7 +31,13 @@ export const CHART_COMMAND_IDS = [
   APP_MENU_COMMAND_IDS.CHART_TOGGLE_LEGEND, APP_MENU_COMMAND_IDS.CHART_GRID_NONE, APP_MENU_COMMAND_IDS.CHART_GRID_MAJOR,
   APP_MENU_COMMAND_IDS.CHART_GRID_MINOR, APP_MENU_COMMAND_IDS.CHART_GRID_BOTH, APP_MENU_COMMAND_IDS.CHART_INSERT_PLOT,
   APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY, APP_MENU_COMMAND_IDS.CHART_RESET_PLOT_STYLE, APP_MENU_COMMAND_IDS.CHART_EDIT_TEXT,
-  APP_MENU_COMMAND_IDS.CHART_REMOVE_PART
+  APP_MENU_COMMAND_IDS.CHART_REMOVE_PART,
+  APP_MENU_COMMAND_IDS.CHART_TYPE_FUNCTION, APP_MENU_COMMAND_IDS.CHART_TYPE_DATA, APP_MENU_COMMAND_IDS.CHART_TYPE_SCATTER,
+  APP_MENU_COMMAND_IDS.CHART_TYPE_BAR, APP_MENU_COMMAND_IDS.CHART_TYPE_STACKED_BAR, APP_MENU_COMMAND_IDS.CHART_TYPE_AREA,
+  APP_MENU_COMMAND_IDS.CHART_TYPE_SEMILOGY,
+  APP_MENU_COMMAND_IDS.PLOT_TYPE_LINE, APP_MENU_COMMAND_IDS.PLOT_TYPE_SCATTER, APP_MENU_COMMAND_IDS.PLOT_TYPE_SMOOTH,
+  APP_MENU_COMMAND_IDS.PLOT_TYPE_STEP, APP_MENU_COMMAND_IDS.PLOT_TYPE_COMB, APP_MENU_COMMAND_IDS.PLOT_TYPE_BAR,
+  APP_MENU_COMMAND_IDS.PLOT_TYPE_AREA
 ] as const;
 
 export type ChartCommandId = (typeof CHART_COMMAND_IDS)[number];
@@ -163,6 +170,20 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
     bindings[APP_MENU_COMMAND_IDS.CHART_RESET_PLOT_STYLE] = disabled();
     bindings[APP_MENU_COMMAND_IDS.CHART_EDIT_LEGEND_ENTRY] = disabled();
   }
+
+  // Change Chart Type (axis) and Change Plot Type (plot): every type, the ones not offered with the reason.
+  const typeTarget = selection?.kind === "axis" ? selection.axisId : selection?.kind === "plot" ? selection.plotId : null;
+  const typeList = typeTarget && sceneElements ? readChartTypeConversions(source, typeTarget, sceneElements, parseOptions) : null;
+  const typeOptions = (typeList?.options ?? []) as Array<ChartTypeConversion<string>>;
+  const bindType = (commandId: AppMenuCommandId, kind: string, scope: "axis" | "plot") => {
+    const option = typeList?.scope === scope ? typeOptions.find((candidate) => candidate.kind === kind) : undefined;
+    if (!option || !typeTarget) { bindings[commandId] = disabled(); return; }
+    bindings[commandId] = option.available
+      ? { enabled: true, run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "changeChartType", elementId: typeTarget, chartType: kind } }); } }
+      : { enabled: false, checked: option.current, reason: option.reason, run: () => {} };
+  };
+  for (const kind of CHART_KINDS) bindType(CHART_TYPE_COMMAND_IDS[kind.id], kind.id, "axis");
+  for (const type of PLOT_TYPES) bindType(PLOT_TYPE_COMMAND_IDS[type.id], type.id, "plot");
 
   if (selection?.kind === "part") {
     const { axisId, partId, part } = selection;
