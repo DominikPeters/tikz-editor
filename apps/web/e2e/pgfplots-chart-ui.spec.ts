@@ -2,7 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import os from "node:os";
 import {
+  clickHitRegionByTargetId,
   expectSourceCanvasConsistency,
+  focusCanvas,
   gotoApp,
   readSelectedSourceIds,
   readSource,
@@ -125,16 +127,17 @@ test("Escape steps out one level: data point, plot, axis, nothing", async ({ pag
 test("Escape steps out of a scope the same way", async ({ page }) => {
   await setSource(page, String.raw`\begin{tikzpicture}
 \begin{scope}[shift={(1,0)}]
-\draw (0,0) -- (2,0);
-\draw (0,1) -- (2,1);
+\fill (0,0) rectangle (2,0.8);
+\fill (0,1.2) rectangle (2,2);
 \end{scope}
 \end{tikzpicture}`);
   await waitForHitRegions(page);
-  const at = await pointOn(page, "path:1");
-  await page.mouse.click(at.x, at.y);
+  await setCanvasTransform(page, { translateX: 300, translateY: 200, scale: 1 });
+  await waitForHitRegions(page);
+  await focusCanvas(page);
+  await clickHitRegionByTargetId(page, "path:1");
   await expect.poll(() => readSelectedSourceIds(page)).toEqual(["scope:0"]);
-  await page.waitForTimeout(600); // a second click, not a double-click
-  await page.mouse.click(at.x, at.y);
+  await clickHitRegionByTargetId(page, "path:1");
   await expect.poll(() => readSelectedSourceIds(page)).toEqual(["path:1"]);
   await page.keyboard.press("Escape");
   await expect.poll(() => readSelectedSourceIds(page)).toEqual(["scope:0"]);
@@ -205,8 +208,8 @@ test("Objects panel: title, label and legend rows select the parts; plots reorde
   await panel.getByRole("button", { name: "Legend", exact: true }).click();
   await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:legend`]);
   await shot(page, "objects-panel-parts");
-  const second = panel.getByRole("button", { name: "Coordinates \u2014 model" });
-  const first = panel.getByRole("button", { name: "Coordinates \u2014 measured" });
+  const second = panel.getByRole("button", { name: "Coordinates \u2014 model", exact: true });
+  const first = panel.getByRole("button", { name: "Coordinates \u2014 measured", exact: true });
   await second.dragTo(first, { targetPosition: { x: 10, y: 2 } });
   const expected = SOURCE.replace(
     "\\addplot[red, thick] coordinates {(1,1) (2,3) (3,2)};\n\\addlegendentry{measured}\n\\addplot coordinates {(0,2) (2,2.5) (4,3)};\n\\addlegendentry{model}",

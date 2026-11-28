@@ -132,12 +132,27 @@
   text-align: center;
 }
 
-/* Chart thumbnails are whole axes: wider cells than the shape previews. */
+/* Chart thumbnails are whole axes: wider cells than the shape previews, all
+   the same height so the labels line up, and the whole gallery shown. */
 .chartChoiceGrid {
-  min-width: 360px;
+  min-width: 380px;
+  max-height: none;
 }
 
-.chartChoiceGrid .visualChoicePreview > span,
+.chartChoiceGrid .visualChoicePreview {
+  height: 86px;
+}
+
+.chartChoiceGrid .visualChoicePreview > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: none;
+  height: 100%;
+}
+
 .chartChoiceGrid .visualChoicePreview svg {
-  max-width: 100px;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
 }

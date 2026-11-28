@@ -207,8 +207,8 @@ test("drill into a plot and recolour it in the inspector; it stays selected", as
   await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:plot:0`]);
   await expect(page.getByText("Plot", { exact: true }).first()).toBeVisible();
   await shot(page, "06-plot-selected");
-  await page.locator("xpath=//button[@aria-label='Color (cycle list)']").first().click();
-  await page.getByRole("button", { name: "Color (cycle list) red" }).click();
+  await page.locator("xpath=//button[@aria-label='Color']").first().click();
+  await page.getByRole("button", { name: "Color red" }).click();
   await expect.poll(() => readStoreSource(page)).toBe(SOURCE.replace("\\addplot coordinates {(1,1)", "\\addplot+[color=red] coordinates {(1,1)"));
   await settled(page);
   expect(await readSelectedSourceIds(page)).toEqual([`${AXIS}:plot:0`]);
@@ -384,7 +384,19 @@ test("Insert on a slide: a picture with the axis in the frame, the preamble line
   await expect.poll(() => readStoreSource(page)).toContain("ybar, ymin=0");
   const twice = await readStoreSource(page);
   expect(twice.match(/\\usepackage\{pgfplots\}|compat=1\.18/gu)).toEqual(["\\usepackage{pgfplots}", "compat=1.18"]);
+  // The second chart takes the room left on the slide, not another 0.6\textheight.
+  expect(twice).toMatch(/\[width=0\.8\\linewidth, height=0\.(?:3|35|4|45|5|55)\\textheight, ybar/u);
   await shot(page, "21-two-inserted-on-slide");
+});
+
+test("the toolbar chart gallery inserts on a slide too", async ({ page }) => {
+  await setSource(page, TIKZ_DECK);
+  await page.locator(".cm-line").filter({ hasText: "\\begin{frame}{Plan}" }).click();
+  await expect(page.getByText("Slide 1 of 2")).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId("toolbar-insert-chart").click();
+  await page.getByTestId("toolbar-tool-popup-insertChart").getByTestId("toolbar-chart-choice-semilogy").click();
+  await expect.poll(() => readStoreSource(page)).toContain("\\begin{semilogyaxis}[width=0.8\\linewidth, height=0.6\\textheight, ");
+  await expect(page.getByRole("button", { name: "Edit Drawing" })).toBeVisible({ timeout: 15_000 });
 });
 
 test("Insert in a picture opened from a deck: the axis goes into the picture, pgfplots into the preamble", async ({ page }) => {
