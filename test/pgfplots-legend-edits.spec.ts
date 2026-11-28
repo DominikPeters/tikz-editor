@@ -11,6 +11,9 @@ import { getAxisEvaluations } from "../packages/core/src/pgfplots/evaluate-axis.
 import { PGFPLOTS_LEGEND_ENTRY_KEY, buildPgfplotsInspectorDescriptor } from "../packages/core/src/edit/pgfplots/inspector.js";
 import type { Statement } from "../packages/core/src/ast/types.js";
 import { nestedStatements } from "../packages/core/src/ast/walk.js";
+import { editorReducer, makeInitialState } from "../packages/app/src/store/reducer.js";
+import { makeEmptySnapshot } from "../packages/app/src/compute.js";
+import type { EditorState } from "../packages/app/src/store/types.js";
 
 const PREAMBLE = "\\pgfplotsset{compat=1.18}\n";
 const COLOURS: Record<string, string> = { "#ff0000": "red", "#00ff00": "green", "#0000ff": "blue", "#808080": "gray" };
@@ -224,4 +227,28 @@ describe("the inspector's legend entry edits the entry where it is written", () 
     const attached = FORMS["\\addlegendentry after each plot"]?.(BASE) ?? "";
     expect(set(attached, 2, "")).toBe(picture("", [plotLine("red"), "\\addlegendentry{Red}", plotLine("green"), "\\addlegendentry{Green}", plotLine("blue")]));
   });
+});
+
+describe("each legend-carrying plot edit is one undo step (editor reducer history)", () => {
+  const cases: Array<[string, (id: string) => Record<string, unknown>]> = [
+    ["delete", (id) => ({ kind: "deleteElements", elementIds: [`${id}:plot:0`] })],
+    ["reorder", (id) => ({ kind: "reorderElements", elementIds: [`${id}:plot:1`], direction: "bringForward" })],
+    ["legend entry", (id) => ({ kind: "setProperty", elementId: `${id}:plot:2`, key: PGFPLOTS_LEGEND_ENTRY_KEY, value: "Navy" })]
+  ];
+  for (const [form, make] of Object.entries(FORMS)) {
+    for (const [name, action] of cases) {
+      it(`${name} (${form})`, () => {
+        const source = make(BASE);
+        const initial: EditorState = { ...makeInitialState(), source, snapshot: { ...makeEmptySnapshot(source), source } };
+        const edited = editorReducer(initial, { type: "APPLY_EDIT_ACTION", action: action(axisId(source)) as unknown as EditAction });
+        expect(edited.source).not.toBe(source);
+        expect(edited.history).toHaveLength(1);
+        expect(edited.history[0]?.sourceBefore).toBe(source);
+        expect(edited.history[0]?.sourceAfter).toBe(edited.source);
+        const undone = editorReducer(edited, { type: "UNDO" });
+        expect(undone.source).toBe(source);
+        expect(editorReducer(undone, { type: "REDO" }).source).toBe(edited.source);
+      });
+    }
+  }
 });

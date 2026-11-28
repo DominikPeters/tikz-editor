@@ -27,7 +27,7 @@ import { getAxisEvaluations } from "../../pgfplots/evaluate-axis.js";
 import { legendEntryOf, type LegendAssociation } from "../../pgfplots/legend.js";
 import { splitTopLevelListSpans, type LegendEntryText } from "../../pgfplots/model.js";
 import { evaluateTikzFigure } from "../../semantic/evaluate.js";
-import { EMPTY_FRAGMENT, joinFragments, layout, sourceSlice, tikz, unchangedSource, userText, type EditedSource, type TikzFragment } from "../fragment.js";
+import { applyFragments, EMPTY_FRAGMENT, joinFragments, layout, sourceSlice, tikz, userText, type EditedSource, type TikzFragment } from "../fragment.js";
 import { normalizeOptionKey } from "../option-key.js";
 import { parseTikzForEdit, type EditParseOptions } from "../parse-options.js";
 import type { SourcePatch } from "../types.js";
@@ -44,18 +44,13 @@ export function readLegendAssociation(source: string, axisId: string, parseOptio
 /** Applies non-overlapping replacements given against `source` as one edit. */
 export function applyReplacements(source: string, replacements: readonly Replacement[]): { source: EditedSource; patches: SourcePatch[] } {
   const sorted = [...replacements].sort((a, b) => a.span.from - b.span.from || a.span.to - b.span.to);
-  let text = "";
-  let cursor = 0;
   let shift = 0;
-  const patches: SourcePatch[] = [];
-  for (const { span, fragment } of sorted) {
-    if (span.from < cursor) throw new Error("legend edit: overlapping replacements");
-    text += source.slice(cursor, span.from) + fragment;
-    patches.push({ oldSpan: span, newSpan: { from: span.from + shift, to: span.from + shift + fragment.length }, replacement: fragment });
+  const patches: SourcePatch[] = sorted.map(({ span, fragment }) => {
+    const patch = { oldSpan: span, newSpan: { from: span.from + shift, to: span.from + shift + fragment.length }, replacement: fragment };
     shift += fragment.length - (span.to - span.from);
-    cursor = span.to;
-  }
-  return { source: unchangedSource(text + source.slice(cursor)), patches };
+    return patch;
+  });
+  return { source: applyFragments(source, sorted), patches };
 }
 
 /** Widens a statement span to its whole line(s) when only blanks share them (as a deleted statement). */
@@ -339,7 +334,7 @@ export function reorderPlotsWithLegend(source: string, axis: AxisStatement, asso
   }
   for (const [container, list] of listContents) {
     // Trailing empties left by dropped slots are dropped too.
-    const kept = list.filter((item): item is TikzFragment => item !== null);
+    const kept = list.flatMap((item) => (item === null ? [] : [item]));
     const original = container.items.map((item) => source.slice(item.from, item.to));
     if (kept.length === original.length && kept.every((item, i) => item === original[i])) continue;
     replacements.push(rebuildContainer(source, container, kept));

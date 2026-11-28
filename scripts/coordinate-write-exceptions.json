@@ -595,14 +595,6 @@
     "rule": "F2",
     "symbol": "unchangedSource",
     "file": "packages/core/src/edit/actions/delete-elements.ts",
-    "declaration": "applyDeleteElementsAction.currentSource",
-    "count": 1,
-    "expression": "unchangedSource(source)"
-  },
-  {
-    "rule": "F2",
-    "symbol": "unchangedSource",
-    "file": "packages/core/src/edit/actions/delete-elements.ts",
     "declaration": "deleteAxisDescriptions.current",
     "count": 1,
     "expression": "unchangedSource(source)"
@@ -1299,22 +1291,6 @@
     "rule": "F2",
     "symbol": "unchangedSource",
     "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
-    "declaration": "applyReorderPlotsAction.current",
-    "count": 1,
-    "expression": "unchangedSource(source)"
-  },
-  {
-    "rule": "F2",
-    "symbol": "sourceSlice",
-    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
-    "declaration": "applyReorderPlotsAction.fragment",
-    "count": 1,
-    "expression": "sourceSlice(source, findUnitSpan(units, next[slot] ?? \"\"))"
-  },
-  {
-    "rule": "F2",
-    "symbol": "unchangedSource",
-    "file": "packages/core/src/edit/pgfplots/axis-actions.ts",
     "declaration": "success.newSource",
     "count": 1,
     "expression": "unchangedSource(source)"
@@ -1324,8 +1300,112 @@
     "symbol": "userText",
     "file": "packages/core/src/edit/pgfplots/inspector.ts",
     "declaration": "applyPgfplotsSetProperty.fragment",
-    "count": 3,
+    "count": 1,
     "expression": "userText(text, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "asItem",
+    "count": 1,
+    "expression": "sourceSlice(source, entry.origin.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "asItem",
+    "count": 1,
+    "expression": "userText(/[,=]/u.test(raw) || raw !== raw.trim() ? `{${raw}}` : raw, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "asStatement",
+    "count": 1,
+    "expression": "sourceSlice(source, entry.origin.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "asStatement",
+    "count": 1,
+    "expression": "userText(entry.text, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "asStatement.options",
+    "count": 1,
+    "expression": "userText(`[${entry.options}]`, \"source-editor\")"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "legendContainer.sep",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: first.to, to: second.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "legendEntriesContainer.sep",
+    "count": 1,
+    "expression": "sourceSlice(source, { from: first.to, to: second.from })"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "legendEntriesForDeletedPlots",
+    "count": 1,
+    "expression": "sourceSlice(source, item)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "reorderPlotsWithLegend.list",
+    "count": 2,
+    "expression": "sourceSlice(source, item)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "reorderPlotsWithLegend.moved",
+    "count": 1,
+    "expression": "sourceSlice(source, unitSpan(target))"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "reorderPlotsWithLegend.plotText",
+    "count": 1,
+    "expression": "sourceSlice(source, plot.span)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "sourceSlice",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "setPlotLegendEntry.contents",
+    "count": 2,
+    "expression": "sourceSlice(source, item)"
+  },
+  {
+    "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/legend-edits.ts",
+    "declaration": "setPlotLegendEntry.typed",
+    "count": 1,
+    "expression": "userText(value, \"inspector-value\")"
   },
   {
     "rule": "F2",
