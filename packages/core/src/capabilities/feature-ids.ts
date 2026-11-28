@@ -19,6 +19,8 @@ export const FEATURE_IDS = [
   "path_clipping",
   "use_as_bounding_box",
   "backgrounds_library",
+  "pgf_layers", // \pgfdeclarelayer, \pgfsetlayers and {pgfonlayer}: paint order, graphic-state reset, unlisted layers.
+  "pgf_environments", // {pgfscope}, {pgfinterruptboundingbox}, {pgftransparencygroup}, {pgflowlevelscope}, {pgfviewboxscope}.
   "arrow_tips",
   "path_operators_basic",
   "path_operator_curves",

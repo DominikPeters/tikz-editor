@@ -419,7 +419,13 @@ function identityStructure(statement: Statement): string {
     }
     return `${item.kind}[${clauses}]`;
   }).join("|");
-  if (statement.kind === "Scope") return `Scope(${statement.body.map(identityStructure).join("|")})`;
+  if (statement.kind === "Scope") {
+    // A PGF environment that loses its end, or changes its name, reaches past
+    // its old span or ends differently: reparse the document.
+    const environment = statement.environment;
+    const head = environment ? `${environment.name},${environment.endName ?? ""},${environment.terminated};` : "";
+    return `Scope(${head}${statement.body.map(identityStructure).join("|")})`;
+  }
   if (statement.kind === "Path") return `Path(${items(statement.items)})`;
   // Axis commands are numbered per axis, and their trailing paths take
   // statement ids: an added or removed one renumbers what follows.

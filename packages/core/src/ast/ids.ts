@@ -181,3 +181,7 @@ export function pgfplotsTableReadStatementId(statementIndex: number): string {
 export function pgfplotsLibraryStatementId(statementIndex: number): string {
   return `pgfplots-library:${statementIndex}`;
 }
+
+export function pgfLayerStatementId(statementIndex: number): string {
+  return `pgf-layer:${statementIndex}`;
+}
