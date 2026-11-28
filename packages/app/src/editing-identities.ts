@@ -64,6 +64,12 @@ export function reconcileEditingIdentities(
   for (const element of snapshot.scene?.elements ?? []) {
     const ref = element.identityRef ?? element.sourceRef;
     add(ref.sourceId, element.kind, ref.sourceSpan);
+    // An element whose identity is its definition (a pic's paths) is selected by
+    // its own id (`pic-operation:N:M`): that id is an object too. Its kind tells
+    // it from the statement with the same span.
+    if (element.identityRef && element.sourceRef.sourceId !== element.identityRef.sourceId) {
+      add(element.sourceRef.sourceId, `${element.kind}@${element.sourceRef.sourceKind ?? "source"}`, element.sourceRef.sourceSpan);
+    }
   }
   const rootId = editingIdentityRootId(snapshot);
   let baseline = previous?.rootId === rootId ? previous : undefined;
