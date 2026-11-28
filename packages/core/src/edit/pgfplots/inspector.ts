@@ -7,7 +7,7 @@
  */
 import type { AddPlotStatement, AxisStatement } from "../../ast/types.js";
 import type { OptionEntry } from "../../options/types.js";
-import { isPlotMarkName, PLOT_MARK_NAMES } from "../../semantic/path/plot-marks.js";
+import { PLOT_MARK_NAMES } from "../../semantic/path/plot-marks.js";
 import type { PgfplotsAxisEditInfo, SceneElement } from "../../semantic/types.js";
 import { owningAxisId, parseAxisPlotId } from "../../pgfplots/edit-ids.js";
 import { COLOR_CYCLE_LIST } from "../../pgfplots/model.js";
@@ -362,6 +362,40 @@ function buildGridStyleSection(axis: AxisStatement, id: string): InspectorSectio
   };
 }
 
+const NO_MARK_FLAGS = ["no markers", "no marks"];
+
+/** Whether an option list switches marks off with `no markers` / `no marks`. */
+function hidesMarks(entries: readonly OptionEntry[] | undefined): boolean {
+  return NO_MARK_FLAGS.some((key) => lastEntry(entries, key) !== null && authored(entries, key) !== "false");
+}
+
+/**
+ * The Mark field's write: `mark=<name>`, with a `no markers`/`no marks` flag
+ * removed so the mark shows. None keeps such a flag, is the plain default of
+ * an `\addplot[…]` without `+` (no key written), and is `mark=none` where the
+ * cycle list gives a mark (G2: `+[mark=none]` removes it). A `\addplot+` left
+ * without options goes back to `\addplot`.
+ */
+function applyPlotMark(source: string, plot: AddPlotStatement, axisId: string, value: string, parseOptions: EditParseOptions): EditActionResultLike {
+  const entries = plot.options?.entries;
+  const usesCycle = plot.increment || !plot.options;
+  if (value === "none" && hidesMarks(entries)) return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [axisId] };
+  const written = value === "default" || (value === "none" && !usesCycle) ? "" : value;
+  const markKeys = new Set(["mark", ...NO_MARK_FLAGS]);
+  const listed = (entries ?? []).filter((entry) => entry.raw.trim().length > 0);
+  const emptied = written === "" && listed.length > 0 && listed.every((entry) => (entry.kind === "kv" || entry.kind === "flag") && markKeys.has(plainKey(entry.key)));
+  if (emptied && plot.increment && plot.incrementSpan && plot.optionsSpan) {
+    const applied = applyReplacements(source, [{ span: { from: plot.incrementSpan.from, to: plot.optionsSpan.to }, fragment: EMPTY_FRAGMENT }]);
+    return { kind: "success", newSource: applied.source, patches: applied.patches, changedSourceIds: [axisId] };
+  }
+  const existing = lastEntry(entries, "mark");
+  if (written === "" && !existing && !hidesMarks(entries)) return { kind: "success", newSource: unchangedSource(source), patches: [], changedSourceIds: [axisId] };
+  const writeKey = existing && existing.kind !== "unknown" ? existing.key : "mark";
+  const result = applySetPropertyActionRaw(source, { elementId: plot.id, key: writeKey, value: written, clearKeys: NO_MARK_FLAGS }, parseOptions);
+  if (result.kind === "success" || result.kind === "partial") return { ...result, changedSourceIds: [axisId] };
+  return result;
+}
+
 /** G1: the mark the default cycle list gives plot i. */
 function cycleMark(index: number): string {
   const entry = COLOR_CYCLE_LIST[index % COLOR_CYCLE_LIST.length] ?? "";
@@ -377,18 +411,22 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
   const stroke = normalizeInspectorColorValue(line?.style.stroke ?? null);
   const lineWidth = line?.style.lineWidth ?? 0.4;
   const plots = axis.body.filter((item) => item.kind === "AddPlot");
+  const scatter = lastEntry(entries, "only marks") !== null && authored(entries, "only marks") !== "false";
+  // `no markers` on the axis goes to `every axis plot post` and beats any plot mark (Z15).
+  const axisHidesMarks = hidesMarks(axis.options?.entries);
+  // Without the cycle list a plot has no mark unless one is written (G2): None is then its default.
   const defaultMark = usesCycle ? cycleMark(plots.indexOf(plot)) : "none";
-  const markValue = authored(entries, "mark") ?? (lastEntry(entries, "only marks") && usesCycle ? defaultMark : "default");
-  const markOptions = [
-    { value: "default", label: usesCycle ? `Default (${defaultMark})` : "Default (none)" },
-    { value: "none", label: "None" },
+  const markValue = axisHidesMarks || hidesMarks(entries) ? "none" : authored(entries, "mark") ?? (scatter && usesCycle ? defaultMark : defaultMark === "none" ? "none" : "default");
+  const markOptions: Array<{ value: string; label: string; disabled?: boolean; reason?: string }> = [
+    ...(defaultMark === "none" ? [] : [{ value: "default", label: `Default (${defaultMark})` }]),
+    // Z15: `only marks` without a mark draws `*`, so a scatter plot keeps one.
+    { value: "none", label: "None", ...(scatter && !axisHidesMarks ? { disabled: true, reason: "Scatter plots need a mark." } : {}) },
     ...PLOT_MARK_NAMES.filter((name) => name !== "text" && name !== "ball").map((name) => ({ value: name, label: name }))
   ];
   if (markValue !== "default" && !markOptions.some((o) => o.value === markValue)) markOptions.unshift({ value: markValue, label: markValue });
-  const flag = (key: string, label: string): InspectorProperty => ({
-    kind: "boolean", id: `pgfplots-${key.replace(/\s+/gu, "-")}`, label, value: lastEntry(entries, key) !== null && authored(entries, key) !== "false",
-    trueValue: "true", falseValue: "", write: write(id, key)
-  });
+  if (axisHidesMarks) {
+    for (const option of markOptions) if (option.value !== "none") Object.assign(option, { disabled: true, reason: "Marks are off for the whole axis." });
+  }
   // The entry the renderer pairs with this plot, wherever it is written (L4).
   const association = legendAssociationFor(source, axis.id, parseOptions, elements);
   const legendEntry = association ? legendEntryOf(association, plot.id) : null;
@@ -400,27 +438,23 @@ function buildPlotDescriptor(source: string, axis: AxisStatement, plot: AddPlotS
       { kind: "color", id: "pgfplots-plot-color", label: "Color", value: stroke, syntaxValue: authored(entries, "color") ?? authored(entries, "draw"), options: colorOptionsForValue(stroke), write: write(id, "color") },
       { kind: "lineWidth", id: "pgfplots-plot-line-width", label: "Line width", value: lineWidth, min: 0.1, max: 6, step: 0.1, presetLabel: lineWidthPresetLabel(lineWidth), write: write(id, "line width") },
       { kind: "dashStyle", id: "pgfplots-plot-dash", label: "Dash style", value: dashStylePresetFromStyle(line?.style.dashArray ?? null, lineWidth), options: DASH_STYLE_OPTIONS, previewLineWidth: lineWidth, write: write(id, "solid") },
-      { kind: "enum", id: "pgfplots-plot-mark", label: "Mark", value: isPlotMarkName(markValue) || markValue === "none" || markValue === "default" ? markValue : markValue, options: markOptions, write: write(id, "mark") },
-      { kind: "text", id: "pgfplots-plot-mark-size", label: "Mark size", value: authored(entries, "mark size") ?? "", placeholder: PLOT_PLACEHOLDERS.markSize, write: write(id, "mark size") },
-      flag("only marks", "Only marks"),
-      flag("no markers", "No markers"),
-      flag("smooth", "Smooth")
+      { kind: "enum", id: "pgfplots-plot-mark", label: "Mark", value: markValue, options: markOptions, write: write(id, "mark") },
+      { kind: "text", id: "pgfplots-plot-mark-size", label: "Mark size", value: authored(entries, "mark size") ?? "", placeholder: PLOT_PLACEHOLDERS.markSize, write: write(id, "mark size") }
     ]
   };
-  const data: InspectorSection = {
-    id: "pgfplots-plot-data", title: "Data", sourceLevel: "command",
-    properties: [
-      { kind: "text", id: "pgfplots-plot-legend-entry", label: "Legend entry", value: legendEntry?.text?.text ?? "", write: write(id, PGFPLOTS_LEGEND_ENTRY_KEY, legendEntry !== null, legendEntry === null ? "A `forget plot` has no legend entry." : undefined) }
-    ]
-  };
+  style.properties.push({ kind: "text", id: "pgfplots-plot-legend-entry", label: "Legend entry", value: legendEntry?.text?.text ?? "", write: write(id, PGFPLOTS_LEGEND_ENTRY_KEY, legendEntry !== null, legendEntry === null ? "A `forget plot` has no legend entry." : undefined) });
+  const sections: InspectorSection[] = [style];
   if (plot.input.kind === "expression") {
-    data.properties.push(
-      { kind: "text", id: "pgfplots-plot-expression", label: "Expression", value: plot.input.expression, write: write(id, PGFPLOTS_EXPRESSION_KEY) },
-      { kind: "text", id: "pgfplots-plot-domain", label: "Domain", value: authored(entries, "domain") ?? "", placeholder: PLOT_PLACEHOLDERS.domain, write: write(id, "domain") },
-      { kind: "text", id: "pgfplots-plot-samples", label: "Samples", value: authored(entries, "samples") ?? "", placeholder: PLOT_PLACEHOLDERS.samples, write: write(id, "samples") }
-    );
+    sections.push({
+      id: "pgfplots-plot-data", title: "Data", sourceLevel: "command",
+      properties: [
+        { kind: "text", id: "pgfplots-plot-expression", label: "Expression", value: plot.input.expression, write: write(id, PGFPLOTS_EXPRESSION_KEY) },
+        { kind: "text", id: "pgfplots-plot-domain", label: "Domain", value: authored(entries, "domain") ?? "", placeholder: PLOT_PLACEHOLDERS.domain, write: write(id, "domain") },
+        { kind: "text", id: "pgfplots-plot-samples", label: "Samples", value: authored(entries, "samples") ?? "", placeholder: PLOT_PLACEHOLDERS.samples, write: write(id, "samples") }
+      ]
+    });
   }
-  return { elementKind: "plot", elementId: id, writeTargetId: id, sections: [style, data] };
+  return { elementKind: "plot", elementId: id, writeTargetId: id, sections };
 }
 
 function needsBraces(value: string): boolean {
@@ -484,6 +518,11 @@ export function applyPgfplotsSetProperty(
     return { kind: "success", newSource: applied.source, patches: applied.patches, changedSourceIds: [axisId] };
   }
   const key = plainKey(action.key);
+  if (key === "mark" && resolved.target.kind === "pgfplots-plot") {
+    const axis = findAxisStatement(parseTikzForEdit(source, parseOptions).figure.body, axisId);
+    const plot = axis?.body.find((item): item is AddPlotStatement => item.kind === "AddPlot" && item.id === elementId);
+    if (plot) return applyPlotMark(source, plot, axisId, action.value.trim(), parseOptions);
+  }
   let value = action.value.trim();
   if (value === "auto" && AUTO_KEYS.has(key)) value = "";
   if (DEFAULT_REMOVES[key] === value) value = "";

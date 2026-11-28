@@ -7,7 +7,7 @@ import { parseTikz } from "../packages/core/src/parser/index.js";
 import { evaluateTikzFigure } from "../packages/core/src/semantic/evaluate.js";
 import { applyEditAction, type EditAction } from "../packages/core/src/edit/actions.js";
 import { readAxisEditInfo } from "../packages/core/src/edit/pgfplots/axis-actions.js";
-import { buildPgfplotsInspectorDescriptor, PGFPLOTS_EXPRESSION_KEY, PGFPLOTS_LEGEND_ENTRY_KEY } from "../packages/core/src/edit/pgfplots/inspector.js";
+import { buildPgfplotsInspectorDescriptor, PGFPLOTS_CHART_TYPE_KEY, PGFPLOTS_EXPRESSION_KEY, PGFPLOTS_LEGEND_ENTRY_KEY } from "../packages/core/src/edit/pgfplots/inspector.js";
 import { resolvePropertyTarget } from "../packages/core/src/edit/property-target.js";
 import type { PgfplotsAxisEditInfo, SceneElement } from "../packages/core/src/semantic/types.js";
 import type { Statement } from "../packages/core/src/ast/types.js";
@@ -180,7 +180,7 @@ describe("pgfplots editing: property targets", () => {
     const twice = apply(once, { kind: "setProperty", elementId: `${id}:plot:1`, level: "command", key: "mark", value: "*" });
     expect(twice).toBe(once.replace("thick]", "thick,\n  mark=*]"));
     const removed = apply(twice, { kind: "setProperty", elementId: `${id}:plot:0`, level: "command", key: "mark", value: "" });
-    expect(removed).toBe(twice.replace("\\addplot+[mark=square*] coordinates", "\\addplot+ coordinates"));
+    expect(removed).toBe(twice.replace("\\addplot+[mark=square*] coordinates", "\\addplot coordinates"));
   });
 
   it("writes axis keys into the axis options", () => {
@@ -440,8 +440,48 @@ describe("pgfplots editing: inspector", () => {
     expect(set(SOURCE, `${id}:plot:1`, PGFPLOTS_LEGEND_ENTRY_KEY, "square")).toBe(SOURCE.replace("{x^2};", "{x^2};\n\\addlegendentry{square}"));
     expect(set(SOURCE, `${id}:plot:1`, PGFPLOTS_EXPRESSION_KEY, "sin(deg(x))")).toBe(SOURCE.replace("{x^2}", "{sin(deg(x))}"));
     expect(set(SOURCE, `${id}:plot:1`, "color", "blue")).toBe(SOURCE.replace("[red, domain=0:2]", "[red, domain=0:2, color=blue]"));
-    expect(set(SOURCE, `${id}:plot:0`, "only marks", "true")).toBe(SOURCE.replace("\\addplot coordinates", "\\addplot+[only marks] coordinates"));
+    expect(set(SOURCE, `${id}:plot:0`, PGFPLOTS_CHART_TYPE_KEY, "scatter")).toBe(SOURCE.replace("\\addplot coordinates", "\\addplot+[only marks] coordinates"));
     expect(set(set(SOURCE, `${id}:plot:1`, "mark", "square"), `${id}:plot:1`, "mark", "default")).toBe(SOURCE);
+  });
+
+  it("Mark: None reads `no markers`/`no marks`/`mark=none`, writes the minimal edit, and a mark undoes it", () => {
+    const body = (plot: string, axisOptions = "") => picture(`\\begin{axis}${axisOptions}\n${plot}\n\\end{axis}`);
+    const mark = (source: string) => {
+      const descriptor = buildPgfplotsInspectorDescriptor(source, `${AXIS_ID(source)}:plot:0`, evaluate(source).scene.elements);
+      const property = descriptor?.sections.flatMap((s) => s.properties).find((p) => p.id === "pgfplots-plot-mark") as { value: string; options: Array<{ value: string; disabled?: boolean }> } | undefined;
+      if (!property) throw new Error("no Mark field");
+      return property;
+    };
+    const set = (source: string, value: string) => apply(source, { kind: "setProperty", elementId: `${AXIS_ID(source)}:plot:0`, level: "command", key: "mark", value });
+    const data = "coordinates {(0,0) (1,1)};";
+    // The checkboxes are gone: Type and Mark are the controls.
+    const ids = buildPgfplotsInspectorDescriptor(body(`\\addplot ${data}`), `${AXIS_ID(body(`\\addplot ${data}`))}:plot:0`, evaluate(body(`\\addplot ${data}`)).scene.elements)?.sections.flatMap((s) => s.properties.map((p) => p.id));
+    expect(ids).not.toContain("pgfplots-only-marks");
+    expect(ids).not.toContain("pgfplots-no-markers");
+    expect(ids).not.toContain("pgfplots-smooth");
+    expect(ids?.slice(0, 7)).toEqual(["pgfplots-plot-type", "pgfplots-plot-color", "pgfplots-plot-line-width", "pgfplots-plot-dash", "pgfplots-plot-mark", "pgfplots-plot-mark-size", "pgfplots-plot-legend-entry"]);
+    for (const flag of ["no markers", "no marks", "mark=none"]) expect(mark(body(`\\addplot+[${flag}] ${data}`)).value).toBe("none");
+    expect(mark(body(`\\addplot ${data}`)).value).toBe("default");
+    // Bare and `+` plots take a mark from the cycle list: None writes `mark=none` (G2, checked with LuaLaTeX).
+    expect(set(body(`\\addplot ${data}`), "none")).toBe(body(`\\addplot+[mark=none] ${data}`));
+    expect(set(body(`\\addplot+[red] ${data}`), "none")).toBe(body(`\\addplot+[red, mark=none] ${data}`));
+    // Choosing Default goes back to the bare plot.
+    expect(set(body(`\\addplot+[mark=none] ${data}`), "default")).toBe(body(`\\addplot ${data}`));
+    // A flag already hiding marks stays; a mark replaces it.
+    expect(set(body(`\\addplot+[no markers] ${data}`), "none")).toBe(body(`\\addplot+[no markers] ${data}`));
+    expect(set(body(`\\addplot+[red, no markers] ${data}`), "x")).toBe(body(`\\addplot+[red, mark=x] ${data}`));
+    expect(set(body(`\\addplot+[no marks] ${data}`), "default")).toBe(body(`\\addplot ${data}`));
+    // `\addplot[…]` has no mark by default: None is its default, and removes a written mark.
+    const plain = mark(body(`\\addplot[red] ${data}`));
+    expect(plain.value).toBe("none");
+    expect(plain.options.some((o) => o.value === "default")).toBe(false);
+    expect(set(body(`\\addplot[red, mark=*] ${data}`), "none")).toBe(body(`\\addplot[red] ${data}`));
+    expect(set(body(`\\addplot[red] ${data}`), "none")).toBe(body(`\\addplot[red] ${data}`));
+    // Scatter keeps a mark (Z15); `no markers` on the axis leaves None only.
+    expect(mark(body(`\\addplot+[only marks] ${data}`)).options.find((o) => o.value === "none")?.disabled).toBe(true);
+    const axisOff = mark(body(`\\addplot ${data}`, "[no markers]"));
+    expect(axisOff.value).toBe("none");
+    expect(axisOff.options.filter((o) => !o.disabled).map((o) => o.value)).toEqual(["none"]);
   });
 });
 
