@@ -45,6 +45,7 @@ const KNOWN: Record<string, { tier1?: Record<string, string>; tier2?: Record<str
   },
   "errorbars-explicit": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "errorbars-style": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
+  "context-every-path": { tier2: { "textbox-missing": ERROR_MARK_BOX } },
   "symbolic-coords": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },
   "symbolic-partial": { tier1: { "tick-count": SYMBOLIC_TICK_PROBE } },
   "function-large": {

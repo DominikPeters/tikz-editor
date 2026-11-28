@@ -117,7 +117,16 @@ axisCommand {
   PgfplotsExtraStatement |
   PgfplotsInvokeForeachStatement |
   AxisLabelStatement |
-  AxisFontEnvironment
+  AxisFontEnvironment |
+  AxisScopeStatement
+}
+
+// `\begin{scope}[options] … \end{scope}` inside an axis body, at any depth:
+// its body holds axis commands too (behaviour AC5). pgfplots-tokens.ts reads
+// `\begin{scope}` as BeginAxisScope only where an axis item can start, so a
+// scope in a plain picture stays a ScopeStatement.
+AxisScopeStatement {
+  BeginAxisScope Comment* (OptionList axisItem* | axisBodyStart axisItem*)? EndScope
 }
 
 // `\pgfplotsinvokeforeach{list}{body with #1}` (manual, utility commands).
@@ -1092,6 +1101,7 @@ TableKw { @specialize<Identifier, "table"> }
   AxisLabelCmd,
   BeginAxisFontEnv,
   EndAxisFontEnv,
+  BeginAxisScope,
   TableData,
   PlotExpressionData,
   insertSemicolon,

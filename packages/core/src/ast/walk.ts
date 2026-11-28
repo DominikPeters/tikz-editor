@@ -13,12 +13,32 @@ const AXIS_COMMAND_KINDS: ReadonlySet<string> = new Set<AxisCommand["kind"]>([
   "AddLegendEntry",
   "AddLegendImage",
   "Legend",
-  "PgfplotsExtra"
+  "PgfplotsExtra",
+  "AxisScopeBegin",
+  "AxisScopeEnd"
 ]);
 
 /** Whether an axis body item is an axis command (`\addplot`, a legend command) rather than a statement. */
 export function isAxisCommand(item: AxisBodyItem): item is AxisCommand {
   return AXIS_COMMAND_KINDS.has(item.kind);
+}
+
+/**
+ * The scopes around each item of an axis body (behaviour AC5), as the ids of
+ * their begin markers joined outermost first ("" outside any scope).
+ */
+export function axisScopePaths(axis: AxisStatement): Map<string, string> {
+  const paths = new Map<string, string>();
+  const stack: string[] = [];
+  for (const item of axis.body) {
+    if (item.kind === "AxisScopeEnd") {
+      const at = stack.lastIndexOf(item.beginId);
+      if (at >= 0) stack.length = at;
+    }
+    paths.set(item.id, stack.join("/"));
+    if (item.kind === "AxisScopeBegin") stack.push(item.id);
+  }
+  return paths;
 }
 
 /** The TikZ statements of an axis body, in order, without its axis commands. */

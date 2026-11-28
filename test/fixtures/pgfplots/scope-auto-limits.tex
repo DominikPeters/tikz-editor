@@ -1,0 +1,11 @@
+% pgfplots oracle fixture (hand-written): plots in a scope count for the
+% automatic limits (data, untransformed); with a scope shift a mark moved
+% beyond the box is still drawn and extends the bounding box (AC5).
+\begin{tikzpicture}
+\begin{axis}
+\addplot coordinates {(0,1) (1,2)};
+\begin{scope}[xshift=6mm]
+  \addplot coordinates {(2,3) (3,5)};
+\end{scope}
+\end{axis}
+\end{tikzpicture}
