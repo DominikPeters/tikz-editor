@@ -59,6 +59,21 @@ const CASES: ExportCase[] = [
 \end{tikzpicture}`)
   },
   {
+    name: "settings between plots in the axis body (behaviour AB)",
+    comparePageSize: true,
+    source: doc(String.raw`\pgfplotsset{compat=1.18}`, String.raw`\begin{tikzpicture}
+\begin{axis}[domain=0:1, samples=3]
+\def\k{1}
+\addplot {x+\k};
+\pgfplotsset{domain=2:3, cycle list={{teal},{violet}}}
+{\pgfplotsset{samples=5}\def\k{4}\addplot {x+\k};}
+\tikzset{mark=x}
+\addplot[red] {x};
+\pgfplotsset{title={Late}, legend entries={a,b,c}}
+\end{axis}
+\end{tikzpicture}`)
+  },
+  {
     name: "compat 1.11",
     source: doc(String.raw`\pgfplotsset{compat=1.11}`, String.raw`\begin{tikzpicture}
 \begin{axis}[xlabel=time]
