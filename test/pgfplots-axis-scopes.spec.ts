@@ -59,7 +59,7 @@ describe("pgfplots axis scopes: grammar and AST", () => {
 
   it("reads axis commands inside nested scopes, in body order, without diagnostics", () => {
     const parsed = parseTikz(SOURCE, { includeContextDefinitions: true });
-    expect(parsed.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
+    expect(parsed.diagnostics.filter((d) => d.severity === "error" || d.severity === "warning")).toEqual([]);
     const axis = axisOf(SOURCE);
     expect(axis.body.map((item) => item.kind)).toEqual([
       "AddPlot", "AxisScopeBegin", "AddPlot", "AddLegendEntry", "AxisScopeBegin", "Path", "AddPlot", "AxisScopeEnd", "AxisScopeEnd", "AddPlot"
@@ -156,7 +156,7 @@ describe("pgfplots axis scopes: evaluation (behaviour AC5)", () => {
 \end{scope}
 \addplot coordinates {(0,3) (2,3)};`);
     const { semantic, line } = render(source);
-    expect(semantic.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
+    expect(semantic.diagnostics.filter((d) => d.severity === "error" || d.severity === "warning")).toEqual([]);
     const inScope = line("axis:1:plot:1");
     expect(inScope?.style.dashArray?.length).toBeGreaterThan(0);
     expect(inScope?.style.stroke).not.toBe(line("axis:1:plot:0")?.style.stroke);
