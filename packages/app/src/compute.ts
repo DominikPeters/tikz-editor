@@ -40,6 +40,7 @@ import {
   beamerTikzFontCommand,
   createBeamerTexMathFontProfile,
   prepareBeamerDocument,
+  beamerPictureTextColor,
   resolveBeamerTheme,
   scanBeamerDocument,
   scanBeamerFrameOverlays,
@@ -1099,10 +1100,13 @@ async function computeNestedTikzSnapshot(
   const pictureStep = beamerTikzStep(request.source, picture.span, overlays, pictureStepNumber);
   const masked = pictureStep.source;
   const documentLengths = await nestedPictureDocumentLengths(request.source, ref.frameIndex, picture.span, graphicsContext, work);
+  // The theme's text colour, as on the slide.
+  const textColor = beamerPictureTextColor(theme);
   const result = await renderTikzToSvgAsync(masked, {
     parse: { recover: true, includeContextDefinitions: true },
     evaluate: { graphicsResolver: graphicsContext.resolver, initialFont: beamerTikzFontCommand(theme.fonts["normal-text"]),
       ...(documentLengths ? { documentLengths } : {}),
+      ...(textColor ? { pictureOptions: `color=${textColor}` } : {}),
       ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}) },
     svgOptionsFromParse: (parse) => computeSvgOptions(parse, request.renderViewBox),
     textEngine,

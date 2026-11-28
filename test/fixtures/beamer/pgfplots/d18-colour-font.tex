@@ -1,0 +1,17 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usefonttheme{serif}
+\setbeamercolor{normal text}{fg=blue!50!black}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{Colour and font}
+\small Inherited size.
+\begin{tikzpicture}
+\begin{axis}[width=6cm, height=4cm, xlabel={Time}, title={T}]
+\addplot coordinates {(0,1) (1,3) (2,2)};
+\addlegendentry{data}
+\end{axis}
+\end{tikzpicture}
+\end{frame}
+\end{document}

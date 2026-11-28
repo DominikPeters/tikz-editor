@@ -18,7 +18,7 @@ const fixture = (name: string) => ({
   },
 });
 
-const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull", "d15-inserted", "d16-madrid169-heights"];
+const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull", "d15-inserted", "d16-madrid169-heights", "d18-colour-font"];
 
 describe("pgfplots in Beamer frames", () => {
   for (const name of CASES) {
@@ -68,6 +68,15 @@ describe("pgfplots in Beamer frames", () => {
     const { source } = fixture("d13-overlay-matrix");
     const first = await renderBeamerFrame(source, { frameIndex: 1, step: 1 });
     expect(first.layout.embeddedTikz[0]?.coveredModel?.parts ?? []).toEqual([]);
+  });
+
+  it("draws the axis in the theme's text colour, as LuaLaTeX does", async () => {
+    // normal text fg=blue!50!black: box, ticks and labels #000080; the plot keeps its cycle colour.
+    const { source } = fixture("d18-colour-font");
+    const rendered = await renderBeamerFrame(source);
+    const markup = rendered.layout.embeddedTikz.flatMap((tikz) => tikz.model.parts.map((part) => part.markup)).join("");
+    expect(markup).toContain("#000080");
+    expect(markup).toContain("#0000ff");
   });
 
   it("reports \\addplot<spec>, which pgfplots refuses", async () => {

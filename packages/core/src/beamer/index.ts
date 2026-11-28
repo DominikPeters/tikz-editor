@@ -107,6 +107,7 @@ export {
   beamerTikzFontCommand,
   prepareBeamerDocument,
   renderBeamerFrame,
+  beamerPictureTextColor,
   renderBeamerFramePages,
   type PreparedBeamerDocument,
 } from "./render.js";

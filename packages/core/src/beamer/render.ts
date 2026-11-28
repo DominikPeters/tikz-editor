@@ -3982,6 +3982,17 @@ function beamerTikzRuledShapes(rendered: RenderTikzToSvgResult, ruled: ((span: S
 }
 
 /** The picture's paint without its covered elements, which keep their room and names. */
+/**
+ * The theme's normal text colour as a TikZ colour (`{rgb,255:…}`), which a
+ * slide picture draws in; undefined when it is black (TikZ's default).
+ */
+export function beamerPictureTextColor(theme: ResolvedBeamerTheme): string | undefined {
+  const hex = textColor(theme, "normal text");
+  if (!/^#[0-9a-f]{6}$/iu.test(hex) || hex.toLowerCase() === "#000000") return undefined;
+  const channel = (offset: number) => Number.parseInt(hex.slice(offset, offset + 2), 16);
+  return `{rgb,255:red,${channel(1)};green,${channel(3)};blue,${channel(5)}}`;
+}
+
 function beamerTikzPaintModel(rendered: RenderTikzToSvgResult) {
   const hiddenIds = new Set(rendered.semantic.scene.elements.filter(element => element.overlayCovered).map(element => element.id));
   return hiddenIds.size === 0 ? rendered.svg.model : {
@@ -4016,8 +4027,11 @@ async function prepareEmbeddedTikz(params: {
     mathFontProfile: createBeamerTexMathFontProfile(params.bodyFont),
     namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, sizePt, baselineSkipPt]) => [name, { sizePt, baselineSkipPt }])),
   });
-  const ambientColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
+  // The picture draws in the colour of the text around it: a colour declared
+  // there, else the theme's normal text colour (when it is not black).
+  const declaredColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
     name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
+  const ambientColor = declaredColor ?? (params.theme ? beamerPictureTextColor(params.theme) : undefined);
   const pictureStep = beamerTikzStep(params.source, params.node.root.span, params.overlays, params.step);
   // \textwidth and \linewidth where the picture is set (a column's width inside columns), \textheight and the paper.
   // (\columnwidth is \textwidth in beamer, in a column too; \linewidth unless a list narrows it.)
