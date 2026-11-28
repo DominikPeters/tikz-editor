@@ -208,6 +208,45 @@ a b
 \end{axis}
 \end{scope}
 \end{tikzpicture}`)
+  },
+  // Plain TikZ pictures on PGF layers: the layer declarations and the list
+  // come from the preamble, or the `backgrounds` library is inferred.
+  {
+    name: "PGF layers declared in the preamble",
+    comparePageSize: true,
+    source: doc(String.raw`\pgfdeclarelayer{back}
+\pgfdeclarelayer{front}
+\pgfsetlayers{back,main,front}`, String.raw`\begin{tikzpicture}
+\node[draw, fill=white] (a) {A};
+\begin{pgfonlayer}{back}
+\fill[yellow] (-1,-1) rectangle (1,1);
+\end{pgfonlayer}
+\begin{pgfonlayer}{front}
+\draw[red] (a.south west) -- (a.north east);
+\end{pgfonlayer}
+\end{tikzpicture}`)
+  },
+  {
+    name: "background layer of the backgrounds library",
+    comparePageSize: true,
+    source: doc(String.raw`\usetikzlibrary{backgrounds}`, String.raw`\begin{tikzpicture}
+\node[draw] (a) {A};
+\begin{pgfonlayer}{background}
+\fill[yellow] (a.south west) rectangle (a.north east);
+\end{pgfonlayer}
+\begin{scope}[on background layer]
+\draw (-1,0) -- (1,0);
+\end{scope}
+\end{tikzpicture}`)
+  },
+  {
+    name: "bare picture on the background layer",
+    source: String.raw`\begin{tikzpicture}
+\node[draw] (a) {A};
+\begin{pgfonlayer}{background}
+\fill[yellow] (-1,-1) rectangle (1,1);
+\end{pgfonlayer}
+\end{tikzpicture}`
   }
 ];
 
