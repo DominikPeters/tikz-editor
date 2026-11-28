@@ -293,3 +293,80 @@ test("insert templates: function plot and bar chart, with compat added once", as
   await setCanvasTransform(page, { translateX: 80, translateY: 120, scale: 0.8 });
   await shot(page, "11-bar-template");
 });
+
+const LEGEND_SOURCE = String.raw`\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[legend entries={Up,Down}, xmin=0, xmax=4, ymin=0, ymax=4]
+\addplot[red] coordinates {(0,0) (4,4)};
+\addplot[blue] coordinates {(0,4) (4,0)};
+\end{axis}
+\fill (-1,-2) circle (2pt);
+\end{tikzpicture}
+\end{document}`;
+
+test("delete a plot labelled through legend entries: its entry goes with it; one undo restores both", async ({ page }) => {
+  await setSource(page, LEGEND_SOURCE);
+  await waitForHitRegions(page);
+  await shot(page, "12-legend-entries-before");
+  const onLine = await pointOnRegion(page, `${AXIS}:plot:0`);
+  // The first click selects the axis, the second drills into the plot.
+  await page.mouse.click(onLine.x, onLine.y);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual([AXIS]);
+  await page.mouse.click(onLine.x, onLine.y);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual([`${AXIS}:plot:0`]);
+  await page.keyboard.press("Delete");
+  const expected = LEGEND_SOURCE.replace("legend entries={Up,Down}", "legend entries={Down}").replace("\\addplot[red] coordinates {(0,0) (4,4)};\n", "");
+  await expect.poll(() => readSource(page)).toBe(expected);
+  await settled(page);
+  await expect(page.locator(`[data-hit-region-target-id='${AXIS}:legend']`).first()).toBeAttached();
+  await shot(page, "13-legend-entries-deleted");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => readSource(page)).toBe(LEGEND_SOURCE);
+  await settled(page);
+  await shot(page, "14-legend-entries-undone");
+});
+
+const HIDDEN_SOURCE = String.raw`\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[hide axis, xmin=0, xmax=4, ymin=0, ymax=4]
+\addplot coordinates {(0,0) (2,3) (4,1)};
+\end{axis}
+\fill (-1,-2) circle (2pt);
+\end{tikzpicture}
+\end{document}`;
+
+test("hide axis: clicking the plot selects the axis, dragging moves it (at=)", async ({ page }) => {
+  await setSource(page, HIDDEN_SOURCE);
+  await waitForHitRegions(page);
+  await setCanvasTransform(page, { translateX: 200, translateY: 120, scale: SCALE });
+  await waitForHitRegions(page);
+  const onLine = await pointOnRegion(page, `${AXIS}:plot:0`);
+  await page.mouse.click(onLine.x, onLine.y);
+  await expect.poll(() => readSelectedSourceIds(page)).toEqual([AXIS]);
+  await shot(page, "15-hidden-axis-selected");
+  await page.mouse.move(onLine.x, onLine.y);
+  await page.mouse.down();
+  await page.keyboard.down("Control"); // no snapping
+  await page.mouse.move(onLine.x + 60, onLine.y - 30, { steps: 120 });
+  await page.mouse.up();
+  await page.keyboard.up("Control");
+  await settled(page);
+  const source = await readSource(page);
+  expect(source).toMatch(/ymax=4, at=\{\([-\d.]+cm,[-\d.]+cm\)\}\]/u);
+  // 60 px right, 30 px up at 1.5 px/pt: (40pt, 20pt). A drag that starts on a part of the
+  // selected axis (here the plot) begins once the pointer has left its drag threshold, so the
+  // first few pixels are not applied (observed: 4 px); the direction is the pointer's.
+  const was = axisWorldBox(HIDDEN_SOURCE); const now = axisWorldBox(source);
+  const dx = now.x0 - was.x0; const dy = now.y0 - was.y0;
+  expect(dx).toBeGreaterThan(36); expect(dx).toBeLessThanOrEqual(40.5);
+  expect(dy).toBeGreaterThan(18); expect(dy).toBeLessThanOrEqual(20.5);
+  expect(Math.abs(dx / dy - 2)).toBeLessThan(0.05);
+  expect(await readSelectedSourceIds(page)).toEqual([AXIS]);
+  await shot(page, "16-hidden-axis-moved");
+});
