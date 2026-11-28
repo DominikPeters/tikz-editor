@@ -4,6 +4,7 @@ import type { EditAnalysisView } from "@tikz-editor/core/edit/analysis";
 import { resolveFigureBoundsState } from "@tikz-editor/core/edit/figure-bounds";
 import type { OptionEntry, OptionListAst } from "@tikz-editor/core/options/types";
 import type { SceneElement, SceneFigure } from "@tikz-editor/core/semantic/types";
+import { AXIS_ELEMENT_KINDS, AXIS_ELEMENT_LABELS } from "@tikz-editor/core/edit/pgfplots/chart-elements";
 
 export type ObjectsPanelNode = {
   id: string;
@@ -91,6 +92,7 @@ function buildNode(
   // A pgfplots axis is a container like a scope; its children are its plots, then the TikZ statements in it.
   const children = statement.kind !== "Path"
     ? [
+        ...(statement.kind === "Axis" ? buildAxisPartNodes(statement, sceneElementsBySourceId, selectedIds, byId) : []),
         ...(statement.kind === "Axis" ? buildPlotNodes(statement, selectedIds, byId) : []),
         ...(nestedStatements(statement) ?? [])
           .map((child) => buildNode(child, analysisView, sceneElementsBySourceId, selectedIds, byId, boundingBoxSourceId))
@@ -140,7 +142,37 @@ const PLOT_INPUT_LABELS: Record<AddPlotStatement["input"]["kind"], string> = {
   other: "Plot"
 };
 
-/** The plots of an axis, labelled by input form and legend entry (`Function: $x^2$`). */
+/** The title, axis labels and legend an axis draws: the parts a click on the canvas drills into (`axis:N:title`, ...). */
+function buildAxisPartNodes(
+  axis: AxisStatement,
+  sceneElementsBySourceId: ReadonlyMap<string, SceneElement[]>,
+  selectedIds: ReadonlySet<string>,
+  byId: Map<string, ObjectsPanelNode>
+): ObjectsPanelNode[] {
+  return AXIS_ELEMENT_KINDS.filter((part) => sceneElementsBySourceId.has(`${axis.id}:${part}`)).map((part, index) => {
+    const id = `${axis.id}:${part}`;
+    const node: ObjectsPanelNode = {
+      id,
+      writeTargetId: id,
+      title: AXIS_ELEMENT_LABELS[part],
+      label: AXIS_ELEMENT_LABELS[part],
+      explicitName: null,
+      parentKey: `${axis.id}:parts`,
+      index,
+      hidden: false,
+      selected: selectedIds.has(id),
+      canRename: false,
+      canToggleVisibility: false,
+      canDragReorder: false,
+      childCount: 0,
+      children: []
+    };
+    byId.set(id, node);
+    return node;
+  });
+}
+
+/** The plots of an axis, labelled by input form and legend entry (`Function: $x^2$`); dragging reorders them (legend entries follow). */
 function buildPlotNodes(axis: AxisStatement, selectedIds: ReadonlySet<string>, byId: Map<string, ObjectsPanelNode>): ObjectsPanelNode[] {
   const plots = axis.body.filter((item): item is AddPlotStatement => item.kind === "AddPlot");
   return plots.map((plot, index) => {
@@ -160,7 +192,7 @@ function buildPlotNodes(axis: AxisStatement, selectedIds: ReadonlySet<string>, b
       selected: selectedIds.has(plot.id),
       canRename: false,
       canToggleVisibility: false,
-      canDragReorder: false,
+      canDragReorder: plots.length > 1,
       childCount: 0,
       children: []
     };

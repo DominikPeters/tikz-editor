@@ -165,3 +165,28 @@ describe("objects panel model", () => {
     expect(model.byId.get("path:1")?.label).toBe("Rectangle");
   });
 });
+
+describe("objects panel model: pgfplots axis parts", () => {
+  it("lists the title, labels and legend the axis draws, then the plots (which reorder by drag)", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{axis}[title=Results, xlabel=Time]
+    \addplot coordinates {(0,0) (1,1)};
+    \addlegendentry{A}
+    \addplot coordinates {(0,1) (1,2)};
+  \end{axis}
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const semantic = evaluateSemantic(source);
+    const model = buildObjectsPanelModel({ analysisView, scene: semantic.scene, selectedIds: new Set(["axis:0:title"]) });
+    const axis = model.byId.get("axis:0");
+    expect(axis?.children.map((child) => [child.id, child.title, child.canDragReorder])).toEqual([
+      ["axis:0:title", "Title", false],
+      ["axis:0:xlabel", "X label", false],
+      ["axis:0:legend", "Legend", false],
+      ["axis:0:plot:0", "Coordinates — A", true],
+      ["axis:0:plot:1", "Coordinates", true]
+    ]);
+    expect(model.byId.get("axis:0:title")?.selected).toBe(true);
+    expect(new Set(axis?.children.slice(0, 3).map((child) => child.parentKey))).toEqual(new Set(["axis:0:parts"]));
+  });
+});
