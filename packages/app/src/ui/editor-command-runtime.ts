@@ -75,7 +75,7 @@ import {
 import { requestSourceFormat } from "./source-sync";
 import { resolveOpenedFileForDocument, resolveOpenedPowerPointForDocument } from "./svg-import";
 import { resolveNodePositioningContextMenuAction } from "./canvas-panel/node-positioning-context-action";
-import { buildChartCommandBindings } from "./chart-commands";
+import { buildChartCommandBindings, plotReorderAvailability } from "./chart-commands";
 import type { Span } from "@tikz-editor/core/ast/types";
 
 export type CommandOrigin = "menu" | "shortcut" | "context-menu" | "platform";
@@ -796,6 +796,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.SEND_BACKWARD]: {
       enabled: availability["reorder-sendBackward"].enabled,
       ...(availability["reorder-sendBackward"].reason ? { reason: availability["reorder-sendBackward"].reason } : {}),
+      ...plotReorderAvailability(source, selectedElementIds, "sendBackward", parseOptions),
       run: () => {
         reorderSelection(commandContext, "sendBackward");
       }
@@ -803,6 +804,7 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     [APP_MENU_COMMAND_IDS.BRING_FORWARD]: {
       enabled: availability["reorder-bringForward"].enabled,
       ...(availability["reorder-bringForward"].reason ? { reason: availability["reorder-bringForward"].reason } : {}),
+      ...plotReorderAvailability(source, selectedElementIds, "bringForward", parseOptions),
       run: () => {
         reorderSelection(commandContext, "bringForward");
       }

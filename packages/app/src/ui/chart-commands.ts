@@ -11,6 +11,7 @@ import { applyResetPlotStyleAction, readAxisElements, type AxisElementKind, type
 import { CHART_KINDS } from "@tikz-editor/core/edit/pgfplots/chart-kinds";
 import { CHART_KIND_COMMAND_IDS } from "../app-menu/chart-menu";
 import { legendAssociationFor } from "@tikz-editor/core/edit/pgfplots/legend-edits";
+import { applyReorderPlotsAction } from "@tikz-editor/core/edit/pgfplots/axis-actions";
 import type { EditParseOptions } from "@tikz-editor/core/edit/parse-options";
 import { resolvePropertyTarget } from "@tikz-editor/core/edit/property-target";
 import { isAxisId, owningAxisId, parseAxisDescriptionId, parseAxisPlotId } from "@tikz-editor/core/pgfplots/edit-ids";
@@ -171,6 +172,22 @@ export function buildChartCommandBindings(input: ChartCommandInput): Record<Char
     bindings[APP_MENU_COMMAND_IDS.CHART_REMOVE_PART] = disabled();
   }
   return bindings as Record<ChartCommandId, CommandBindingLike>;
+}
+
+/**
+ * Bring Forward / Send Backward for one selected plot: the reorder action's own
+ * answer (refused at either end, or across an axis scope), with its reason.
+ */
+export function plotReorderAvailability(
+  source: string,
+  selectedElementIds: ReadonlySet<string>,
+  direction: "bringForward" | "sendBackward",
+  parseOptions: EditParseOptions
+): { enabled: boolean; reason?: string } | null {
+  const selection = resolveChartSelection(selectedElementIds);
+  if (selection?.kind !== "plot") return null;
+  const result = applyReorderPlotsAction(source, [selection.plotId], direction, parseOptions);
+  return result.kind === "unsupported" ? { enabled: false, reason: result.reason } : { enabled: true };
 }
 
 /** The owning axis of the single selected id, if any. */

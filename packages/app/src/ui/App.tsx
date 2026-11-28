@@ -1503,6 +1503,7 @@ function EditorApp() {
         selectSourceIds: (sourceIds: string[]) => void;
         clearSelection: () => void;
         getSelectedSourceIds: () => string[];
+        getActiveHandleId: () => string | null;
         getSceneSourceIds: () => string[];
         getActiveFigureId: () => string | null;
         getFigureCount: () => number;
@@ -1573,6 +1574,7 @@ function EditorApp() {
       getSelectedSourceIds: () => {
         return [...useEditorStore.getState().selectedElementIds];
       },
+      getActiveHandleId: () => useEditorStore.getState().activeHandleId,
       getSceneSourceIds: () => {
         const sourceIds = new Set<string>();
         for (const element of snapshotRef.current.scene?.elements ?? []) {
