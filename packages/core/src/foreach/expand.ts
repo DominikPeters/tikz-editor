@@ -3,7 +3,6 @@ import {
   addLegendImageId,
   addPlotId,
   axisScopeBeginId,
-  axisScopeEndId,
   axisStatementId,
   legendStatementId,
   pgfplotsExtraId,
@@ -1444,25 +1443,31 @@ function reindexAxisCommands(
   templateLocalIdByExpandedId: Map<string, string>
 ): void {
   const counters = { AddPlot: 0, AddLegendEntry: 0, AddLegendImage: 0, Legend: 0, PgfplotsExtra: 0, AxisScopeBegin: 0 };
+  // Scope markers pair by position (a loop repeats the same ids): an end closes the innermost open begin it names.
+  const open: Array<{ begin: Extract<AxisBodyItem, { kind: "AxisScopeBegin" }>; previousId: string }> = [];
   for (const item of axis.body) {
     if (!isAxisCommand(item)) continue;
-    if (item.kind === "AxisScopeBegin" || item.kind === "AxisScopeEnd") {
-      // A scope's markers: the end takes the id of its begin (scopes nest, so they are counted at the begin).
-      if (item.kind === "AxisScopeEnd") continue;
-      const index = counters.AxisScopeBegin++;
+    if (item.kind === "AxisScopeBegin") {
       const previousId = item.id;
       item.axisId = axis.id;
-      item.id = axisScopeBeginId(axis.id, index);
+      item.id = axisScopeBeginId(axis.id, counters.AxisScopeBegin++);
+      delete item.endId;
       if (item.id !== previousId) templateLocalIdByExpandedId.set(item.id, previousId);
-      const end = axis.body.find((other) => other.kind === "AxisScopeEnd" && other.beginId === previousId);
-      if (end && end.kind === "AxisScopeEnd") {
-        const previousEndId = end.id;
-        end.axisId = axis.id;
-        end.id = axisScopeEndId(axis.id, index);
-        end.beginId = item.id;
-        item.endId = end.id;
-        if (end.id !== previousEndId) templateLocalIdByExpandedId.set(end.id, previousEndId);
-      }
+      open.push({ begin: item, previousId });
+      continue;
+    }
+    if (item.kind === "AxisScopeEnd") {
+      let at = open.length - 1;
+      while (at >= 0 && open[at]?.previousId !== item.beginId) at -= 1;
+      const entry = at >= 0 ? open[at] : undefined;
+      if (!entry) continue;
+      open.length = at;
+      const previousEndId = item.id;
+      item.axisId = axis.id;
+      item.id = `${entry.begin.id}:end`;
+      item.beginId = entry.begin.id;
+      entry.begin.endId = item.id;
+      if (item.id !== previousEndId) templateLocalIdByExpandedId.set(item.id, previousEndId);
       continue;
     }
     const index = counters[item.kind]++;
