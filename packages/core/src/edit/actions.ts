@@ -100,6 +100,7 @@ import { nestedStatements } from "../ast/walk.js";
 import { isAxisId, parseAxisDescriptionId, parseAxisPlotId } from "../pgfplots/edit-ids.js";
 import { applyInsertAxisPlotAction, applyResetPlotStyleAction, applySetAxisElementAction, type AxisElementKind } from "./pgfplots/chart-elements.js";
 import { applyChangeChartTypeAction } from "./pgfplots/chart-type.js";
+import { applyEditPlotDataAction, type PlotDataChange } from "./pgfplots/plot-data.js";
 import { applyDeletePlotPointAction, applyInsertPlotPointAction, applyMoveAxisAction, applyMoveLegendAction, applyReorderPlotsAction, applyResizeAxisAction } from "./pgfplots/axis-actions.js";
 import { applyPgfplotsSetProperty } from "./pgfplots/inspector.js";
 import { ensurePgfplotsSetup, PGFPLOTS_TEMPLATES, type PgfplotsTemplateKind } from "./pgfplots/templates.js";
@@ -166,6 +167,8 @@ export type EditAction =
   | { kind: "resetPlotStyle"; plotId: string }
   /** Change Chart Type of an axis (`chartType`: a chart kind) or a plot (a plot type), chart-type.ts. */
   | { kind: "changeChartType"; elementId: string; chartType: string }
+  /** One change in the data grid of a plot (plot-data.ts): a cell, a pasted block, a row, a column name. */
+  | { kind: "editPlotData"; plotId: string; change: PlotDataChange }
   /** A new path through world points: what the path and freehand tools draw. */
   | { kind: "addPath"; start: WorldPoint; startAnchor?: AnchorReference; segments: readonly ComplexPathSegment[]; closed?: boolean; strokeColor?: string }
   | { kind: "deleteElement"; elementId: string }
@@ -392,6 +395,8 @@ export function applyEditAction(
         return applyResetPlotStyleAction(source, action.plotId, parseOptions);
       case "changeChartType":
         return applyChangeChartTypeAction(source, action.elementId, action.chartType, parseOptions);
+      case "editPlotData":
+        return applyEditPlotDataAction(source, action.plotId, action.change, parseOptions);
       case "deleteElement":
         return applyDeleteElementsAction(source, [action.elementId], parseOptions);
       case "deleteElements":

@@ -1505,6 +1505,14 @@
   },
   {
     "rule": "F2",
+    "symbol": "userText",
+    "file": "packages/core/src/edit/pgfplots/plot-data.ts",
+    "declaration": "applyEditPlotDataAction.replacements.fragment",
+    "count": 1,
+    "expression": "userText(edit.text, \"inspector-value\")"
+  },
+  {
+    "rule": "F2",
     "symbol": "editedSlice",
     "file": "packages/core/src/edit/property-write-planner.ts",
     "declaration": "deriveSingleSourcePatch.replacement",
