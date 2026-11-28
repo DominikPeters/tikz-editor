@@ -770,6 +770,7 @@ async function renderBeamerFrameStep(params: {
     });
   }
   if (metadataMeasurements.length) chrome = planChrome();
+  references.pictureLengths = { textheight: page.page.height - chrome.headlineInset - chrome.bottomInset, paperwidth: page.page.width, paperheight: page.page.height };
   const extractedPictures = new Set<number>();
   const collectExtracted = (nodes: readonly (BeamerFrameBodyNode | BeamerColumnFlowNode)[]): void => {
     for (const node of nodes) {
@@ -804,6 +805,7 @@ async function renderBeamerFrameStep(params: {
     const tikz = await prepareEmbeddedTikz({ source, theme: pictureTheme, node: { kind: "tikzpicture", id: root.id, span: root.span, root, horizontalAlignment: "left" },
       ambientText: references.ambientTextAt?.(ambientOffset) ?? "",
       lengths: lengths ?? { textwidth: page.textArea.width },
+      pageLengths: references.pictureLengths,
       width: Number.POSITIVE_INFINITY, bodyFont: pictureTheme.fonts["normal-text"], diagnostics, visibility, overlays: bodyIr.overlays, step,
       ...(params.graphicsResolver !== undefined ? { graphicsResolver: params.graphicsResolver } : {}),
       ...(params.work !== undefined ? {work:params.work} : {}) });
@@ -1806,6 +1808,7 @@ async function prepareFrameFlow(params: {
         theme: nodeTheme,
         node,
         width: params.textWidth,
+        ...(params.references.pictureLengths ? { pageLengths: params.references.pictureLengths } : {}),
         overlays: params.overlays, step: params.step,
         bodyFont,
         diagnostics: params.diagnostics,
@@ -3946,6 +3949,7 @@ async function prepareColumnFlowNode(params: {
     source, theme,
     node,
     width,
+    ...(params.references.pictureLengths ? { pageLengths: params.references.pictureLengths } : {}),
     bodyFont,
     diagnostics,
     visibility,
@@ -3998,6 +4002,8 @@ async function prepareEmbeddedTikz(params: {
   width: number;
   /** \textwidth and \linewidth where the picture is set, when they differ from `width`. */
   lengths?: Pick<BeamerPictureLengths, "textwidth"> & Partial<BeamerPictureLengths>;
+  /** `\textheight` and the paper size of the frame (the picture is evaluated without the deck's class). */
+  pageLengths?: { textheight: number; paperwidth: number; paperheight: number };
   bodyFont: BeamerThemeFont;
   diagnostics: Diagnostic[];
   visibility: BeamerOverlayVisibility;
@@ -4013,14 +4019,15 @@ async function prepareEmbeddedTikz(params: {
   const ambientColor = params.ambientText ? parseSimpleTexParagraphIr(params.ambientText,
     name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
   const pictureStep = beamerTikzStep(params.source, params.node.root.span, params.overlays, params.step);
+  // \textwidth and \linewidth where the picture is set (a column's width inside columns), \textheight and the paper.
+  const documentLengths = { ...params.pageLengths, ...(params.lengths ?? { textwidth: params.width }) };
   const rendered = await renderTikzToSvgAsync(
     pictureStep.source,
     {
       textEngine,
       parse: { includeContextDefinitions: true },
       evaluate: { initialFont: beamerTikzFontCommand(params.bodyFont),
-        // \textwidth and \linewidth where the picture is set (a column's width inside columns).
-        documentLengths: params.lengths ?? { textwidth: params.width },
+        documentLengths,
         ...(pictureStep.overlayVisibility ? { overlayVisibility: pictureStep.overlayVisibility } : {}),
         ...(ambientColor ? { pictureOptions: `color=${ambientColor}` } : {}),
         namedFontSizes: Object.fromEntries(beamerNamedFontSizes(params.theme).map(([name, size]) => [name, size])) },
@@ -4064,6 +4071,7 @@ async function prepareEmbeddedTikz(params: {
     coveredModel,
     ruledShapes: beamerTikzRuledShapes(rendered, pictureStep.ruled),
     viewBox,
+    documentLengths,
   };
 }
 

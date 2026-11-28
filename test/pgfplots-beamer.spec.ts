@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { applyDeckEditAction, renderBeamerFrame } from "../packages/core/src/beamer/index.js";
+import { pgfplotsPreambleInsertions } from "../packages/core/src/edit/pgfplots/templates.js";
 import { beamerPictureLengths } from "../packages/core/src/beamer/picture-lengths.js";
 import { createBeamerSyntaxContext } from "../packages/core/src/beamer/syntax.js";
 import { parseTikz, renderTikzToSvgAsync } from "../packages/core/src/index.js";
@@ -17,14 +18,14 @@ const fixture = (name: string) => ({
   },
 });
 
-const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull"];
+const CASES = ["d2-columns", "d4-block", "d7-only", "d8-madrid", "d9-169", "d12-pause-inside", "d13-overlay-matrix", "d14-overfull", "d15-inserted", "d16-madrid169-heights"];
 
 describe("pgfplots in Beamer frames", () => {
   for (const name of CASES) {
     const { source, oracle } = fixture(name);
     it.each(oracle.pages.map((page) => [page.frame, page.step, page] as const))(`${name}: frame %i step %i matches LuaLaTeX`, async (frame, step, page) => {
       const rendered = await renderBeamerFrame(source, { frameIndex: frame - 1, step });
-      expect(rendered.diagnostics.filter((diagnostic) => diagnostic.severity !== "info" && !diagnostic.code?.startsWith("pgfplots-compat"))).toEqual([]);
+      expect(rendered.diagnostics.filter((diagnostic) => !diagnostic.code?.startsWith("pgfplots-compat"))).toEqual([]);
       const comparison = compareBeamerPageTraces(buildNativeBeamerPageTrace(rendered, computerModernTexMetricProvider), page.trace);
       expect(comparison.summary.glyphCodeMatch).toBe(true);
       expect(comparison.summary.fontMatch).toBe(true);
@@ -105,6 +106,52 @@ ${body}
     expect(await widthOf(String.raw`\begin{block}{B}${picture("0.8\\linewidth")}\end{block}`)).toBeCloseTo(block, 2);
     const item = await widthOf(picture("285.38988pt"));
     expect(await widthOf(String.raw`\begin{itemize}\item ${picture("\\linewidth")}\end{itemize}`)).toBeCloseTo(item, 2);
+  });
+});
+
+describe("Insert → Function Plot on a slide", () => {
+  const DECK = String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\begin{document}
+\begin{frame}{Plot}
+Some text.
+\end{frame}
+\end{document}`;
+  it("puts a centred picture with the axis at the end of the frame and the preamble lines once", async () => {
+    const first = await renderBeamerFrame(DECK);
+    const inserted = applyDeckEditAction(DECK, first.layout, { kind: "deckInsertPgfplotsTemplate", frameId: first.layout.frameId, template: "function", placement: { kind: "end" } });
+    expect(inserted.kind).toBe("success");
+    if (inserted.kind !== "success") return;
+    expect(inserted.newSource).toBe(String.raw`\documentclass{beamer}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{frame}{Plot}
+Some text.
+\begin{center}
+  \begin{tikzpicture}
+    \begin{axis}[width=0.8\linewidth, height=0.6\textheight, xlabel={$x$}, ylabel={$f(x)$}, domain=-2:2, samples=50]
+      \addplot {x^2 - 1};
+      \addlegendentry{$x^2 - 1$}
+    \end{axis}
+  \end{tikzpicture}
+\end{center}
+\end{frame}
+\end{document}`);
+    const second = await renderBeamerFrame(inserted.newSource);
+    expect(second.diagnostics).toEqual([]);
+    const picture = second.layout.embeddedTikz[0];
+    // The axis fits on the slide (its size against LuaLaTeX: fixture d15-inserted).
+    expect(picture?.bounds.width ?? 0).toBeLessThan(307.28987);
+    expect((picture?.bounds.y ?? 0) + (picture?.bounds.height ?? 0)).toBeLessThan(273.14662);
+    const again = applyDeckEditAction(inserted.newSource, second.layout, { kind: "deckInsertPgfplotsTemplate", frameId: second.layout.frameId, template: "bar", placement: { kind: "end" } });
+    expect(again.kind === "success" ? again.newSource.match(/usepackage\{pgfplots\}|compat=1\.18/gu) : null).toEqual(["usepackage{pgfplots}", "compat=1.18"]);
+  });
+  it("adds only what the preamble lacks", () => {
+    expect(pgfplotsPreambleInsertions(String.raw`\documentclass{beamer}\n\usepackage{pgfplots}\n\pgfplotsset{compat=1.17}\n\begin{document}\end{document}`)).toEqual([]);
+    expect(pgfplotsPreambleInsertions("\\documentclass{beamer}\n\\usepackage{pgfplots}\n\\begin{document}\n\\end{document}").map((entry) => entry.text)).toEqual(["\n\\pgfplotsset{compat=1.18}"]);
+    expect(pgfplotsPreambleInsertions("\\begin{tikzpicture}\\end{tikzpicture}")).toEqual([]);
   });
 });
 

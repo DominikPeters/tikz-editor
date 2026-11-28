@@ -139,6 +139,7 @@ export type PreparedColumnFlowItem =
       viewBox: BeamerEmbeddedTikzLayout["viewBox"];
       /** Painted statements under an overlay rule, with their bounds in the picture's SVG coordinates. */
       ruledShapes?: readonly { sourceSpan: Span; bounds: { x: number; y: number; width: number; height: number } }[];
+      documentLengths?: BeamerEmbeddedTikzLayout["documentLengths"];
     }
   | {
       kind: "block";

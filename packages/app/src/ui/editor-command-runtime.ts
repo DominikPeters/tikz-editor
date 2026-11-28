@@ -16,6 +16,7 @@ import type { AppSettings } from "../settings/types";
 import { useSettingsStore } from "../settings/useSettingsStore";
 import { useEditorStore } from "../store/store";
 import { graphicsInsertionTarget, pickAndInsertDeckGraphics, pickAndInsertTikzGraphics } from "./deck-graphics-insertion";
+import { insertDeckPgfplotsTemplate } from "./deck-pgfplots-insertion";
 import type { DocumentFileRef, EditorAction, EditorState, SnapModes, ToolMode } from "../store/types";
 import { getToolCapabilityStatus } from "./capabilities";
 import { resolveEquationNodeTargetFromSelection, type EquationNodeTarget } from "./equation-utils";
@@ -287,10 +288,14 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
   };
 
   // pgfplots insert templates: an axis appended to the picture (core `insertPgfplotsTemplate`).
-  const pgfplotsTemplateBinding = (template: "function" | "data" | "bar"): CommandBinding => ({
+  // On a slide: a new picture with the axis in the frame (core `deckInsertPgfplotsTemplate`).
+  const pgfplotsTemplateBinding = (template: "function" | "data" | "bar"): CommandBinding => imageTarget === "slide" ? {
+    enabled: snapshot.source === source,
+    run: () => { insertDeckPgfplotsTemplate(useEditorStore.getState, dispatch, template); }
+  } : {
     enabled: snapshot.parseResult != null,
     run: () => { dispatch({ type: "APPLY_EDIT_ACTION", action: { kind: "insertPgfplotsTemplate", template } }); }
-  });
+  };
 
   const runSvgExport = () => {
     if (!snapshot.svg) {

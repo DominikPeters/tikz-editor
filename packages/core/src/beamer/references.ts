@@ -68,6 +68,8 @@ export type BeamerReferenceContext = BeamerReferenceIndex & {
   ambientTextAt?: ((offset: number) => string) & { itemDepthAt?: (offset: number) => number; listDepthAt?: (offset: number) => number };
   macroBindingsAt?: (offset: number) => ReadonlyMap<string, MacroBinding>;
   frameLayout?: { paperHeight: number; textHeight: number; plain: boolean; metadata: Partial<Record<BeamerMetadataFieldName, BeamerMetadataFieldModel>> };
+  /** `\textheight` and the paper size where the frame's pictures are set (pgfplots behaviour Y4). */
+  pictureLengths?: { textheight: number; paperwidth: number; paperheight: number };
   tocSections?: readonly BeamerSectionModel[];
   currentSectionId?: string | null;
   /** Live item separation for Beamer shrink/squeeze frames. */
