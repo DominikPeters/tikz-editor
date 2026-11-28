@@ -46,12 +46,13 @@ function reportExportFailure(message: string, error?: unknown): false {
 export async function exportStandaloneLatexDownload(
   source: string,
   activeRootId: string | null,
-  options: { fileName?: string } = {}
+  options: { fileName?: string; documentLengths?: Parameters<typeof createStandaloneLatexExportArtifact>[0]["documentLengths"] } = {}
 ): Promise<boolean> {
   const artifact = createStandaloneLatexExportArtifact({
     source,
     activeFigureId: activeRootId,
-    ...(options.fileName === undefined ? {} : { fileName: options.fileName })
+    ...(options.fileName === undefined ? {} : { fileName: options.fileName }),
+    ...(options.documentLengths === undefined ? {} : { documentLengths: options.documentLengths })
   });
   if (!artifact.complete) {
     console.warn("[tikz-editor] Standalone LaTeX export emitted with unresolved diagnostics.", artifact.diagnostics);

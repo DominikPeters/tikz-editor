@@ -4020,7 +4020,9 @@ async function prepareEmbeddedTikz(params: {
     name => params.theme?.colorAliases?.[name] ?? null).nodes.flatMap(node => node.kind === "style-declaration" && node.color !== undefined ? [node.color] : []).at(-1) : undefined;
   const pictureStep = beamerTikzStep(params.source, params.node.root.span, params.overlays, params.step);
   // \textwidth and \linewidth where the picture is set (a column's width inside columns), \textheight and the paper.
-  const documentLengths = { ...params.pageLengths, ...(params.lengths ?? { textwidth: params.width }) };
+  // (\columnwidth is \textwidth in beamer, in a column too; \linewidth unless a list narrows it.)
+  const textwidth = params.lengths?.textwidth ?? params.width;
+  const documentLengths = { ...params.pageLengths, textwidth, linewidth: textwidth, columnwidth: textwidth, ...params.lengths };
   const rendered = await renderTikzToSvgAsync(
     pictureStep.source,
     {

@@ -327,8 +327,11 @@ export function createEditorCommandRuntime(input: RuntimeInput): EditorCommandRu
     if (!snapshot.semanticResult) {
       return;
     }
+    // A slide picture keeps the size it has on its slide (\textwidth of its column…).
+    const documentLengths = snapshot.pictureDocumentLengths;
     void import("./export-commands").then((mod) => mod.exportStandaloneLatexDownload(source, activeRootId, {
-      fileName: "tikz-export.tex"
+      fileName: "tikz-export.tex",
+      ...(documentLengths ? { documentLengths } : {})
     }));
   };
 
