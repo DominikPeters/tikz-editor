@@ -542,7 +542,7 @@ function planPlot(context: AxisContext, plot: AddPlotStatement, target: PlotType
   if (target === "bar" && !axisLevel && legendDrawn(context)) {
     // E26: a `ybar` plot in a line chart with a legend: TeX lays out its legend row differently
     // from the editor (1.5pt to 3pt), so it is not offered there.
-    return { reason: "Not available in a chart with a legend." };
+    return { reason: "Not available with a legend." };
   }
   if (target === "scatter") {
     if (input === "expression") return { reason: "For data plots only." };
@@ -665,7 +665,7 @@ export function chartTypeConversions(source: string, axis: AxisStatement, evalua
     if (id === "stacked-bar") {
       // U6: stacking adds coordinate by coordinate; plots with different x values do not stack as bars.
       const xs = plots.map((plot) => readPlotData(context, plot).xs?.join("\u0000") ?? null);
-      if (xs.includes(null) || new Set(xs).size > 1) return refuse("Plots must share the same x values.");
+      if (xs.includes(null) || new Set(xs).size > 1) return refuse("Plot x values must match.");
     }
     edits.push(...axisBarEdits(context, id === "bar" ? "ybar" : id === "stacked-bar" ? "ybar stacked" : null));
     return { kind: id, label, current: false, available: true, edits };
