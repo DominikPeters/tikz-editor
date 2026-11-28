@@ -17,7 +17,6 @@ import type {
   PgfScopeEnvironment,
   PgfkeysStatement,
   PathItem,
-  ScopeStatement,
   PicOperationItem,
   Span,
   TikzLibraryStatement,
@@ -1111,7 +1110,6 @@ type PgfEnvironmentEffect = {
  * one group.
  */
 function enterPgfEnvironment(
-  statement: ScopeStatement,
   environment: PgfScopeEnvironment,
   context: SemanticContext,
   diagnostics: Diagnostic[],
@@ -1193,7 +1191,6 @@ function enterPgfEnvironment(
       return effect;
     }
   }
-  void statement;
   return effect;
 }
 
@@ -1450,7 +1447,7 @@ function evaluateStatement(
     let resetsParentLineWidth = false;
     const environment = statement.environment;
     if (environment) {
-      const effect = enterPgfEnvironment(statement, environment, context, diagnostics, featureUsage, scopeResolved);
+      const effect = enterPgfEnvironment(environment, context, diagnostics, featureUsage, scopeResolved);
       scopeResolved = effect.resolved;
       scopeLayer = effect.layer;
       scopeClipChain = effect.clipChain;
