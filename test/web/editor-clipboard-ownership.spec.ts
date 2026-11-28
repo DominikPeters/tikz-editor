@@ -65,6 +65,7 @@ describe("clipboard operation ownership", () => {
       setWarning: warning, setFreehandDraft: vi.fn(), dragRef: { current: null }, setDragState: vi.fn(), dispatch,
       setToolCursorWorld: vi.fn(), setSnapLines: vi.fn(), setToolDraft: vi.fn(), setBezierBendDraft: vi.fn(),
       setPendingBezier: vi.fn(), closeTextEditingSession: vi.fn(), setMarqueeDraft: vi.fn(), selectedElementIds: current.selectedElementIds,
+      scopeOverlay: { scopesById: new Map(), ancestorScopeIdsBySourceId: new Map(), boundsByScopeId: new Map() },
       applyActionWithFeedback: vi.fn(), source: current.source, snapshot: current.snapshot,
       logSnapDebug: vi.fn(), NUDGE_STEP_PT: 1, NUDGE_STEP_SHIFT_PT: 10, platform,
       DESKTOP_TIKZ_CLIPBOARD_FORMATS: ["tikz"], DESKTOP_SVG_CLIPBOARD_FORMATS: ["svg"],

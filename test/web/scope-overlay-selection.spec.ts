@@ -9,6 +9,7 @@ import {
   resolveScopeAwareContextMenuTarget,
   resolveScopeAwarePointerDownTarget,
   resolveScopeAwarePointerUpDrillTarget,
+  resolveEscapeStepUp,
   scopeWorldBounds
 } from "../../packages/app/src/ui/canvas-panel/scope-overlay.js";
 import { sb, sp, wb } from "../coords-helpers.js";
@@ -281,5 +282,40 @@ describe("scope overlay matrix augmentation", () => {
         focusedScopeId: "path:0"
       })
     ).toBe("node:0:0:matrix-cell:2:1");
+  });
+});
+
+describe("Escape steps out one level (scopes and pgfplots axes alike)", () => {
+  const source = String.raw`\begin{tikzpicture}
+  \draw (0,0) -- (1,0);
+  \begin{scope}
+    \draw (0,1) -- (1,1);
+    \begin{axis}
+      \addplot coordinates {(0,0) (1,1)};
+    \end{axis}
+  \end{scope}
+\end{tikzpicture}`;
+  const parsed = parseTikz(source, { recover: true });
+  const axisId = (parsed.figure.body[1] as { body: Array<{ kind: string; id: string }> }).body.find((s) => s.kind === "Axis")?.id ?? "";
+  const overlay = buildScopeOverlayIndex(parsed.figure.body, new Map([["path:0", sb(0, 0, 1, 0)], ["path:2", sb(0, 1, 1, 1)]]), {
+    partIdsByAxisId: new Map([[axisId, [`${axisId}:plot:0`, `${axisId}:title`]]]),
+    boundsByAxisId: new Map()
+  });
+  const step = (ids: string[], activeHandleId: string | null = null) => resolveEscapeStepUp({ selectedSourceIds: new Set(ids), activeHandleId, scopeOverlay: overlay });
+
+  it("point handle -> plot -> axis -> scope -> nothing", () => {
+    expect(axisId).toMatch(/^axis:\d+$/u);
+    expect(step([`${axisId}:plot:0`], "handle:1")).toEqual({ kind: "deselect-handle" });
+    expect(step([`${axisId}:plot:0`])).toEqual({ kind: "select-container", containerId: axisId, focusedScopeId: "scope:1" });
+    expect(step([`${axisId}:title`])).toEqual({ kind: "select-container", containerId: axisId, focusedScopeId: "scope:1" });
+    expect(step([axisId])).toEqual({ kind: "select-container", containerId: "scope:1", focusedScopeId: null });
+    expect(step(["path:2"])).toEqual({ kind: "select-container", containerId: "scope:1", focusedScopeId: null });
+    expect(step(["scope:1"])).toEqual({ kind: "clear" });
+    expect(step(["path:0"])).toEqual({ kind: "clear" });
+  });
+
+  it("a selection across containers, or none, clears", () => {
+    expect(step(["path:0", "path:2"])).toEqual({ kind: "clear" });
+    expect(step([])).toEqual({ kind: "clear" });
   });
 });

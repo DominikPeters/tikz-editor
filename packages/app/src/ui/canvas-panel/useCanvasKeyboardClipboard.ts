@@ -41,6 +41,7 @@ import {
   findSvgFileInDataTransfer
 } from "../svg-import";
 import { selectNudgeAnchorHandle } from "./panel-helpers";
+import { resolveEscapeStepUp, type ScopeOverlayIndex } from "./scope-overlay";
 import type {
   ApplyActionWithFeedbackFn,
   CanvasContextMenuState,
@@ -75,6 +76,8 @@ export type UseCanvasKeyboardClipboardArgs = {
   closeTextEditingSession: () => void;
   setMarqueeDraft: StateSetter<Extract<DragState, { kind: "marquee" }> | null>;
   selectedElementIds: ReadonlySet<string>;
+  /** Containers (scopes, matrices, axes) for Escape's step out one level. */
+  scopeOverlay: ScopeOverlayIndex;
   applyActionWithFeedback: ApplyActionWithFeedbackFn;
   snapshot: CanvasSnapshot;
   source: string;
@@ -162,6 +165,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
     closeTextEditingSession,
     setMarqueeDraft,
     selectedElementIds,
+    scopeOverlay,
     applyActionWithFeedback,
     snapshot,
     source,
@@ -273,7 +277,18 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
         ) {
           setDragState(null);
         }
-        dispatch({ type: "CLEAR_SELECTION" });
+        // Escape steps out one level: a point handle, then the part to its container, then nothing.
+        const stepUp = toolMode === "select"
+          ? resolveEscapeStepUp({ selectedSourceIds: selectedElementIds, activeHandleId: useEditorStore.getState().activeHandleId, scopeOverlay })
+          : { kind: "clear" as const };
+        if (stepUp.kind === "deselect-handle") {
+          dispatch({ type: "SET_ACTIVE_HANDLE", handleId: null });
+        } else if (stepUp.kind === "select-container") {
+          dispatch({ type: "SELECT", id: stepUp.containerId, additive: false });
+          dispatch({ type: "SET_FOCUSED_SCOPE", scopeId: stepUp.focusedScopeId });
+        } else {
+          dispatch({ type: "CLEAR_SELECTION" });
+        }
         setWarning(null);
         setSnapLines([]);
         event.preventDefault();
@@ -417,6 +432,7 @@ export function useCanvasKeyboardClipboard(args: UseCanvasKeyboardClipboardArgs)
       dragRef,
       finalizePathDraft,
       logSnapDebug,
+      scopeOverlay,
       selectedElementIds,
       setBezierBendDraft,
       setContextMenuState,

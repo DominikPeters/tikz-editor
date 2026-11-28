@@ -364,6 +364,41 @@ export function resolveFocusedScopeIdForSelection(
   return ancestors.at(-1) ?? null;
 }
 
+export type EscapeStepUp =
+  | { kind: "deselect-handle" }
+  | { kind: "select-container"; containerId: string; focusedScopeId: string | null }
+  | { kind: "clear" };
+
+/**
+ * What Escape does on the canvas: it steps out one level, as the deck's
+ * Escape selects an object's parent. An active point handle is deselected
+ * first; a selection inside a container (a scope, a matrix, a pgfplots axis)
+ * selects that container; a selection with no container clears.
+ */
+export function resolveEscapeStepUp(input: {
+  selectedSourceIds: ReadonlySet<string>;
+  activeHandleId: string | null;
+  scopeOverlay: ScopeOverlayIndex;
+}): EscapeStepUp {
+  const { selectedSourceIds, activeHandleId, scopeOverlay } = input;
+  if (activeHandleId && selectedSourceIds.size > 0) {
+    return { kind: "deselect-handle" };
+  }
+  let container: string | null = null;
+  for (const id of selectedSourceIds) {
+    const ancestors = scopeOverlay.ancestorScopeIdsBySourceId.get(id) ?? [];
+    const parent = ancestors.at(-1) ?? null;
+    if (!parent || (container !== null && container !== parent)) {
+      return { kind: "clear" };
+    }
+    container = parent;
+  }
+  if (!container) {
+    return { kind: "clear" };
+  }
+  return { kind: "select-container", containerId: container, focusedScopeId: resolveFocusedScopeIdForSelection(container, scopeOverlay) };
+}
+
 export function isSourceWithinScope(
   scopeId: string | null | undefined,
   sourceId: string,

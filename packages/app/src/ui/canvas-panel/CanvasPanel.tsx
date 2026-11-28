@@ -3402,6 +3402,7 @@ export const CanvasPanel = memo(function CanvasPanel({
     closeTextEditingSession,
     setMarqueeDraft,
     selectedElementIds,
+    scopeOverlay,
     applyActionWithFeedback,
     snapshot,
     source,
