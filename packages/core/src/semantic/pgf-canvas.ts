@@ -104,68 +104,63 @@ export function parsePgfTransformationCode(code: string): WorldTransform | null 
     skipSpace(reader);
     if (reader.index >= code.length) return matrix;
     const command = readCommand(reader);
-    let next: WorldTransform | null = null;
-    switch (command) {
-      case "pgftransformreset":
-        matrix = identityMatrix();
-        continue;
-      case "pgftransformshift": {
-        const point = readPointGroup(reader);
-        next = point ? translationMatrix(point.x, point.y) : null;
-        break;
-      }
-      case "pgftransformxshift": {
-        const length = readLength(readGroup(reader));
-        next = length === null ? null : translationMatrix(length, 0);
-        break;
-      }
-      case "pgftransformyshift": {
-        const length = readLength(readGroup(reader));
-        next = length === null ? null : translationMatrix(0, length);
-        break;
-      }
-      case "pgftransformscale": {
-        const factor = readNumber(readGroup(reader));
-        next = factor === null ? null : scaleMatrix(factor, factor);
-        break;
-      }
-      case "pgftransformxscale": {
-        const factor = readNumber(readGroup(reader));
-        next = factor === null ? null : scaleMatrix(factor, 1);
-        break;
-      }
-      case "pgftransformyscale": {
-        const factor = readNumber(readGroup(reader));
-        next = factor === null ? null : scaleMatrix(1, factor);
-        break;
-      }
-      case "pgftransformrotate": {
-        const degrees = readNumber(readGroup(reader));
-        next = degrees === null ? null : rotationMatrix(degrees);
-        break;
-      }
-      case "pgftransformxslant": {
-        const factor = readNumber(readGroup(reader));
-        next = factor === null ? null : worldTransform(1, 0, factor, 1, 0, 0);
-        break;
-      }
-      case "pgftransformyslant": {
-        const factor = readNumber(readGroup(reader));
-        next = factor === null ? null : worldTransform(1, factor, 0, 1, 0, 0);
-        break;
-      }
-      case "pgftransformcm": {
-        const values = [0, 1, 2, 3].map(() => readNumber(readGroup(reader)));
-        const point = readPointGroup(reader);
-        const [a, b, c, d] = values;
-        next = a == null || b == null || c == null || d == null || !point ? null : worldTransform(a, b, c, d, point.x, point.y);
-        break;
-      }
-      default:
-        return null;
+    if (command === "pgftransformreset") {
+      matrix = identityMatrix();
+      continue;
     }
+    const next = command === null ? null : readTransformationCommand(command, reader);
     if (!next) return null;
     matrix = multiplyMatrix(matrix, next);
+  }
+}
+
+/** One of PGF's coordinate transformation commands, with its arguments. */
+function readTransformationCommand(command: string, reader: Reader): WorldTransform | null {
+  const number = (): number | null => readNumber(readGroup(reader));
+  switch (command) {
+    case "pgftransformshift": {
+      const point = readPointGroup(reader);
+      return point ? translationMatrix(point.x, point.y) : null;
+    }
+    case "pgftransformxshift": {
+      const length = readLength(readGroup(reader));
+      return length === null ? null : translationMatrix(length, 0);
+    }
+    case "pgftransformyshift": {
+      const length = readLength(readGroup(reader));
+      return length === null ? null : translationMatrix(0, length);
+    }
+    case "pgftransformscale": {
+      const factor = number();
+      return factor === null ? null : scaleMatrix(factor, factor);
+    }
+    case "pgftransformxscale": {
+      const factor = number();
+      return factor === null ? null : scaleMatrix(factor, 1);
+    }
+    case "pgftransformyscale": {
+      const factor = number();
+      return factor === null ? null : scaleMatrix(1, factor);
+    }
+    case "pgftransformrotate": {
+      const degrees = number();
+      return degrees === null ? null : rotationMatrix(degrees);
+    }
+    case "pgftransformxslant": {
+      const factor = number();
+      return factor === null ? null : worldTransform(1, 0, factor, 1, 0, 0);
+    }
+    case "pgftransformyslant": {
+      const factor = number();
+      return factor === null ? null : worldTransform(1, factor, 0, 1, 0, 0);
+    }
+    case "pgftransformcm": {
+      const [a, b, c, d] = [number(), number(), number(), number()];
+      const point = readPointGroup(reader);
+      return a === null || b === null || c === null || d === null || !point ? null : worldTransform(a, b, c, d, point.x, point.y);
+    }
+    default:
+      return null;
   }
 }
 

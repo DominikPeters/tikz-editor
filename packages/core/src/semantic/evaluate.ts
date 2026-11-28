@@ -62,7 +62,6 @@ import {
   createSemanticContext,
   currentFrame,
   endStatementEffectTracking,
-  listContextSceneLayers,
   listContextRequiredLibraries,
   listContextSymbolDependencyEdges,
   listContextUnresolvedSymbols,
@@ -1203,7 +1202,7 @@ function readViewBoxTransform(environment: PgfScopeEnvironment, transform: World
   if (braces.length !== 5) return null;
   const points = braces.slice(0, 4).map((argument) => parsePgfPoint(argument.raw));
   const mode = braces[4]?.raw.trim();
-  if (points.some((point) => point === null) || (mode !== "meet" && mode !== "slice")) return null;
+  if (points.includes(null) || (mode !== "meet" && mode !== "slice")) return null;
   // `\pgf@pos@transform@glob`: the corners in canvas coordinates.
   const [a, b, c, d] = points.map((point) => applyWorldMatrix(transform, requireDefined(point, "Expected a view box corner")));
   if (!a || !b || !c || !d) return null;

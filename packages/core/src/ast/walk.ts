@@ -37,6 +37,36 @@ export function nestedStatements(statement: Statement): readonly Statement[] | n
   return null;
 }
 
+/**
+ * The ids with each selected PGF environment (`{pgfonlayer}{name}`, ...)
+ * replaced by the statements in it, recursively: such an environment takes
+ * no TikZ options, so an edit that would write them on a scope (a move)
+ * edits its statements instead.
+ */
+export function expandPgfEnvironmentIds(statements: readonly Statement[], ids: readonly string[]): string[] {
+  const environments = new Map<string, readonly Statement[]>();
+  const visit = (body: readonly Statement[]): void => {
+    for (const statement of body) {
+      if (statement.kind === "Scope" && statement.environment) environments.set(statement.id, statement.body);
+      const nested = nestedStatements(statement);
+      if (nested) visit(nested);
+    }
+  };
+  visit(statements);
+  if (environments.size === 0) return [...ids];
+  const expanded: string[] = [];
+  const push = (id: string): void => {
+    const body = environments.get(id);
+    if (!body) {
+      if (!expanded.includes(id)) expanded.push(id);
+      return;
+    }
+    for (const statement of body) push(statement.id);
+  };
+  for (const id of ids) push(id);
+  return expanded;
+}
+
 export type AstWalkVisitor = {
   onStatement?: (statement: Statement) => void;
   onPathItem?: (item: PathItem) => void;

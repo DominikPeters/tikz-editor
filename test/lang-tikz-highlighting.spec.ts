@@ -210,4 +210,25 @@ describe("@tikz-editor/lang-tikz highlighting", () => {
     const tableFrom = source.indexOf("{\n      a b");
     expect(ranges.some((range) => range.from === tableFrom && range.classes.split(" ").includes("string"))).toBe(true);
   });
+
+  it("highlights PGF environments and layer declarations", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \pgfdeclarelayer{back}
+  \pgfsetlayers{back,main}
+  \begin{pgfonlayer}{back}
+    \draw (0,0) -- (1,1);
+  \end{pgfonlayer}
+\end{tikzpicture}`;
+    const ranges = collectHighlights(source);
+    const at = (text: string, className: string): boolean => {
+      const from = source.indexOf(text);
+      return hasClassAt(ranges, from, from + text.length, className);
+    };
+    expect(at(String.raw`\begin{pgfonlayer}{back}`, "keyword")).toBe(true);
+    expect(at(String.raw`\end{pgfonlayer}`, "keyword")).toBe(true);
+    expect(at(String.raw`\pgfdeclarelayer`, "keyword")).toBe(true);
+    expect(at(String.raw`\pgfsetlayers`, "keyword")).toBe(true);
+    const drawFrom = source.indexOf(String.raw`\draw`);
+    expect(hasClassAt(ranges, drawFrom, drawFrom + String.raw`\draw`.length, "keyword")).toBe(true);
+  });
 });

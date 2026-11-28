@@ -141,4 +141,27 @@ describe("objects panel model", () => {
     expect(model.byId.get("path:0")?.label).toBe("Rectangle");
     expect(model.byId.get("path:1")?.label).toBe("Rectangle");
   });
+
+  it("shows PGF environments as containers labelled by their layer or kind", () => {
+    const source = String.raw`\begin{tikzpicture}
+  \begin{pgfonlayer}{background}
+    \fill[yellow] (0,0) rectangle (1,1);
+    \begin{pgfscope}
+      \draw (0,0) -- (1,1);
+    \end{pgfscope}
+  \end{pgfonlayer}
+  \draw (2,0) circle (0.5);
+\end{tikzpicture}`;
+    const analysisView = createEditAnalysisSession().ensure(source);
+    const semantic = evaluateSemantic(source);
+    const model = buildObjectsPanelModel({ analysisView, scene: semantic.scene, selectedIds: new Set() });
+
+    expect(model.nodes.map((node) => node.id)).toEqual(["scope:0", "path:4"]);
+    const layer = model.byId.get("scope:0");
+    expect(layer?.title).toBe("Layer: background");
+    expect(layer?.childCount).toBe(2);
+    expect(layer?.canRename).toBe(false);
+    expect(model.byId.get("scope:2")?.title).toBe("PGF Scope");
+    expect(model.byId.get("path:1")?.label).toBe("Rectangle");
+  });
 });
