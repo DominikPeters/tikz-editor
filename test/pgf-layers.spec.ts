@@ -600,8 +600,8 @@ describe("PGF environments: source-preserving edits", () => {
   it("refuses to ungroup the environment or to write options on it; writes a statement's options inside", () => {
     const ungroup = applyEditAction(SOURCE, [], { kind: "ungroupElements", elementIds: ["scope:1"] });
     expect(ungroup.kind).toBe("unsupported");
-    expect(applyEditAction(SOURCE, [], { kind: "setProperty", elementId: "scope:1", key: "color", value: "red" }).kind).toBe("unsupported");
-    expect(succeed(applyEditAction(SOURCE, [], { kind: "setProperty", elementId: "path:2", key: "color", value: "red" }))).toContain("\\draw[color=red] (0,1) -- (1,1);");
+    expect(applyEditAction(SOURCE, [], { kind: "setProperty", elementId: "scope:1", level: "command", key: "color", value: "red" }).kind).toBe("unsupported");
+    expect(succeed(applyEditAction(SOURCE, [], { kind: "setProperty", elementId: "path:2", level: "command", key: "color", value: "red" }))).toContain("\\draw[color=red] (0,1) -- (1,1);");
   });
 });
 
