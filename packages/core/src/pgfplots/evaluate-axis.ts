@@ -204,6 +204,44 @@ function drawBase(style: ResolvedStyle): ResolvedStyle {
   return { ...style, ...commandDefaultStyle("draw", style) };
 }
 
+const TRANSFORM_KEY = /^(?:scale|xscale|yscale|rotate|cm|xslant|yslant|shift|xshift|yshift|shift only|reset cm|transform canvas|rotate around)$/u;
+
+/**
+ * Behaviour AC1: the TikZ state an axis starts from. pgfplots begins the axis
+ * with the line width back at 0.4pt and the stroke colour back at the current
+ * colour (a `thick` or `draw=red` of the picture or of an enclosing scope
+ * reaches nothing in the axis, not even embedded TikZ), then applies `every
+ * picture` once more (its transformations: behaviour Z1, diagnosed). Colour,
+ * text colour, font, dash pattern, opacity and the `every …` styles carry over.
+ */
+function axisEntryStyle(context: SemanticContext, outer: SemanticContextFrame, sourceId: string, span: Span): ResolvedStyle {
+  const style = outer.style;
+  const reset: ResolvedStyle = {
+    ...style,
+    lineWidth: 0.4,
+    ...(style.drawExplicit ? { stroke: style.textColor ?? "black", drawExplicit: false } : {})
+  };
+  const lists = (outer.customStyles.get("every picture") ?? []).map((layer) => {
+    const entries = layer.options.entries.filter((entry) => entry.kind === "unknown" || !TRANSFORM_KEY.test(entry.key.trim()));
+    return entries.length === layer.options.entries.length ? layer.options : { ...layer.options, entries, raw: `[${entries.map((entry) => entry.raw).join(",")}]` };
+  }).filter((list) => list.entries.length > 0);
+  if (lists.length === 0) return reset;
+  return resolveStyle(context, outer, reset, expandOptionListMacros(lists, outer.macroBindings, context.macroTraceCollector ?? undefined), sourceId, span).style;
+}
+
+/** TikZ's `every path` in effect in a frame, macros expanded (behaviour AC2). */
+function everyPathLists(context: SemanticContext, frame: SemanticContextFrame): OptionListAst[] {
+  if (frame.everyPathStyles.length === 0) return [];
+  return expandOptionListMacros(frame.everyPathStyles.map((layer) => layer.options), frame.macroBindings, context.macroTraceCollector ?? undefined);
+}
+
+/** TikZ's `every mark` in effect in a frame (behaviour AC3). */
+function everyMarkLists(context: SemanticContext, frame: SemanticContextFrame): OptionListAst[] {
+  const layers = frame.customStyles.get("every mark") ?? [];
+  if (layers.length === 0) return [];
+  return expandOptionListMacros(layers.map((layer) => layer.options), frame.macroBindings, context.macroTraceCollector ?? undefined);
+}
+
 /** A frame for evaluating statements inside the axis. */
 function childFrame(parent: SemanticContextFrame, overrides: Partial<SemanticContextFrame>): SemanticContextFrame {
   return {
@@ -316,7 +354,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   // and sees the final values (behaviour V0, experiment E16). A brace group
   // keeps its definitions to itself (behaviour AB4).
   const bodyGroups = axisBodyGroupPaths(source, context.source);
-  const parent = childFrame(outer, {});
+  const parent = childFrame(outer, { style: axisEntryStyle(context, outer, source.id, source.beginSpan) });
   const plotBindings = new Map<AddPlotStatement, SemanticContextFrame["macroBindings"]>();
   const settingBindings = new Map<AxisBodyItem, SemanticContextFrame["macroBindings"]>();
   pushFrame(context, parent);
@@ -470,6 +508,15 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const axisScope = resolveStyle(context, parent, parent.style, axisTikz.length > 0 ? [keyUsesToOptionList(axisTikz)] : [], axis.id, axis.span);
   dedupeWarnings(diagnostics, axisScope.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: axis.optionsSpan ?? axis.beginSpan })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
   const axisFrame = childFrame(parent, { style: axisScope.style, transform: axisScope.transform });
+  const everyMarkOption = axisTikz.find((use) => /^every mark\/\.(?:append )?style$/u.test(use.key.trim()));
+  if (everyMarkOption) {
+    // Behaviour AC3 (c-every-mark-axis-scale): given to the axis, `every mark` loses the cycle list's mark fill and its scale in TeX.
+    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-axis-every-mark", message: "`every mark` given to the axis options changes the marks differently in TeX (their fill becomes the line colour and a `scale` is lost); this editor applies it as TikZ would. Set it with `\\tikzset` or `mark options` instead.", span: everyMarkOption.origin.span });
+  }
+  if (axisFrame.everyNodeStyles.some((layer) => layer.options.entries.some((entry) => entry.kind !== "unknown" && entry.key.trim() === "draw" && (entry.kind === "flag" || entry.valueRaw.trim() !== "none")))) {
+    // Behaviour AC4 (pre-every-node-draw): framed text moves the axis labels and the bounding box by the frame's outer sep in TeX.
+    diagnostics.push({ severity: "warning", code: "unsupported-pgfplots-every-node-draw", message: "`every node` with `draw` frames every text of the axis; this editor draws the frames but does not move the axis labels and the bounding box by the frames' line width as TeX does (up to about 1pt).", span: axis.beginSpan });
+  }
   // `declare function` and `trig format` given to the axis hold for everything in it.
   const pgfmathScopeKeys = (uses: readonly PgfplotsKeyUse[]) => uses.filter((use) => /^(?:\/pgf\/)?(?:declare function|trig format)$/u.test(use.key)).map((use) => ({ ...use, key: use.key.replace(/^\/pgf\//u, "") }));
   const axisPgfmath = pgfmathScopeKeys(model.tikzOptions);
@@ -728,13 +775,20 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     "node near coord": []
   };
 
-  // Plot styles (needed for marks in F1 and for emission).
-  const plotStyles = plots.map((plot) => {
+  // Plot styles (needed for marks in F1 and for emission). AC2: TikZ's `every
+  // path` is applied when each path starts, after the plot's style (which
+  // pgfplots sets as a scope), so it wins over it; marks are not paths and
+  // keep the plot's style.
+  const everyPath = everyPathLists(context, axisFrame);
+  const withEveryPath = (style: ResolvedStyle, sourceId: string, span: Span): ResolvedStyle => everyPath.length === 0 ? style : resolveStyle(context, axisFrame, style, everyPath, sourceId, span).style;
+  const plotBaseStyles = plots.map((plot) => {
     if (!plot.points) return null;
     const resolved = resolveStyle(context, axisFrame, drawBase(axisScope.style), plot.model.pathKeys.length > 0 ? [keyUsesToOptionList(plot.model.pathKeys)] : [], plot.model.statement.id, plot.model.statement.span);
     dedupeWarnings(diagnostics, resolved.diagnostics.filter((code) => code.startsWith("unsupported-option-key:")).map((code) => ({ key: code.slice("unsupported-option-key:".length), span: plot.model.statement.optionsSpan ?? plot.model.statement.span })), warned, "unsupported-pgfplots-key", (key) => `Key \`${key}\` is neither a supported pgfplots key nor a TikZ key; it is ignored.`);
     return resolved.style;
   });
+  const plotStyles = plotBaseStyles.map((style, index) => (style ? withEveryPath(style, plots[index]?.model.statement.id ?? axis.id, plots[index]?.model.statement.span ?? axis.span) : null));
+  const everyMark = everyMarkLists(context, axisFrame);
   const marksFor = (plotModel: PlotModel, base: ResolvedStyle, warn: boolean): LegendMarks | null => {
     const mark = plotModel.mark;
     if (mark === null) return null;
@@ -743,11 +797,13 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
       return null;
     }
     const markBase: ResolvedStyle = { ...base, stroke: base.stroke ?? base.textColor ?? "black", fill: base.fill ?? base.textColor ?? "black", drawExplicit: true, markerStart: null, markerEnd: null };
-    const lists = plotModel.markKeys.length > 0 ? [keyUsesToOptionList(plotModel.markKeys)] : [];
+    // AC3: TikZ's `every mark` first, then the plot's mark options (pgfplots appends them to it).
+    const lists = [...everyMark, ...(plotModel.markKeys.length > 0 ? [keyUsesToOptionList(plotModel.markKeys)] : [])];
     const resolved = resolveStyle(context, axisFrame, markBase, lists, plotModel.statement.id, plotModel.statement.span);
     const style = { ...resolved.style, stroke: resolved.style.stroke ?? resolved.style.textColor ?? markBase.stroke, fill: resolved.style.fill ?? resolved.style.textColor ?? markBase.fill };
     // `mark options={scale=…}` scales the mark's geometry (PGF transforms the mark; line widths stay).
-    const markScale = plotModel.markKeys.reduce((f, use) => (use.key === "scale" ? f * (readPgfNumber(use.value ?? "") ?? 1) : f), 1);
+    const everyMarkScale = everyMark.flatMap((list) => list.entries).reduce((f, entry) => (entry.kind === "kv" && entry.key.trim() === "scale" ? f * (readPgfNumber(entry.valueRaw) ?? 1) : f), 1);
+    const markScale = plotModel.markKeys.reduce((f, use) => (use.key === "scale" ? f * (readPgfNumber(use.value ?? "") ?? 1) : f), everyMarkScale);
     const primitives = plotMarkPrimitives(mark, { size: plotModel.markSize ?? 2, strokeColor: style.stroke ?? "black", fillColor: style.fill ?? "black" })
       ?.map((primitive) => (primitive.kind === "path" && markScale !== 1 ? { ...primitive, segments: primitive.segments.map((seg) => scaleMarkSegment(seg, markScale)) } : primitive));
     if (!primitives || primitives.some((primitive) => primitive.kind !== "path")) {
@@ -757,7 +813,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     return { style, primitives: primitives.flatMap((primitive) => (primitive.kind === "path" ? [primitive] : [])) };
   };
   const markStyles = plots.map((plot, index) => {
-    const base = plotStyles[index];
+    const base = plotBaseStyles[index];
     if (!plot.points || !base) return null;
     return marksFor(plot.model, base, true);
   });
@@ -798,7 +854,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
    * `error bar style`) and the error mark at its end, rotated by the bar's
    * direction plus its `rotate` (initially 90), so `-` lies across the bar (E20 `err-*`).
    */
-  const errorBarElements = (plotModel: PlotModel, points: readonly PlotPoint[], plotStyle: ResolvedStyle, statement: AddPlotStatement): SceneElement[] => {
+  const errorBarElements = (plotModel: PlotModel, points: readonly PlotPoint[], plotStyle: ResolvedStyle, markBaseStyle: ResolvedStyle, statement: AddPlotStatement): SceneElement[] => {
     const bars = plotModel.errorBars;
     if (!bars) return [];
     const out: SceneElement[] = [];
@@ -808,7 +864,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
     const rotateText = markParts.find((part) => /^rotate\s*=/u.test(part));
     const markRotate = rotateText ? readPgfNumber(rotateText.replace(/^rotate\s*=/u, "")) ?? 0 : 0;
     const markOther = markParts.filter((part) => part !== rotateText);
-    const markStyleBase: ResolvedStyle = { ...base, stroke: base.stroke ?? "black", fill: base.stroke ?? "black", drawExplicit: true };
+    // AC2: the error mark is a mark, not a path: `every path` does not reach it.
+    const markStyleBase: ResolvedStyle = { ...markBaseStyle, markerStart: null, markerEnd: null, stroke: markBaseStyle.stroke ?? "black", fill: markBaseStyle.stroke ?? "black", drawExplicit: true };
     const markStyle = markOther.length > 0 ? resolveStyle(context, axisFrame, markStyleBase, [parseOptionListRaw(`[${markOther.join(",")}]`)], statement.id, statement.span).style : markStyleBase;
     const sizeText = markOther.find((part) => /^mark size\s*=/u.test(part));
     const markSize = sizeText ? readLength(sizeText.replace(/^mark size\s*=/u, "")) ?? 2 : plotModel.markSize ?? 2;
@@ -883,7 +940,9 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   const tickStyleNames = (letter: "x" | "y", kind: "major" | "minor") => ["every tick", `every ${kind} tick`, `every ${letter} tick`, `every ${kind} ${letter} tick`];
   const elementStyle = (names: string[]): ResolvedStyle => {
     const uses = flattenStyleEntries(styleLists(model.styles, names), model.styles);
-    return resolveStyle(context, axisFrame, drawBase(axisScope.style), uses.length > 0 ? [keyUsesToOptionList(uses)] : [], axis.id, axis.span).style;
+    // AC2: `every path` first, then the element's own style (pgfplots gives it as path options).
+    const lists = [...everyPath, ...(uses.length > 0 ? [keyUsesToOptionList(uses)] : [])];
+    return resolveStyle(context, axisFrame, drawBase(axisScope.style), lists, axis.id, axis.span).style;
   };
 
   // Stage 5.
@@ -1117,7 +1176,7 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
             n += 1;
           }
         }
-        if (plot.model.errorBars) content.push(...errorBarElements(plot.model, plot.points, style, statement));
+        if (plot.model.errorBars) content.push(...errorBarElements(plot.model, plot.points, style, plotBaseStyles[plotIndex - 1] ?? style, statement));
         if (statement.trailingPath) content.push(...trailingNodes(statement.trailingPath, plot.model, plot.points));
         if (plot.model.nodesNearCoords !== null) markElements.push(...nodesNearCoords(plot.model, plot.points, barTops));
         continue;
@@ -1174,7 +1233,8 @@ function evaluateAxisInFrame(source: AxisStatement, context: SemanticContext, ho
   }
   const legendResult = emitLegend({
     axis, model, images: legendImages, diagnostics,
-    pathStyle: (plotModel, legendKeys) => resolveStyle(context, axisFrame, drawBase(axisScope.style), [...legendKeys, ...plotModel.pathKeys].length > 0 ? [keyUsesToOptionList([...legendKeys, ...plotModel.pathKeys])] : [], plotModel.statement.id, plotModel.statement.span).style,
+    // AC2: a legend image is a path drawn with the plot's style; `every path` wins over it, and its marks follow it.
+    pathStyle: (plotModel, legendKeys) => withEveryPath(resolveStyle(context, axisFrame, drawBase(axisScope.style), [...legendKeys, ...plotModel.pathKeys].length > 0 ? [keyUsesToOptionList([...legendKeys, ...plotModel.pathKeys])] : [], plotModel.statement.id, plotModel.statement.span).style, plotModel.statement.id, plotModel.statement.span),
     marks: (plotModel, base) => marksFor(plotModel, base, false),
     frameWith: (uses) => uses.length === 0 ? labelFrame : childFrame(labelFrame, { style: resolveStyle(context, labelFrame, labelFrame.style, [keyUsesToOptionList(uses)], axis.id, axis.span).style }),
     node: (request, frame, emit) => {
