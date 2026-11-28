@@ -9,6 +9,8 @@
  * The TeX part runs with `EXPORT_COMPILE_TESTS=1` (`npm run test:export-compile`)
  * when `lualatex` and pgfplots are installed, like the other TeX oracle specs.
  */
+import { applyEditAction } from "../packages/core/src/edit/actions.js";
+import { CHART_KINDS } from "../packages/core/src/edit/pgfplots/chart-kinds.js";
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -265,6 +267,14 @@ a b
 \end{tikzpicture}`
   }
 ];
+
+// Every chart kind as Insert > Chart (and the toolbar gallery) writes it into a document.
+const EMPTY_DOCUMENT = "\\documentclass{article}\n\\begin{document}\n\\begin{tikzpicture}\n\\end{tikzpicture}\n\\end{document}\n";
+for (const kind of CHART_KINDS) {
+  const inserted = applyEditAction(EMPTY_DOCUMENT, [], { kind: "insertPgfplotsTemplate", template: kind.id });
+  if (inserted.kind !== "success") throw new Error(`inserting ${kind.id} failed`);
+  CASES.push({ name: `inserted chart kind: ${kind.label}`, source: inserted.newSource });
+}
 
 function figureId(source: string, index: number): string {
   const figures = parseTikz(source, { recover: true }).figures;
